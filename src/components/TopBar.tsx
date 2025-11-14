@@ -82,6 +82,13 @@ export default function TopBar() {
           >
             <Mic className="w-5 h-5" />
           </button>
+          <button
+            onClick={toggleVoiceControl}
+            className={`p-2 rounded ${voiceControlActive ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            title="Toggle Voice Control"
+          >
+            <Mic className="w-5 h-5" />
+          </button>
         </div>
 
         <div className="flex items-center space-x-3 bg-gray-800 rounded-lg px-4 py-2">
