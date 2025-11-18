@@ -32,6 +32,7 @@ interface DAWContextType {
   getWaveformData: (trackId: string) => number[];
   getAudioDuration: (trackId: string) => number;
   seek: (timeSeconds: number) => void;
+  setTrackInputGain: (trackId: string, gainDb: number) => void;
 }
 
 const DAWContext = createContext<DAWContextType | undefined>(undefined);
@@ -100,6 +101,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         audioEngineRef.current.setTrackPan(track.id, track.pan);
         audioEngineRef.current.setStereoWidth(track.id, track.stereoWidth || 100);
         audioEngineRef.current.setPhaseFlip(track.id, track.phaseFlip || false);
+        // Ensure input gain (pre-fader) is synced as well
+        if (typeof track.inputGain === 'number') {
+          audioEngineRef.current.setTrackInputGain(track.id, track.inputGain);
+        }
       });
     }
   }, [tracks, isPlaying]);
@@ -244,6 +249,16 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     setTracks(prev => prev.filter(t => t.id !== trackId));
     if (selectedTrack?.id === trackId) {
       setSelectedTrack(null);
+    }
+  };
+
+  // Set input gain (pre-fader) for a track both in state and audio engine
+  const setTrackInputGain = (trackId: string, gainDb: number) => {
+    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, inputGain: gainDb } : t));
+    try {
+      audioEngineRef.current.setTrackInputGain(trackId, gainDb);
+    } catch (err) {
+      // audio engine might not be initialized yet — that's fine
     }
   };
 
@@ -459,6 +474,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         getWaveformData,
         getAudioDuration,
         seek,
+        setTrackInputGain,
       }}
     >
       {children}

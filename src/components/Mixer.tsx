@@ -15,8 +15,9 @@ const PLUGIN_TYPES: { type: Plugin['type']; name: string; description: string }[
 ];
 
 export default function Mixer() {
-  const { tracks, updateTrack } = useDAW();
+  const { tracks, updateTrack, setTrackInputGain } = useDAW();
   const [gainValues, setGainValues] = useState<Record<string, number>>({});
+  const [inputGainValues, setInputGainValues] = useState<Record<string, number>>({});
   const [panValues, setPanValues] = useState<Record<string, number>>({});
   const [stereoWidthValues, setStereoWidthValues] = useState<Record<string, number>>({});
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -57,9 +58,15 @@ export default function Mixer() {
   };
 
   // Double-click handler for all sliders
-  const handleDoubleClickReset = (trackId: string, field: 'volume' | 'pan' | 'stereoWidth') => {
-    const resetValues = { volume: 0, pan: 0, stereoWidth: 100 };
-    updateTrack(trackId, { [field]: resetValues[field] });
+  const handleDoubleClickReset = (trackId: string, field: 'volume' | 'pan' | 'stereoWidth' | 'inputGain') => {
+    const resetValues: Record<string, number> = { volume: 0, pan: 0, stereoWidth: 100, inputGain: 0 };
+    if (field === 'inputGain') {
+      updateTrack(trackId, { inputGain: resetValues.inputGain });
+      setTrackInputGain(trackId, resetValues.inputGain);
+      setInputGainValues({ ...inputGainValues, [trackId]: resetValues.inputGain });
+    } else {
+      updateTrack(trackId, { [field]: resetValues[field] });
+    }
   };
 
   // Handle double-click to reset volume to 0dB
@@ -81,6 +88,30 @@ export default function Mixer() {
   const handleGainChange = (trackId: string, value: number) => {
     setGainValues({ ...gainValues, [trackId]: value });
     updateTrack(trackId, { volume: value });
+  };
+
+  // Handle input gain numeric input
+  const handleInputGainInput = (trackId: string, value: string) => {
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= -60 && numValue <= 12) {
+      updateTrack(trackId, { inputGain: numValue });
+      setInputGainValues({ ...inputGainValues, [trackId]: numValue });
+      try {
+        setTrackInputGain(trackId, numValue);
+      } catch (err) {
+        // audio engine might not be ready
+      }
+    }
+  };
+
+  const handleInputGainChange = (trackId: string, value: number) => {
+    setInputGainValues({ ...inputGainValues, [trackId]: value });
+    updateTrack(trackId, { inputGain: value });
+    try {
+      setTrackInputGain(trackId, value);
+    } catch (err) {
+      // audio engine might not be ready
+    }
   };
 
   // Handle plugin insertion with menu
@@ -209,6 +240,32 @@ export default function Mixer() {
                 className="input-daw w-16"
                 title="Double-click to reset to 0dB"
               />
+              {/* Input Gain (pre-fader) */}
+              <div className="mt-1 w-full">
+                <div className="text-daw-xs channel-strip-label">Input</div>
+                <input
+                  type="range"
+                  min="-60"
+                  max="12"
+                  step="0.1"
+                  value={(inputGainValues[track.id] ?? track.inputGain ?? 0)}
+                  onChange={(e) => handleInputGainChange(track.id, parseFloat(e.target.value))}
+                  onDoubleClick={() => handleDoubleClickReset(track.id, 'inputGain')}
+                  className="w-full slider-vertical"
+                  title={`Input Gain: ${(inputGainValues[track.id] ?? track.inputGain ?? 0)}dB - double-click to reset`}
+                />
+                <input
+                  type="number"
+                  min="-60"
+                  max="12"
+                  step="0.1"
+                  value={(inputGainValues[track.id] ?? track.inputGain ?? 0)}
+                  onChange={(e) => handleInputGainInput(track.id, e.target.value)}
+                  onDoubleClick={() => handleDoubleClickReset(track.id, 'inputGain')}
+                  className="input-daw w-16 mt-1"
+                  title="Double-click to reset input gain to 0dB"
+                />
+              </div>
             </div>
 
             {/* Plugin Slots (vertical) - 6 slots with drag-drop */}
