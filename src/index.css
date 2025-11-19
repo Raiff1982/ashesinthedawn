@@ -77,13 +77,13 @@
 
 /* Slider styling */
 .slider-vertical {
-  writing-mode: bt-lr;
-  -webkit-appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
   width: 8px;
 }
 
 input[type="range"].slider-vertical {
-  background: linear-gradient(to top, #1f2937, #374151);
+  background: linear-gradient(to right, #1f2937, #374151);
   border-radius: 4px;
 }
 
