@@ -12,19 +12,19 @@ export default function Mixer() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gradient-to-b from-gray-850 to-gray-950">
       {/* Tabs */}
-      <div className="flex gap-4 px-4 pt-3 border-b border-gray-700 text-xs">
-        <button className="pb-2 border-b-2 border-blue-500 text-gray-100 font-semibold">
+      <div className="flex gap-4 px-4 pt-3 border-b border-gray-600 text-xs bg-gray-900">
+        <button className="pb-2 border-b-2 border-blue-500 text-gray-50 font-semibold hover:text-white transition">
           Insert 1
         </button>
-        <button className="pb-2 border-b-2 border-gray-700 text-gray-400 hover:text-gray-300">
+        <button className="pb-2 border-b-2 border-transparent text-gray-400 hover:text-gray-300 transition">
           Insert 2
         </button>
-        <button className="pb-2 border-b-2 border-gray-700 text-gray-400 hover:text-gray-300">
+        <button className="pb-2 border-b-2 border-transparent text-gray-400 hover:text-gray-300 transition">
           Send
         </button>
-        <button className="pb-2 border-b-2 border-gray-700 text-gray-400 hover:text-gray-300">
+        <button className="pb-2 border-b-2 border-transparent text-gray-400 hover:text-gray-300 transition">
           Master
         </button>
       </div>
@@ -33,8 +33,8 @@ export default function Mixer() {
       <div className="flex-1 overflow-x-auto p-4">
         <div className="flex gap-6 min-w-max">
           {/* Input Gain */}
-          <div className="flex flex-col items-center gap-2 min-w-32">
-            <label className="text-xs font-semibold text-gray-400">Input Gain</label>
+          <div className="channel-strip px-3 py-2">
+            <label className="channel-strip-label block text-center mb-1">Input</label>
             <input
               type="range"
               min="-60"
@@ -43,14 +43,14 @@ export default function Mixer() {
               onChange={(e) => setTrackInputGain(selectedTrack.id, parseFloat(e.target.value))}
               className="w-24 h-6 accent-blue-500"
             />
-            <span className="text-xs text-gray-300 font-mono">
+            <span className="channel-strip-value block text-center text-xs mt-1">
               {selectedTrack.inputGain || 0}dB
             </span>
           </div>
 
           {/* Volume/Fader */}
-          <div className="flex flex-col items-center gap-2 min-w-32">
-            <label className="text-xs font-semibold text-gray-400">Volume</label>
+          <div className="channel-strip px-3 py-2">
+            <label className="channel-strip-label block text-center mb-1">Volume</label>
             <input
               type="range"
               min="-60"
@@ -59,16 +59,16 @@ export default function Mixer() {
               onChange={(e) =>
                 updateTrack(selectedTrack.id, { volume: parseFloat(e.target.value) })
               }
-              className="w-24 h-6 accent-blue-500"
+              className="w-24 h-6 accent-amber-500"
             />
-            <span className="text-xs text-gray-300 font-mono">
+            <span className="channel-strip-value block text-center text-xs mt-1">
               {selectedTrack.volume || 0}dB
             </span>
           </div>
 
           {/* Pan */}
-          <div className="flex flex-col items-center gap-2 min-w-32">
-            <label className="text-xs font-semibold text-gray-400">Pan</label>
+          <div className="channel-strip px-3 py-2">
+            <label className="channel-strip-label block text-center mb-1">Pan</label>
             <input
               type="range"
               min="-1"
@@ -78,16 +78,16 @@ export default function Mixer() {
               onChange={(e) =>
                 updateTrack(selectedTrack.id, { pan: parseFloat(e.target.value) })
               }
-              className="w-24 h-6 accent-blue-500"
+              className="w-24 h-6 accent-cyan-500"
             />
-            <span className="text-xs text-gray-300 font-mono">
+            <span className="channel-strip-value block text-center text-xs mt-1">
               {selectedTrack.pan === 0 ? 'C' : selectedTrack.pan! < 0 ? 'L' : 'R'}
             </span>
           </div>
 
           {/* Stereo Width */}
-          <div className="flex flex-col items-center gap-2 min-w-32">
-            <label className="text-xs font-semibold text-gray-400">Width</label>
+          <div className="channel-strip px-3 py-2">
+            <label className="channel-strip-label block text-center mb-1">Width</label>
             <input
               type="range"
               min="0"
@@ -96,54 +96,52 @@ export default function Mixer() {
               onChange={(e) =>
                 updateTrack(selectedTrack.id, { stereoWidth: parseFloat(e.target.value) })
               }
-              className="w-24 h-6 accent-blue-500"
+              className="w-24 h-6 accent-purple-500"
             />
-            <span className="text-xs text-gray-300 font-mono">
+            <span className="channel-strip-value block text-center text-xs mt-1">
               {selectedTrack.stereoWidth || 100}%
             </span>
           </div>
 
-          {/* Mute/Solo/Record Buttons */}
-          <div className="flex flex-col items-center gap-2">
-            <label className="text-xs font-semibold text-gray-400">Controls</label>
-            <div className="flex gap-1">
-              <button
-                onClick={() =>
-                  updateTrack(selectedTrack.id, { muted: !selectedTrack.muted })
-                }
-                className={`px-3 py-1 rounded text-xs font-semibold transition ${
-                  selectedTrack.muted
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                M
-              </button>
-              <button
-                onClick={() =>
-                  updateTrack(selectedTrack.id, { soloed: !selectedTrack.soloed })
-                }
-                className={`px-3 py-1 rounded text-xs font-semibold transition ${
-                  selectedTrack.soloed
-                    ? 'bg-yellow-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                S
-              </button>
-              <button
-                onClick={() =>
-                  updateTrack(selectedTrack.id, { armed: !selectedTrack.armed })
-                }
-                className={`px-3 py-1 rounded text-xs font-semibold transition ${
-                  selectedTrack.armed
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                R
-              </button>
-            </div>
+          {/* Control Buttons */}
+          <div className="channel-strip px-3 py-2 flex flex-col gap-1">
+            <label className="channel-strip-label block text-center mb-1">Controls</label>
+            <button
+              onClick={() =>
+                updateTrack(selectedTrack.id, { muted: !selectedTrack.muted })
+              }
+              className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                selectedTrack.muted
+                  ? 'bg-red-600 text-white shadow-lg'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              M
+            </button>
+            <button
+              onClick={() =>
+                updateTrack(selectedTrack.id, { soloed: !selectedTrack.soloed })
+              }
+              className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                selectedTrack.soloed
+                  ? 'bg-yellow-600 text-white shadow-lg'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              S
+            </button>
+            <button
+              onClick={() =>
+                updateTrack(selectedTrack.id, { armed: !selectedTrack.armed })
+              }
+              className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                selectedTrack.armed
+                  ? 'bg-red-600 text-white shadow-lg'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              R
+            </button>
           </div>
         </div>
       </div>
