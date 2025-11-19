@@ -1,4 +1,4 @@
-import { Plus, Music, Mic2, Piano, Radio, Volume2, Trash2, Layers } from 'lucide-react';
+import { Plus, Music, Mic2, Piano, Radio, Trash2 } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
 import { Track } from '../types';
 import { useState } from 'react';
@@ -8,9 +8,9 @@ export default function TrackList() {
   const [showAddMenu, setShowAddMenu] = useState(false);
 
 
-  const getTrackNumber = (index: number, type: Track['type']): number => {
-    const tracksOfType = tracks.filter(t => t.type === type);
-    return tracksOfType.findIndex(t => t.id === tracks[index].id) + 1;
+  const getTrackNumber = (track: Track): number => {
+    const tracksOfSameType = tracks.filter(t => t.type === track.type);
+    return tracksOfSameType.findIndex(t => t.id === track.id) + 1;
   };
 
   return (
@@ -58,7 +58,7 @@ export default function TrackList() {
 
       {/* Tracks List */}
       <div className="flex-1 overflow-y-auto">
-        {tracks.map((track, index) => (
+        {tracks.map((track) => (
           <div
             key={track.id}
             onClick={() => selectTrack(track.id)}
@@ -80,7 +80,7 @@ export default function TrackList() {
                   </span>
                   <span className="text-xs text-gray-500">
                     {track.type.charAt(0).toUpperCase()}
-                    {getTrackNumber(index, track.type)}
+                    {getTrackNumber(track)}
                   </span>
                 </div>
               </div>
