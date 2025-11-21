@@ -15,6 +15,16 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
   const [timeSignature, setTimeSignature] = useState('4/4');
   const { setCurrentProject } = useDAW();
 
+  const handleOpenProject = () => {
+    console.log('Open project dialog would appear here');
+    // TODO: Implement file browser for existing projects
+  };
+
+  const handleTemplates = () => {
+    console.log('Templates dialog would appear here');
+    // TODO: Implement template selection interface
+  };
+
   const createNewProject = () => {
     const newProject: Project = {
       id: `project-${Date.now()}`,
@@ -61,13 +71,19 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
               <p className="text-xs text-gray-400">Start from scratch</p>
             </button>
 
-            <button className="p-6 bg-gray-800 hover:bg-gray-750 rounded-lg border-2 border-gray-700 hover:border-blue-500 transition-all">
+            <button
+              onClick={handleOpenProject}
+              className="p-6 bg-gray-800 hover:bg-gray-750 rounded-lg border-2 border-gray-700 hover:border-blue-500 transition-all"
+            >
               <FolderOpen className="w-8 h-8 text-gray-400 mb-3" />
               <h3 className="text-white font-semibold mb-1">Open Project</h3>
               <p className="text-xs text-gray-400">Continue working</p>
             </button>
 
-            <button className="p-6 bg-gray-800 hover:bg-gray-750 rounded-lg border-2 border-gray-700 hover:border-blue-500 transition-all">
+            <button 
+              onClick={handleTemplates}
+              className="p-6 bg-gray-800 hover:bg-gray-750 rounded-lg border-2 border-gray-700 hover:border-blue-500 transition-all"
+            >
               <Play className="w-8 h-8 text-gray-400 mb-3" />
               <h3 className="text-white font-semibold mb-1">Templates</h3>
               <p className="text-xs text-gray-400">Quick start</p>

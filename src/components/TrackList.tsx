@@ -1,10 +1,10 @@
-import { Plus, Music, Mic2, Piano, Radio, Eye } from 'lucide-react';
+import { Plus, Music, Mic2, Piano, Radio, Eye, X } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
 import { Track } from '../types';
 import { useState } from 'react';
 
 export default function TrackList() {
-  const { tracks, selectedTrack, addTrack, selectTrack, updateTrack } = useDAW();
+  const { tracks, selectedTrack, addTrack, selectTrack, updateTrack, deleteTrack } = useDAW();
   const [showAddMenu, setShowAddMenu] = useState(false);
 
   const getTrackNumber = (track: Track): number => {
@@ -96,11 +96,25 @@ export default function TrackList() {
                       {track.type.charAt(0).toUpperCase() + track.type.slice(1)} {getTrackNumber(track)}
                     </div>
                   </div>
-                  <div
-                    className="w-4 h-4 rounded flex-shrink-0"
-                    style={{ backgroundColor: track.color }}
-                    title="Track color"
-                  />
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <div
+                      className="w-4 h-4 rounded"
+                      style={{ backgroundColor: track.color }}
+                      title="Track color"
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${track.name}"?`)) {
+                          deleteTrack(track.id);
+                        }
+                      }}
+                      title="Delete track"
+                      className="p-1 rounded bg-gray-700 text-gray-400 hover:bg-red-600 hover:text-white transition opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Control Buttons - Row 1 */}
