@@ -117,6 +117,50 @@ Audio Output (same dtype as input)
 - **Stereo Detection**: <0.3 correlation threshold
 - **Mid/Side**: Separate level tracking for stereo analysis
 
+### Waveform Visualization System
+
+**Location**: `src/components/Waveform.tsx`, `src/components/Timeline.tsx`
+
+#### Peak-Based Rendering Algorithm
+- **Block Size**: Adapts to canvas width for O(width) complexity
+- **Min/Max Computation**: Finds amplitude extremes per pixel
+- **Rendering**: Single line segment per pixel (SVG or Canvas)
+- **Performance**: Fast even for 10+ minute audio files
+
+#### Waveform Component Props
+```typescript
+interface WaveformProps {
+  track: Track;
+  height?: number;              // Canvas height (default 60px)
+  width?: number;               // Canvas width (default 400px)
+  color?: string;               // Waveform color (default #3b82f6)
+  showPlayhead?: boolean;       // Display playhead indicator
+  currentTime?: number;         // Playhead position (seconds)
+}
+```
+
+#### Timeline Zoom System
+- **Range**: 50% to 300% zoom
+- **Increments**: 20% steps (buttons: −/+/Reset)
+- **Visual Feedback**: Real-time percentage display
+- **Dynamic Scaling**: All track widths scale with zoom level
+- **Grid Adjustment**: Bar markers adjust spacing accordingly
+
+#### Color Scheme
+```
+Background:  #1f2937 (dark gray)
+Center Line: #374151 (subtle gray)
+Waveform:    #3b82f6 (default cyan)
+Playhead:    #f59e0b (golden with glow)
+Peaks:       Dynamic opacity (0.2 to 1.0)
+```
+
+#### Reference Implementation
+- **PyQt6 Desktop App**: `waveform_timeline.py`
+- **Features**: Audio loading, min/max peaks, zoom, playback sync
+- **Languages**: Python 3.10+
+- **Dependencies**: PyQt6, NumPy, SoundFile, SoundDevice
+
 ---
 
 ## Part 2: React UI Architecture

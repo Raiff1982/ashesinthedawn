@@ -69,6 +69,13 @@ CoreLogic Studio is a next-generation Digital Audio Workstation (DAW) designed f
 - VUMeter (logarithmic metering)
 - Correlometer (stereo correlation)
 
+#### Waveform Visualization Enhancements
+- **Peak-Based Rendering**: Min/max peak computation for O(width) fast rendering
+- **Timeline Zoom Controls**: 50%-300% zoom with visual percentage display
+- **Advanced Playhead**: Real-time playback position with golden glow effect
+- **SVG Waveforms**: Gradient-based rendering with dynamic opacity
+- **Reference Implementation**: Standalone PyQt6 waveform player (`waveform_timeline.py`)
+
 ### Phase 3: Real-Time Audio I/O (In Progress)
 - PortAudio integration
 - Multi-device handling

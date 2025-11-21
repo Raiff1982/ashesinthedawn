@@ -250,6 +250,77 @@ Example:
 
 ---
 
+### Building Custom Waveforms
+
+The Waveform component uses efficient peak-based rendering:
+
+```typescript
+// Component usage
+import Waveform from './components/Waveform';
+
+<Waveform
+  track={track}
+  height={60}
+  width={400}
+  color="#3b82f6"
+  showPlayhead={true}
+  currentTime={currentTime}
+/>
+```
+
+**Peak Rendering Algorithm:**
+- Computes min/max peaks per block of samples
+- Renders O(width) line segments (1 per pixel)
+- Fast rendering even for large audio files
+- Dynamic opacity based on peak amplitude
+
+**Timeline Zoom:**
+- Built-in zoom controls (50%-300%)
+- Zoom button: `+ / - / Reset`
+- Visual percentage display
+- Smooth scaling with pixel-perfect rendering
+
+---
+
+### Working with DSP Backend
+
+#### Python Requirements
+```bash
+pip install numpy scipy
+```
+
+#### Running Tests
+```bash
+# All Phase 2 tests
+python -m pytest test_phase2_*.py -v
+
+# Specific test file
+python -m pytest test_phase2_effects.py -v
+
+# With coverage
+python -m pytest test_phase2_*.py --cov=daw_core
+```
+
+#### PyQt6 Waveform Reference
+The standalone `waveform_timeline.py` demonstrates:
+- Audio file loading with soundfile
+- Min/max peak computation
+- Custom PyQt6 widget rendering
+- Playback synchronization with sounddevice
+
+Run with:
+```bash
+python waveform_timeline.py
+```
+
+Requires:
+- PyQt6
+- NumPy
+- SoundFile
+- SoundDevice
+
+---
+
 ## Common Tasks
 
 ### Accessing DAW State
