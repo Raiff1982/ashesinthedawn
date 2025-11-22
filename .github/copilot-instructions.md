@@ -1,5 +1,8 @@
 # CoreLogic Studio - AI Coding Agent Instructions
 
+**Last Updated**: November 22, 2025 (23:52 UTC)
+**Session**: Audio System Stabilization & Documentation Refresh
+
 ## Project Overview
 
 CoreLogic Studio is a **dual-platform DAW** (Digital Audio Workstation):

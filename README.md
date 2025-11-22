@@ -1,5 +1,7 @@
 # CoreLogic Studio - Tech Specs & Usage
 
+**Last Updated**: November 22, 2025 (23:52 UTC)
+
 ## Overview
 
 CoreLogic Studio is a next-generation Digital Audio Workstation (DAW) designed for professional and serious project studios. It combines a classic console-style workflow with adaptive AI assistance, integrated voice control, and tight hardware integration.
