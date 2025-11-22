@@ -150,8 +150,7 @@ class CodetteIntegrationService {
    */
   async getMasteringIntelligence(
     masterLevel: number,
-    masterPeak: number,
-    trackCount: number
+    masterPeak: number
   ): Promise<CodetteAnalysis> {
     if (!this.enabled) {
       throw new Error('Codette not enabled');
@@ -315,7 +314,7 @@ class CodetteIntegrationService {
    * Private helper: Generate mixing actions
    */
   private generateMixingActions(
-    trackType: string,
+    _trackType: string,
     trackMetrics: Array<{ trackId: string; level: number; peak: number }>
   ): CodetteAction[] {
     return trackMetrics

@@ -1,35 +1,58 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, Brain, BarChart3, Radio, Loader, TrendingUp } from 'lucide-react';
+import { 
+  Sparkles, Brain, BarChart3, Radio, Loader, AlertCircle, CheckCircle
+} from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
-import { getAIService } from '../lib/aiService';
-import { getCodetteService } from '../lib/codetteIntegration';
+import { getCodetteBridge } from '../lib/codetteBridgeService';
+
+interface ActionItem {
+  action: string;
+  parameter: string;
+  value: string | number;
+  priority: 'high' | 'medium' | 'low';
+}
 
 interface AISuggestion {
-  type: 'gain' | 'mixing' | 'health' | 'routing' | 'codette';
+  type: 'gain' | 'mixing' | 'health' | 'routing' | 'mastering' | 'creative' | 'full';
   suggestion: string;
   confidence: number;
   actionable: boolean;
+  actionItems?: ActionItem[];
 }
 
 export default function AIPanel() {
-  const { tracks, selectedTrack, isPlaying } = useDAW();
+  const { tracks, selectedTrack } = useDAW();
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
   const [loading, setLoading] = useState(false);
-  const [aiEnabled, setAiEnabled] = useState(false);
-  const [activeTab, setActiveTab] = useState<'health' | 'mixing' | 'routing' | 'codette'>('health');
+  const [backendConnected, setBackendConnected] = useState(false);
+  const [activeTab, setActiveTab] = useState<'health' | 'mixing' | 'routing' | 'full'>('health');
 
   useEffect(() => {
-    const aiService = getAIService();
-    const codetteService = getCodetteService();
-    setAiEnabled(aiService.isAvailable() && codetteService.isAvailable());
+    // Initial connection check
+    checkBackendConnection();
+
+    // Check backend connection periodically
+    const healthCheckInterval = setInterval(() => {
+      checkBackendConnection();
+    }, 5000);
+
+    return () => clearInterval(healthCheckInterval);
   }, []);
 
-  const analyzeSessionWithCodette = async () => {
-    if (!aiEnabled) return;
-    
+  const checkBackendConnection = async () => {
+    try {
+      const bridge = getCodetteBridge();
+      const response = await bridge.healthCheck();
+      setBackendConnected(response.success);
+    } catch {
+      setBackendConnected(false);
+    }
+  };
+
+  const analyzeSessionWithBackend = async () => {
     setLoading(true);
     try {
-      const codetteService = getCodetteService();
+      const bridge = getCodetteBridge();
       
       // Build session context from DAW state
       const trackMetrics = tracks.map(t => ({
@@ -38,7 +61,7 @@ export default function AIPanel() {
         type: t.type,
         level: t.volume || -60,
         peak: (t.volume || -60) + 3,
-        plugins: (t.inserts || []).map(p => p.id || p.name || 'Unknown'),
+        plugins: (t.inserts || []).map(p => typeof p === 'string' ? p : 'Unknown'),
       }));
 
       const hasClipping = tracks.some(t => (t.volume || -60) > -1);
@@ -55,100 +78,147 @@ export default function AIPanel() {
         hasClipping,
       };
 
-      const response = await codetteService.analyzeSession(context);
+      const prediction = await bridge.analyzeSession(context);
 
       setSuggestions([{
-        type: 'codette',
-        suggestion: response.analysis.recommendation,
-        confidence: response.analysis.confidence,
-        actionable: response.analysis.actionItems.length > 0,
+        type: 'full',
+        suggestion: prediction.prediction,
+        confidence: prediction.confidence,
+        actionable: (prediction.actionItems?.length || 0) > 0,
+        actionItems: prediction.actionItems?.map(item => ({
+          action: item.action || 'Action',
+          parameter: item.parameter || '',
+          value: item.value || '',
+          priority: item.priority || 'medium'
+        })),
       }]);
     } catch (error) {
-      console.error('Codette analysis error:', error);
+      console.error('Backend analysis error:', error);
+      setSuggestions([{
+        type: 'full',
+        suggestion: `Backend error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        confidence: 0,
+        actionable: false,
+      }]);
     } finally {
       setLoading(false);
     }
   };
 
   const suggestMixingChain = async () => {
-    if (!aiEnabled || !selectedTrack) return;
+    if (!selectedTrack) return;
     
     setLoading(true);
     try {
-      const codetteService = getCodetteService();
-      const trackMetrics = [{
-        trackId: selectedTrack.id,
+      const bridge = getCodetteBridge();
+      
+      const analysis = await bridge.getMixingIntelligence(selectedTrack.type, {
         level: selectedTrack.volume || -60,
         peak: (selectedTrack.volume || -60) + 3,
-      }];
-      
-      const analysis = await codetteService.getMixingIntelligence(selectedTrack.type, trackMetrics);
+        plugins: (selectedTrack.inserts || []).map(p => typeof p === 'string' ? p : 'Unknown'),
+      });
       
       setSuggestions([{
         type: 'mixing',
-        suggestion: analysis.recommendation,
+        suggestion: analysis.prediction,
         confidence: analysis.confidence,
         actionable: true,
+        actionItems: analysis.actionItems?.map(item => ({
+          action: item.action || 'Action',
+          parameter: item.parameter || '',
+          value: item.value || '',
+          priority: item.priority || 'medium'
+        })),
       }]);
     } catch (error) {
       console.error('Mixing suggestion error:', error);
+      setSuggestions([{
+        type: 'mixing',
+        suggestion: `Error: ${error instanceof Error ? error.message : 'Analysis failed'}`,
+        confidence: 0,
+        actionable: false,
+      }]);
     } finally {
       setLoading(false);
     }
   };
 
   const suggestRouting = async () => {
-    if (!aiEnabled) return;
-    
     setLoading(true);
     try {
-      const codetteService = getCodetteService();
+      const bridge = getCodetteBridge();
       
-      const trackMetrics = tracks.map(t => ({
-        trackId: t.id,
-        name: t.name,
-        type: t.type,
-        level: t.volume || -60,
-        peak: (t.volume || -60) + 3,
-        plugins: (t.inserts || []).map(p => p.id || p.name || 'Unknown'),
-      }));
+      const trackTypes = tracks.map(t => t.type);
+      const hasAux = tracks.some(t => t.type === 'aux');
 
-      const context = {
+      const analysis = await bridge.getRoutingIntelligence({
         trackCount: tracks.length,
-        totalDuration: 0,
-        sampleRate: 48000,
-        trackMetrics,
-        masterLevel: Math.max(...tracks.map(t => t.volume || -60), -60),
-        masterPeak: Math.max(...tracks.map(t => t.volume || -60), -60) + 3,
-        hasClipping: tracks.some(t => (t.volume || -60) > -1),
-      };
-
-      const analysis = await codetteService.getRoutingIntelligence(context);
+        trackTypes,
+        hasAux,
+      });
       
       setSuggestions([{
         type: 'routing',
-        suggestion: analysis.recommendation,
+        suggestion: analysis.prediction,
         confidence: analysis.confidence,
         actionable: true,
+        actionItems: analysis.actionItems?.map(item => ({
+          action: item.action || 'Action',
+          parameter: item.parameter || '',
+          value: item.value || '',
+          priority: item.priority || 'medium'
+        })),
       }]);
     } catch (error) {
       console.error('Routing suggestion error:', error);
+      setSuggestions([{
+        type: 'routing',
+        suggestion: `Error: ${error instanceof Error ? error.message : 'Analysis failed'}`,
+        confidence: 0,
+        actionable: false,
+      }]);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!aiEnabled) {
-    return (
-      <div className="p-3 space-y-2 text-xs">
-        <div className="flex items-center gap-2 text-yellow-500">
-          <Brain size={14} />
-          <span>Codette AI not initialized</span>
-        </div>
-        <p className="text-gray-400">Set REACT_APP_AI_ENABLED=true in .env.local</p>
-      </div>
-    );
-  }
+  const suggestGainStaging = async () => {
+    setLoading(true);
+    try {
+      const bridge = getCodetteBridge();
+      
+      const analysis = await bridge.getGainStagingAdvice(
+        tracks.map(t => ({
+          id: t.id,
+          level: t.volume || -60,
+          peak: (t.volume || -60) + 3,
+        }))
+      );
+      
+      setSuggestions([{
+        type: 'gain',
+        suggestion: analysis.prediction,
+        confidence: analysis.confidence,
+        actionable: true,
+        actionItems: analysis.actionItems?.map(item => ({
+          action: item.action || 'Action',
+          parameter: item.parameter || '',
+          value: item.value || '',
+          priority: item.priority || 'medium'
+        })),
+      }]);
+    } catch (error) {
+      console.error('Gain staging error:', error);
+      setSuggestions([{
+        type: 'gain',
+        suggestion: `Error: ${error instanceof Error ? error.message : 'Analysis failed'}`,
+        confidence: 0,
+        actionable: false,
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-gray-900 border-t border-gray-700">
@@ -157,6 +227,19 @@ export default function AIPanel() {
         <div className="flex items-center gap-2 mb-3">
           <Sparkles size={16} className="text-purple-400" />
           <h3 className="font-semibold text-gray-100">🤖 Codette AI</h3>
+          <div className="ml-auto flex items-center gap-1">
+            {backendConnected ? (
+              <>
+                <CheckCircle size={12} className="text-green-500" />
+                <span className="text-xs text-green-500">Connected</span>
+              </>
+            ) : (
+              <>
+                <AlertCircle size={12} className="text-yellow-500" />
+                <span className="text-xs text-yellow-500">Offline</span>
+              </>
+            )}
+          </div>
         </div>
         
         {/* Tabs */}
@@ -196,9 +279,9 @@ export default function AIPanel() {
             Routing
           </button>
           <button
-            onClick={() => setActiveTab('codette')}
+            onClick={() => setActiveTab('full')}
             className={`px-2 py-1 rounded transition-colors ${
-              activeTab === 'codette'
+              activeTab === 'full'
                 ? 'bg-purple-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
@@ -213,31 +296,7 @@ export default function AIPanel() {
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {activeTab === 'health' && (
           <button
-            onClick={async () => {
-              setLoading(true);
-              try {
-                const aiService = getAIService();
-                const hasClipping = tracks.some(t => (t.volume || -60) > 0);
-                const peakLevel = Math.max(...tracks.map(t => t.volume || -60), -60);
-                const avgLevel = tracks.reduce((sum, t) => sum + (t.volume || -60), 0) / Math.max(tracks.length, 1);
-                
-                const health = await aiService.analyzeSessionHealth(
-                  tracks.length,
-                  peakLevel,
-                  avgLevel,
-                  hasClipping
-                );
-
-                setSuggestions([{
-                  type: 'health',
-                  suggestion: health.recommendations[0] || 'Session is healthy',
-                  confidence: 0.95,
-                  actionable: health.clipping,
-                }]);
-              } finally {
-                setLoading(false);
-              }
-            }}
+            onClick={suggestGainStaging}
             disabled={loading}
             className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-2"
           >
@@ -249,7 +308,7 @@ export default function AIPanel() {
             ) : (
               <>
                 <BarChart3 size={14} />
-                Analyze Health
+                Gain Staging Analysis
               </>
             )}
           </button>
@@ -270,12 +329,12 @@ export default function AIPanel() {
               ) : (
                 <>
                   <Sparkles size={14} />
-                  Mixing Chain
+                  Suggest Mixing Chain
                 </>
               )}
             </button>
             {!selectedTrack && (
-              <p className="text-xs text-gray-400 text-center">Select a track first</p>
+              <p className="text-xs text-gray-400 text-center py-2">Select a track first</p>
             )}
           </>
         )}
@@ -300,9 +359,9 @@ export default function AIPanel() {
           </button>
         )}
 
-        {activeTab === 'codette' && (
+        {activeTab === 'full' && (
           <button
-            onClick={analyzeSessionWithCodette}
+            onClick={analyzeSessionWithBackend}
             disabled={loading}
             className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-2"
           >
@@ -314,54 +373,94 @@ export default function AIPanel() {
             ) : (
               <>
                 <Brain size={14} />
-                Full Analysis
+                Full Session Analysis
               </>
             )}
           </button>
         )}
 
-        {/* Results */}
+        {/* Results Tiles */}
         {suggestions.length > 0 && (
-          <div className="mt-4 p-3 bg-gray-800 rounded-lg border border-purple-700">
-            <div className="flex items-start gap-2">
-              <Sparkles size={16} className="text-purple-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-xs font-medium text-gray-300 mb-1">
-                  {suggestions[0].type.toUpperCase()}
-                </p>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  {suggestions[0].suggestion}
-                </p>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-700">
-                  <span className="text-xs text-gray-500">
-                    Confidence: {Math.round(suggestions[0].confidence * 100)}%
-                  </span>
-                  {suggestions[0].actionable && (
-                    <span className="text-xs px-2 py-1 bg-purple-600/20 text-purple-400 rounded">
-                      Actionable
-                    </span>
-                  )}
+          <div className="mt-4 space-y-2">
+            {suggestions.map((suggestion, idx) => (
+              <div key={idx} className="p-3 bg-gray-800 rounded-lg border border-purple-700 hover:border-purple-600 transition-colors">
+                <div className="flex items-start gap-2">
+                  <Sparkles size={14} className="text-purple-400 flex-shrink-0 mt-1" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-purple-300 mb-1 uppercase">
+                      {suggestion.type}
+                    </p>
+                    <p className="text-xs text-gray-300 leading-relaxed break-words">
+                      {suggestion.suggestion}
+                    </p>
+                    
+                    {/* Action Items if present */}
+                    {suggestion.actionItems && suggestion.actionItems.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-700 space-y-1">
+                        {suggestion.actionItems.map((item, i) => (
+                          <div key={i} className="text-xs text-gray-400 flex items-start gap-2">
+                            <span className="text-purple-400 mt-0.5">•</span>
+                            <div>
+                              <p className="text-gray-300">{item.action}: {item.parameter}</p>
+                              <p className="text-gray-500">Set to: {item.value}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-700">
+                      <span className="text-xs text-gray-500">
+                        Confidence: {Math.round(suggestion.confidence * 100)}%
+                      </span>
+                      {suggestion.actionable && (
+                        <span className="text-xs px-2 py-0.5 bg-purple-600/20 text-purple-300 rounded">
+                          Actionable
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
 
-        {/* Status */}
-        <div className="p-2 bg-gray-800 rounded text-xs space-y-1 border border-gray-700">
-          <p className="text-gray-400 flex items-center gap-2">
-            <TrendingUp size={12} className="text-purple-400" />
-            <span className="text-gray-500">Tracks:</span> {tracks.length}
-          </p>
-          <p className="text-gray-400">
-            <span className="text-gray-500">Selected:</span> {selectedTrack?.name || 'None'}
-          </p>
-          <p className="text-gray-400">
-            <span className="text-gray-500">Status:</span>{' '}
-            <span className={isPlaying ? 'text-green-400' : 'text-gray-500'}>
-              {isPlaying ? 'Playing' : 'Stopped'}
-            </span>
-          </p>
+        {/* Backend Status Tile */}
+        {!backendConnected && (
+          <div className="p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs space-y-1">
+            <p className="text-yellow-400 flex items-center gap-2">
+              <AlertCircle size={12} />
+              Backend offline - local processing active
+            </p>
+          </div>
+        )}
+
+        {/* Session Status Tile */}
+        <div className="p-3 bg-gray-800 rounded-lg border border-gray-700 space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase">Session Status</p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-gray-900 rounded p-2">
+              <p className="text-gray-500 mb-1">Tracks</p>
+              <p className="text-gray-200 font-semibold">{tracks.length}</p>
+            </div>
+            <div className="bg-gray-900 rounded p-2">
+              <p className="text-gray-500 mb-1">Selected</p>
+              <p className="text-gray-200 font-semibold text-xs truncate">{selectedTrack?.name || 'None'}</p>
+            </div>
+            <div className="bg-gray-900 rounded p-2">
+              <p className="text-gray-500 mb-1">Backend</p>
+              <p className={`font-semibold text-xs ${backendConnected ? 'text-green-400' : 'text-red-400'}`}>
+                {backendConnected ? 'Online' : 'Offline'}
+              </p>
+            </div>
+            <div className="bg-gray-900 rounded p-2">
+              <p className="text-gray-500 mb-1">Ready</p>
+              <p className={`font-semibold text-xs ${backendConnected && tracks.length > 0 ? 'text-green-400' : 'text-yellow-400'}`}>
+                {backendConnected && tracks.length > 0 ? 'Yes' : 'No'}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

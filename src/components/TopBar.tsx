@@ -1,6 +1,7 @@
-import { Play, Pause, Square, Circle, Settings, Search, SkipBack, SkipForward, Zap, AlertCircle } from 'lucide-react';
+import { Play, Pause, Square, Circle, Settings, Search, SkipBack, SkipForward, Zap } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
 import { useEffect } from 'react';
+import { DropdownMenu } from './DropdownMenu';
 
 export default function TopBar() {
   const {
@@ -213,42 +214,51 @@ export default function TopBar() {
 
         <div className="w-px h-6 bg-gray-700" />
 
-        {/* Audio I/O Status Indicator */}
-        {audioIOError ? (
-          <button
-            onClick={openAudioSettingsModal}
-            className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-900/30 border border-red-700 hover:bg-red-900/50 transition text-red-400"
-            title="Audio I/O Error - Click to configure"
-          >
-            <AlertCircle className="w-3.5 h-3.5" />
-            <span className="text-xs">I/O Error</span>
-          </button>
-        ) : isAudioIOActive ? (
-          <button
-            onClick={openAudioSettingsModal}
-            className="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 transition"
-            title="Click to adjust audio settings"
-          >
-            <Zap className={`w-3.5 h-3.5 ${getInputLevelColor()}`} />
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-300">
-                {(inputLevel * 100).toFixed(0)}%
+        {/* Audio I/O Dropdown Menu */}
+        <DropdownMenu
+          trigger={
+            <>
+              <Zap className={`w-4 h-4 ${audioIOError ? 'text-red-400' : isAudioIOActive ? getInputLevelColor() : 'text-gray-500'}`} />
+              <span className="text-xs">
+                {audioIOError ? 'I/O Error' : isAudioIOActive ? `${(inputLevel * 100).toFixed(0)}%` : 'Offline'}
               </span>
-              <span className="text-xs text-gray-500">
-                {latencyMs.toFixed(1)}ms
-              </span>
-            </div>
-          </button>
-        ) : (
-          <button
-            onClick={openAudioSettingsModal}
-            className="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 transition text-gray-500"
-            title="Audio I/O Offline - Click to enable"
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span className="text-xs">Offline</span>
-          </button>
-        )}
+            </>
+          }
+          items={[
+            {
+              label: audioIOError ? 'Audio I/O Error - Click to configure' : `Input Level: ${(inputLevel * 100).toFixed(0)}%`,
+              disabled: true,
+              onClick: undefined,
+              className: 'cursor-default hover:bg-gray-800 text-gray-300'
+            },
+            {
+              label: `Latency: ${latencyMs.toFixed(1)}ms`,
+              disabled: true,
+              onClick: undefined,
+              className: 'cursor-default hover:bg-gray-800 text-gray-300'
+            },
+            {
+              label: isAudioIOActive ? 'Status: Active' : 'Status: Offline',
+              disabled: true,
+              onClick: undefined,
+              className: `cursor-default hover:bg-gray-800 ${isAudioIOActive ? 'text-green-400' : 'text-gray-500'}`
+            },
+            {
+              label: 'Configure Audio Settings',
+              icon: <Settings className="w-3.5 h-3.5" />,
+              onClick: openAudioSettingsModal
+            }
+          ]}
+          align="right"
+          triggerClassName={`px-2 py-1 rounded text-xs font-medium transition ${
+            audioIOError
+              ? 'bg-red-900/30 border border-red-700 hover:bg-red-900/50 text-red-400'
+              : isAudioIOActive
+                ? 'bg-gray-800 border border-gray-700 hover:bg-gray-700 text-gray-300'
+                : 'bg-gray-800 border border-gray-700 hover:bg-gray-700 text-gray-500'
+          }`}
+          menuClassName="bg-gray-800 border border-gray-700"
+        />
 
         {/* Settings & Search buttons */}
         <button 
