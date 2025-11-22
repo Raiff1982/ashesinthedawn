@@ -3,10 +3,24 @@
  * Provides core audio functionality for CoreLogic Studio
  */
 
+interface LoopConfig {
+  enabled: boolean;
+  startTime: number;
+  endTime: number;
+}
+
+interface TrackPlayState {
+  isPlaying: boolean;
+  currentOffset: number;
+  startTime: number;
+  loopCount: number;
+}
+
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
+  private metronomeGain: GainNode | null = null;
   private isInitialized = false;
   private audioBuffers: Map<string, AudioBuffer> = new Map();
   private waveformCache: Map<string, number[]> = new Map(); // Cache for waveforms
@@ -18,10 +32,15 @@ export class AudioEngine {
   private phaseFlipStates: Map<string, boolean> = new Map();
   private mediaRecorder: MediaRecorder | null = null;
   private recordedChunks: Blob[] = [];
-  private playingTracksState: Map<
-    string,
-    { isPlaying: boolean; currentOffset: number }
-  > = new Map();
+  private playingTracksState: Map<string, TrackPlayState> = new Map();
+  private loopConfig: LoopConfig = { enabled: false, startTime: 0, endTime: 0 };
+  private metronomeSettings = {
+    enabled: false,
+    bpm: 120,
+    timeSignature: 4,
+    volume: 0.3,
+  };
+  private metronomeScheduler: number | null = null;
 
   /**
    * Initialize the Web Audio API context and master nodes
@@ -45,6 +64,11 @@ export class AudioEngine {
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.connect(this.masterGain);
       this.analyser.fftSize = 2048;
+
+      // Create separate gain node for metronome
+      this.metronomeGain = this.audioContext.createGain();
+      this.metronomeGain.gain.value = this.metronomeSettings.volume;
+      this.metronomeGain.connect(this.masterGain);
 
       this.isInitialized = true;
       console.log("Audio Engine initialized");
@@ -80,7 +104,7 @@ export class AudioEngine {
   }
 
   /**
-   * Play an audio file from a specific track
+   * Play an audio file from a specific track with loop support
    */
   playAudio(
     trackId: string,
@@ -102,7 +126,16 @@ export class AudioEngine {
 
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
-      source.loop = true; // Enable looping
+
+      // Enable looping based on loop config
+      if (this.loopConfig.enabled) {
+        source.loop = true;
+        source.loopStart = this.loopConfig.startTime;
+        source.loopEnd = Math.min(
+          this.loopConfig.endTime,
+          audioBuffer.duration
+        );
+      }
 
       // Create pre-fader input gain node
       const inputGain = this.audioContext.createGain();
@@ -135,6 +168,8 @@ export class AudioEngine {
       this.playingTracksState.set(trackId, {
         isPlaying: true,
         currentOffset: startTime,
+        startTime: this.audioContext.currentTime,
+        loopCount: 0,
       });
 
       source.start(0, startTime);
@@ -493,6 +528,131 @@ export class AudioEngine {
   }
 
   /**
+   * Set loop region for playback
+   */
+  setLoopRegion(startTime: number, endTime: number, enabled: boolean): void {
+    this.loopConfig = {
+      enabled,
+      startTime: Math.max(0, startTime),
+      endTime: Math.max(startTime, endTime),
+    };
+    console.log(
+      `Loop region set: ${this.loopConfig.startTime}s - ${this.loopConfig.endTime}s (${enabled ? "enabled" : "disabled"})`
+    );
+  }
+
+  /**
+   * Get current loop configuration
+   */
+  getLoopRegion(): LoopConfig {
+    return { ...this.loopConfig };
+  }
+
+  /**
+   * Toggle loop playback
+   */
+  toggleLoop(): void {
+    this.loopConfig.enabled = !this.loopConfig.enabled;
+    console.log(`Loop ${this.loopConfig.enabled ? "enabled" : "disabled"}`);
+  }
+
+  /**
+   * Generate metronome click sound
+   */
+  private generateMetronomeClick(isDownbeat: boolean): AudioBuffer {
+    if (!this.audioContext) throw new Error("Audio context not initialized");
+
+    const sampleRate = this.audioContext.sampleRate;
+    const duration = 0.1; // 100ms click
+    const buffer = this.audioContext.createBuffer(
+      1,
+      sampleRate * duration,
+      sampleRate
+    );
+    const data = buffer.getChannelData(0);
+
+    const frequency = isDownbeat ? 1000 : 800; // Higher pitch for downbeat
+    const attack = 0.005;
+    const decay = 0.05;
+
+    for (let i = 0; i < data.length; i++) {
+      const t = i / sampleRate;
+      let envelope = 1;
+
+      if (t < attack) {
+        envelope = t / attack;
+      } else if (t < attack + decay) {
+        envelope = 1 - (t - attack) / decay;
+      } else {
+        envelope = 0;
+      }
+
+      data[i] =
+        Math.sin(2 * Math.PI * frequency * t) * envelope * 0.3;
+    }
+
+    return buffer;
+  }
+
+  /**
+   * Enable/disable metronome
+   */
+  setMetronomeEnabled(enabled: boolean): void {
+    this.metronomeSettings.enabled = enabled;
+    if (!enabled && this.metronomeScheduler !== null) {
+      cancelAnimationFrame(this.metronomeScheduler);
+      this.metronomeScheduler = null;
+    }
+    console.log(`Metronome ${enabled ? "enabled" : "disabled"}`);
+  }
+
+  /**
+   * Set metronome volume
+   */
+  setMetronomeVolume(volume: number): void {
+    this.metronomeSettings.volume = Math.max(0, Math.min(1, volume));
+    if (this.metronomeGain) {
+      this.metronomeGain.gain.value = this.metronomeSettings.volume;
+    }
+    console.log(`Metronome volume set to ${this.metronomeSettings.volume}`);
+  }
+
+  /**
+   * Set metronome BPM
+   */
+  setMetronomeBPM(bpm: number): void {
+    this.metronomeSettings.bpm = Math.max(1, Math.min(300, bpm));
+    console.log(`Metronome BPM set to ${this.metronomeSettings.bpm}`);
+  }
+
+  /**
+   * Set metronome time signature
+   */
+  setMetronomeTimeSignature(beats: number): void {
+    this.metronomeSettings.timeSignature = Math.max(1, Math.min(16, beats));
+    console.log(
+      `Metronome time signature set to ${this.metronomeSettings.timeSignature}/4`
+    );
+  }
+
+  /**
+   * Play metronome click
+   */
+  playMetronomeClick(isDownbeat: boolean = false): void {
+    if (!this.audioContext || !this.metronomeGain) return;
+
+    try {
+      const clickBuffer = this.generateMetronomeClick(isDownbeat);
+      const source = this.audioContext.createBufferSource();
+      source.buffer = clickBuffer;
+      source.connect(this.metronomeGain);
+      source.start(0);
+    } catch (error) {
+      console.error("Error playing metronome click:", error);
+    }
+  }
+
+  /**
    * Verify plugin chain is connected properly
    */
   verifyPluginChain(trackId: string): {
@@ -509,6 +669,33 @@ export class AudioEngine {
   }
 
   /**
+   * Sync volume changes during playback (for real-time fader updates)
+   */
+  syncTrackVolume(trackId: string, volumeDb: number): void {
+    const gainNode = this.gainNodes.get(trackId);
+    if (gainNode) {
+      // Use exponential ramp for smooth volume changes
+      const startTime = this.audioContext?.currentTime ?? 0;
+      gainNode.gain.exponentialRampToValueAtTime(
+        this.dbToLinear(volumeDb),
+        startTime + 0.05
+      );
+    }
+  }
+
+  /**
+   * Sync pan changes during playback
+   */
+  syncTrackPan(trackId: string, panValue: number): void {
+    const panNode = this.panNodes.get(trackId);
+    if (panNode) {
+      const clampedPan = Math.max(-1, Math.min(1, panValue));
+      const startTime = this.audioContext?.currentTime ?? 0;
+      panNode.pan.linearRampToValueAtTime(clampedPan, startTime + 0.05);
+    }
+  }
+
+  /**
    * Convert dB to linear gain
    */
   private dbToLinear(db: number): number {
@@ -520,10 +707,21 @@ export class AudioEngine {
    */
   dispose(): void {
     this.stopAllAudio();
+    if (this.metronomeScheduler !== null) {
+      cancelAnimationFrame(this.metronomeScheduler);
+      this.metronomeScheduler = null;
+    }
     this.mediaRecorder?.stop();
     this.audioContext?.close();
     this.audioBuffers.clear();
     this.playingNodes.clear();
+    this.waveformCache.clear();
+    this.gainNodes.clear();
+    this.panNodes.clear();
+    this.stereoWidthNodes.clear();
+    this.inputGainNodes.clear();
+    this.phaseFlipStates.clear();
+    this.playingTracksState.clear();
     this.isInitialized = false;
     console.log("Audio Engine disposed");
   }

@@ -156,12 +156,13 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isPlaying]);
 
-  // Sync track volume and pan changes with audio engine during playback
+  // Sync track volume, pan, and effects during playback for real-time updates
   useEffect(() => {
     if (isPlaying) {
       tracks.forEach((track) => {
-        audioEngineRef.current.setTrackVolume(track.id, track.volume);
-        audioEngineRef.current.setTrackPan(track.id, track.pan);
+        // Use smooth sync methods for real-time parameter updates
+        audioEngineRef.current.syncTrackVolume(track.id, track.volume);
+        audioEngineRef.current.syncTrackPan(track.id, track.pan);
         audioEngineRef.current.setStereoWidth(
           track.id,
           track.stereoWidth || 100
@@ -816,21 +817,31 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Phase 3: Loop functions
+  // Phase 3: Loop functions with audio engine sync
   const setLoopRegionFn = (startTime: number, endTime: number) => {
     setLoopRegion({
       enabled: loopRegion.enabled,
       startTime,
       endTime,
     });
+    // Sync with audio engine
+    audioEngineRef.current.setLoopRegion(
+      startTime,
+      endTime,
+      loopRegion.enabled
+    );
   };
 
   const toggleLoop = () => {
-    setLoopRegion((prev) => ({ ...prev, enabled: !prev.enabled }));
-    // If loop is enabled and we're playing, handle loop playback
-    if (isPlaying && !loopRegion.enabled) {
-      // Loop just enabled - will handle in playback loop
-      console.log("Loop enabled for playback");
-    }
+    const newLoopState = !loopRegion.enabled;
+    setLoopRegion((prev) => ({ ...prev, enabled: newLoopState }));
+    // Sync loop state with audio engine
+    audioEngineRef.current.setLoopRegion(
+      loopRegion.startTime,
+      loopRegion.endTime,
+      newLoopState
+    );
+    console.log(`Loop ${newLoopState ? "enabled" : "disabled"}`);
   };
 
   const clearLoopRegion = () => {
@@ -839,22 +850,29 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       startTime: 0,
       endTime: 0,
     });
+    audioEngineRef.current.setLoopRegion(0, 0, false);
   };
 
-  // Phase 3: Metronome functions
+  // Phase 3: Metronome functions with audio engine sync
   const toggleMetronome = () => {
-    setMetronomeSettings((prev) => ({ ...prev, enabled: !prev.enabled }));
+    const newState = !metronomeSettings.enabled;
+    setMetronomeSettings((prev) => ({ ...prev, enabled: newState }));
+    audioEngineRef.current.setMetronomeEnabled(newState);
   };
 
   const setMetronomeVolume = (volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume));
     setMetronomeSettings((prev) => ({
       ...prev,
-      volume: Math.max(0, Math.min(1, volume)),
+      volume: clampedVolume,
     }));
+    audioEngineRef.current.setMetronomeVolume(clampedVolume);
   };
 
   const setMetronomeBeatSound = (sound: MetronomeSettings["beatSound"]) => {
     setMetronomeSettings((prev) => ({ ...prev, beatSound: sound }));
+    // Additional implementation for beat sound variation can be added here
+    console.log(`Metronome beat sound set to: ${sound}`);
   };
 
   return (
