@@ -1,10 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { Track, Project, LogicCoreMode, Plugin, Clip, AudioEvent, AudioDevice, AudioIOState } from '../types';
+import { Track, Project, LogicCoreMode, Plugin, Clip, AudioEvent, AudioDevice, AudioIOState, PluginInstance, EffectChain, MIDIDevice, MIDIRoute, BusNode, SidechainConfig, AutomationCurve } from '../types';
 import { supabase } from '../lib/supabase';
 import { getAudioEngine } from '../lib/audioEngine';
 import { getAudioDeviceManager } from '../lib/audioDeviceManager';
 import { RealtimeBufferManager } from '../lib/realtimeBufferManager';
 import { AudioIOMetrics } from '../lib/audioIOMetrics';
+import { getPluginHostManager } from '../lib/pluginHost';
+import { MIDIRouter } from '../lib/midiRouter';
+import { BusManager, RoutingEngine, SidechainManager } from '../lib/audioRouter';
+import { getSpectrumAnalyzer } from '../lib/spectrumAnalyzer';
 
 interface DAWContextType {
   currentProject: Project | null;
@@ -134,7 +138,43 @@ interface DAWContextType {
   startTestTone: (frequency: number, volume: number) => boolean;
   stopTestTone: () => void;
   isTestTonePlaying: () => boolean;
-};
+  
+  // Phase 4: Plugin Management
+  loadedPlugins: Map<string, PluginInstance[]>;
+  effectChains: Map<string, EffectChain>;
+  loadPlugin: (pluginPath: string, trackId: string) => Promise<boolean>;
+  unloadPlugin: (trackId: string, pluginId: string) => void;
+  getPluginParameters: (trackId: string, pluginId: string) => Record<string, number>;
+  setPluginParameter: (trackId: string, pluginId: string, paramId: string, value: number) => void;
+  
+  // Phase 4: MIDI Management
+  midiRouting: Map<string, MIDIRoute>;
+  midiDevices: MIDIDevice[];
+  createMIDIRoute: (trackId: string, midiDevice: MIDIDevice, channel: number) => void;
+  deleteMIDIRoute: (routeId: string) => void;
+  getMIDIRoutesForTrack: (trackId: string) => MIDIRoute[];
+  
+  // Phase 4: Audio Routing
+  buses: BusNode[];
+  routingEngine: RoutingEngine;
+  sidechainConfigs: Map<string, SidechainConfig>;
+  createBus: (name: string, color: string) => string;
+  deleteBus: (busId: string) => void;
+  addTrackToBus: (trackId: string, busId: string) => void;
+  removeTrackFromBus: (trackId: string) => void;
+  createSidechain: (compressorTrackId: string, sourceTrackId: string, frequency: number, filterType: 'lowpass' | 'highpass' | 'bandpass' | 'none') => void;
+  deleteSidechain: (sidechainId: string) => void;
+  
+  // Phase 4: Automation
+  automationCurves: Map<string, AutomationCurve[]>;
+  createAutomationCurve: (trackId: string, parameter: string) => string;
+  deleteAutomationCurve: (curveId: string) => void;
+  addAutomationPoint: (curveId: string, time: number, value: number) => void;
+  
+  // Phase 4: Analysis
+  spectrumData: Record<string, number[]>;
+  cpuUsageDetailed: number;
+}
 
 const DAWContext = createContext<DAWContextType | undefined>(undefined);
 
@@ -195,6 +235,25 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   const realtimeBufferRef = useRef<RealtimeBufferManager | null>(null);
   const audioMetricsRef = useRef<AudioIOMetrics | null>(null);
   const inputLevelMonitorRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Phase 4: Infrastructure References
+  const pluginHostManagerRef = useRef(getPluginHostManager());
+  const midiRouterRef = useRef(MIDIRouter.getInstance());
+  const busManagerRef = useRef(new BusManager());
+  const routingEngineRef = useRef(new RoutingEngine());
+  const sidechainManagerRef = useRef(new SidechainManager());
+  const spectrumAnalyzerRef = useRef(getSpectrumAnalyzer());
+
+  // Phase 4: State
+  const [loadedPlugins, setLoadedPlugins] = useState<Map<string, PluginInstance[]>>(new Map());
+  const [effectChains, setEffectChains] = useState<Map<string, EffectChain>>(new Map());
+  const [midiRouting, setMidiRouting] = useState<Map<string, MIDIRoute>>(new Map());
+  const [midiDevices, setMidiDevices] = useState<MIDIDevice[]>([]);
+  const [buses, setBuses] = useState<BusNode[]>([]);
+  const [sidechainConfigs, setSidechainConfigs] = useState<Map<string, SidechainConfig>>(new Map());
+  const [automationCurves, setAutomationCurves] = useState<Map<string, AutomationCurve[]>>(new Map());
+  const [spectrumData, setSpectrumData] = useState<Record<string, number[]>>({});
+  const cpuUsageDetailed = cpuUsage;
 
   useEffect(() => {
     if (currentProject) {
@@ -1302,6 +1361,262 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Phase 4: Plugin Management Methods
+  const loadPlugin = async (pluginPath: string, trackId: string): Promise<boolean> => {
+    try {
+      const pluginId = `plugin-${Date.now()}`;
+      const pluginInstance: PluginInstance = {
+        id: pluginId,
+        name: pluginPath.split('/').pop() || 'Unknown',
+        version: '1.0',
+        type: 'vst3',
+        enabled: true,
+        parameters: [],
+        currentValues: {},
+      };
+
+      // Add to plugin host manager
+      pluginHostManagerRef.current.createPluginInstance(pluginId, pluginInstance);
+
+      // Update state
+      setLoadedPlugins(prev => {
+        const updated = new Map(prev);
+        const trackPlugins = updated.get(trackId) || [];
+        trackPlugins.push(pluginInstance);
+        updated.set(trackId, trackPlugins);
+        return updated;
+      });
+
+      console.log(`Loaded plugin ${pluginPath} on track ${trackId}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to load plugin:', error);
+      return false;
+    }
+  };
+
+  const unloadPlugin = (trackId: string, pluginId: string) => {
+    try {
+      pluginHostManagerRef.current.deletePlugin(pluginId);
+      
+      setLoadedPlugins(prev => {
+        const updated = new Map(prev);
+        const trackPlugins = updated.get(trackId) || [];
+        updated.set(trackId, trackPlugins.filter(p => p.id !== pluginId));
+        return updated;
+      });
+
+      console.log(`Unloaded plugin ${pluginId} from track ${trackId}`);
+    } catch (error) {
+      console.error('Failed to unload plugin:', error);
+    }
+  };
+
+  const getPluginParameters = (trackId: string, pluginId: string): Record<string, number> => {
+    const trackPlugins = loadedPlugins.get(trackId) || [];
+    const plugin = trackPlugins.find(p => p.id === pluginId);
+    return plugin?.currentValues || {};
+  };
+
+  const setPluginParameter = (trackId: string, pluginId: string, paramId: string, value: number) => {
+    setLoadedPlugins(prev => {
+      const updated = new Map(prev);
+      const trackPlugins = updated.get(trackId) || [];
+      const updatedPlugins = trackPlugins.map(p => {
+        if (p.id === pluginId) {
+          return {
+            ...p,
+            currentValues: { ...p.currentValues, [paramId]: value },
+          };
+        }
+        return p;
+      });
+      updated.set(trackId, updatedPlugins);
+      return updated;
+    });
+
+    // Update plugin host manager
+    const plugin = pluginHostManagerRef.current.getPlugin(pluginId);
+    if (plugin) {
+      plugin.setParameter(paramId, value);
+    }
+  };
+
+  // Phase 4: MIDI Management Methods
+  const createMIDIRoute = (trackId: string, midiDevice: MIDIDevice, channel: number) => {
+    const routeId = `midi-route-${Date.now()}`;
+    const route: MIDIRoute = {
+      id: routeId,
+      trackId,
+      midiDevice,
+      midiChannel: channel,
+      transpose: 0,
+      velocity: 100,
+    };
+
+    setMidiRouting(prev => {
+      const updated = new Map(prev);
+      updated.set(routeId, route);
+      return updated;
+    });
+
+    console.log(`Created MIDI route ${routeId} for track ${trackId}`);
+  };
+
+  const deleteMIDIRoute = (routeId: string) => {
+    setMidiRouting(prev => {
+      const updated = new Map(prev);
+      updated.delete(routeId);
+      return updated;
+    });
+
+    console.log(`Deleted MIDI route ${routeId}`);
+  };
+
+  const getMIDIRoutesForTrack = (trackId: string): MIDIRoute[] => {
+    const routes: MIDIRoute[] = [];
+    midiRouting.forEach(route => {
+      if (route.trackId === trackId) {
+        routes.push(route);
+      }
+    });
+    return routes;
+  };
+
+  // Phase 4: Audio Routing Methods
+  const createBus = (name: string, color: string): string => {
+    const busId = `bus-${Date.now()}`;
+    const newBus: BusNode = {
+      id: busId,
+      name,
+      color,
+      tracks: [],
+      volume: 0,
+      pan: 0,
+      muted: false,
+      soloed: false,
+    };
+
+    busManagerRef.current.createBus(busId, name, color);
+    setBuses(prev => [...prev, newBus]);
+
+    console.log(`Created bus ${name} (${busId})`);
+    return busId;
+  };
+
+  const deleteBus = (busId: string) => {
+    busManagerRef.current.deleteBus(busId);
+    setBuses(prev => prev.filter(b => b.id !== busId));
+
+    console.log(`Deleted bus ${busId}`);
+  };
+
+  const addTrackToBus = (trackId: string, busId: string) => {
+    busManagerRef.current.addTrackToBus(trackId, busId);
+    setBuses(prev => prev.map(b => 
+      b.id === busId ? { ...b, tracks: [...b.tracks, trackId] } : b
+    ));
+
+    console.log(`Added track ${trackId} to bus ${busId}`);
+  };
+
+  const removeTrackFromBus = (trackId: string) => {
+    setBuses(prev => prev.map(b => ({
+      ...b,
+      tracks: b.tracks.filter(t => t !== trackId),
+    })));
+
+    console.log(`Removed track ${trackId} from bus`);
+  };
+
+  const createSidechain = (compressorTrackId: string, sourceTrackId: string, frequency: number, filterType: 'lowpass' | 'highpass' | 'bandpass' | 'none') => {
+    const sidechainId = `sidechain-${Date.now()}`;
+    const config: SidechainConfig = {
+      id: sidechainId,
+      compressorTrackId,
+      sourceTrackId,
+      frequency,
+      filterType,
+      enabled: true,
+    };
+
+    sidechainManagerRef.current.createSidechain(sidechainId, config);
+    setSidechainConfigs(prev => {
+      const updated = new Map(prev);
+      updated.set(sidechainId, config);
+      return updated;
+    });
+
+    console.log(`Created sidechain ${sidechainId} for compressor on track ${compressorTrackId}`);
+  };
+
+  const deleteSidechain = (sidechainId: string) => {
+    sidechainManagerRef.current.deleteSidechain(sidechainId);
+    setSidechainConfigs(prev => {
+      const updated = new Map(prev);
+      updated.delete(sidechainId);
+      return updated;
+    });
+
+    console.log(`Deleted sidechain ${sidechainId}`);
+  };
+
+  // Phase 4: Automation Methods
+  const createAutomationCurve = (trackId: string, parameter: string): string => {
+    const curveId = `automation-${Date.now()}`;
+    const curve: AutomationCurve = {
+      id: curveId,
+      trackId,
+      parameter,
+      points: [],
+      mode: 'write',
+      recording: false,
+    };
+
+    setAutomationCurves(prev => {
+      const updated = new Map(prev);
+      const trackCurves = updated.get(trackId) || [];
+      trackCurves.push(curve);
+      updated.set(trackId, trackCurves);
+      return updated;
+    });
+
+    console.log(`Created automation curve ${curveId} for parameter ${parameter}`);
+    return curveId;
+  };
+
+  const deleteAutomationCurve = (curveId: string) => {
+    setAutomationCurves(prev => {
+      const updated = new Map(prev);
+      updated.forEach((curves, trackId) => {
+        updated.set(trackId, curves.filter(c => c.id !== curveId));
+      });
+      return updated;
+    });
+
+    console.log(`Deleted automation curve ${curveId}`);
+  };
+
+  const addAutomationPoint = (curveId: string, time: number, value: number) => {
+    setAutomationCurves(prev => {
+      const updated = new Map(prev);
+      updated.forEach((curves, trackId) => {
+        updated.set(trackId, curves.map(c => {
+          if (c.id === curveId) {
+            return {
+              ...c,
+              points: [...c.points, { time, value, curveType: 'linear' }],
+            };
+          }
+          return c;
+        }));
+      });
+      return updated;
+    });
+
+    console.log(`Added automation point at time ${time} with value ${value}`);
+  };
+
   return (
     <DAWContext.Provider
       value={{
@@ -1431,6 +1746,37 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         startTestTone,
         stopTestTone,
         isTestTonePlaying,
+        // Phase 4: Plugin Management
+        loadedPlugins,
+        effectChains,
+        loadPlugin,
+        unloadPlugin,
+        getPluginParameters,
+        setPluginParameter,
+        // Phase 4: MIDI Management
+        midiRouting,
+        midiDevices,
+        createMIDIRoute,
+        deleteMIDIRoute,
+        getMIDIRoutesForTrack,
+        // Phase 4: Audio Routing
+        buses,
+        routingEngine: routingEngineRef.current,
+        sidechainConfigs,
+        createBus,
+        deleteBus,
+        addTrackToBus,
+        removeTrackFromBus,
+        createSidechain,
+        deleteSidechain,
+        // Phase 4: Automation
+        automationCurves,
+        createAutomationCurve,
+        deleteAutomationCurve,
+        addAutomationPoint,
+        // Phase 4: Analysis
+        spectrumData,
+        cpuUsageDetailed,
       }}
     >
       {children}

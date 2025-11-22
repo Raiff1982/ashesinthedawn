@@ -13,6 +13,7 @@ export interface Track {
   pan: number;
   stereoWidth: number;
   phaseFlip: boolean;
+  duration?: number; // Track duration in seconds
   parentTrackId?: string;
   childTrackIds?: string[];
   automationMode?: 'off' | 'read' | 'write' | 'touch' | 'latch';
@@ -115,4 +116,126 @@ export interface AudioIOState {
   bufferOverruns: number;
   isAudioIOActive: boolean;
   audioIOError: string | null;
+}
+
+// Phase 4: Professional Features Types
+
+export interface PluginInstance {
+  id: string;
+  name: string;
+  version: string;
+  type: 'vst2' | 'vst3' | 'au' | 'internal';
+  enabled: boolean;
+  parameters: PluginParameter[];
+  currentValues: Record<string, number>;
+  automationCurve?: AutomationCurve;
+}
+
+export interface PluginParameter {
+  id: string;
+  pluginId: string;
+  name: string;
+  type: 'float' | 'int' | 'boolean' | 'list';
+  min: number;
+  max: number;
+  default: number;
+  current: number;
+  automatable: boolean;
+}
+
+export interface EffectChain {
+  id: string;
+  trackId: string;
+  plugins: PluginInstance[];
+  bypass: boolean;
+  outputGain: number;
+}
+
+export interface MIDIDevice {
+  deviceId: string;
+  name: string;
+  kind: 'input' | 'output';
+  manufacturer: string;
+  state: 'connected' | 'disconnected';
+  channel: number;
+}
+
+export interface MIDIRoute {
+  id: string;
+  trackId: string;
+  midiDevice: MIDIDevice;
+  midiChannel: number;
+  transpose: number;
+  velocity: number;
+}
+
+export interface MIDINote {
+  pitch: number;
+  velocity: number;
+  startTime: number;
+  duration: number;
+  trackId: string;
+}
+
+export interface BusNode {
+  id: string;
+  name: string;
+  color: string;
+  tracks: string[];
+  outputBusId?: string;
+  volume: number;
+  pan: number;
+  muted: boolean;
+  soloed: boolean;
+}
+
+export interface RoutingMatrix {
+  fromTrackId: string;
+  toDestinations: RoutingDestination[];
+}
+
+export interface RoutingDestination {
+  type: 'track' | 'bus' | 'master';
+  destinationId: string;
+  level: number;
+  pan: number;
+  preFader: boolean;
+}
+
+export interface SidechainConfig {
+  id: string;
+  compressorTrackId: string;
+  sourceTrackId: string;
+  frequency: number;
+  filterType: 'lowpass' | 'highpass' | 'bandpass' | 'none';
+  enabled: boolean;
+}
+
+export interface AutomationCurve {
+  id: string;
+  trackId: string;
+  parameter: string;
+  points: AutomationPoint[];
+  mode: 'off' | 'read' | 'write' | 'touch' | 'latch';
+  recording: boolean;
+}
+
+export interface AutomationPoint {
+  time: number;
+  value: number;
+  curveType: 'linear' | 'exponential' | 'logarithmic';
+}
+
+export interface FrequencyBucket {
+  frequency: number;
+  magnitude: number;
+  normalized: number;
+}
+
+export interface SpectrumData {
+  timestamp: number;
+  buckets: FrequencyBucket[];
+  peakFrequency: number;
+  peakMagnitude: number;
+  average: number;
 }
