@@ -1,11 +1,11 @@
 import { Plus, Music, Mic2, Piano, Radio, Eye, X } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
 import { Track } from '../types';
-import { useState } from 'react';
+import { memo } from 'react';
+import { DropdownMenu } from './DropdownMenu';
 
-export default function TrackList() {
+const TrackListComponent = () => {
   const { tracks, selectedTrack, addTrack, selectTrack, updateTrack, deleteTrack } = useDAW();
-  const [showAddMenu, setShowAddMenu] = useState(false);
 
   const getTrackNumber = (track: Track): number => {
     const tracksOfSameType = tracks.filter(t => t.type === track.type);
@@ -22,46 +22,47 @@ export default function TrackList() {
     }
   };
 
+  const trackMenuItems = [
+    {
+      label: 'Audio',
+      icon: <Mic2 className="w-4 h-4" />,
+      onClick: () => addTrack('audio'),
+    },
+    {
+      label: 'Instrument',
+      icon: <Piano className="w-4 h-4" />,
+      onClick: () => addTrack('instrument'),
+    },
+    {
+      label: 'MIDI',
+      icon: <Music className="w-4 h-4" />,
+      onClick: () => addTrack('midi'),
+    },
+    {
+      label: 'Aux',
+      icon: <Radio className="w-4 h-4" />,
+      onClick: () => addTrack('aux'),
+    },
+  ];
+
   return (
     <div className="flex flex-col h-full bg-gray-900 border-r-2 border-gray-700 overflow-hidden">
       {/* Header */}
       <div className="p-2 border-b-2 border-gray-700 bg-gradient-to-r from-gray-800 to-gray-750">
         <div className="relative">
-          <button
-            onClick={() => setShowAddMenu(!showAddMenu)}
-            className="w-full flex items-center justify-center p-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold text-white text-xs transition gap-1"
-          >
-            <Plus className="w-4 h-4" />
-            Add Track
-          </button>
-          {showAddMenu && (
-            <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg">
-              <button
-                onClick={() => { addTrack('audio'); setShowAddMenu(false); }}
-                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-700 first:rounded-t last:rounded-b"
-              >
-                <Mic2 className="w-3 h-3" /> Audio
-              </button>
-              <button
-                onClick={() => { addTrack('instrument'); setShowAddMenu(false); }}
-                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-700"
-              >
-                <Piano className="w-3 h-3" /> Instrument
-              </button>
-              <button
-                onClick={() => { addTrack('midi'); setShowAddMenu(false); }}
-                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-700"
-              >
-                <Music className="w-3 h-3" /> MIDI
-              </button>
-              <button
-                onClick={() => { addTrack('aux'); setShowAddMenu(false); }}
-                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-700 last:rounded-b"
-              >
-                <Radio className="w-3 h-3" /> Aux
-              </button>
-            </div>
-          )}
+          <DropdownMenu
+            trigger={
+              <>
+                <Plus className="w-4 h-4" />
+                Add Track
+              </>
+            }
+            items={trackMenuItems}
+            triggerClassName="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold text-white"
+            menuClassName="left-0 right-0"
+            align="left"
+            width="w-full"
+          />
         </div>
       </div>
 
@@ -189,4 +190,6 @@ export default function TrackList() {
       </div>
     </div>
   );
-}
+};
+
+export default memo(TrackListComponent);

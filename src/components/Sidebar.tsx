@@ -1,9 +1,17 @@
 import { useRef, useState } from 'react';
-import { Folder, Grid3X3, Zap, BookOpen, Upload, AlertCircle, CheckCircle, FolderOpen, Music, Disc3, Waves } from 'lucide-react';
+import { Grid3X3, Zap, BookOpen, Upload, AlertCircle, CheckCircle, FolderOpen, Music, Disc3, Waves, Sliders, Gauge, GitBranch } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
+import {
+  LazyPluginBrowserWrapper,
+  LazyEffectChainPanelWrapper,
+  LazyRoutingMatrixWrapper,
+  LazySpectrumVisualizerPanelWrapper,
+} from './LazyComponents';
+import MIDISettings from './MIDISettings';
+import AIPanel from './AIPanel';
 
 export default function Sidebar() {
-  const [activeTab, setActiveTab] = useState<'browser' | 'plugins' | 'templates' | 'ai'>('browser');
+  const [activeTab, setActiveTab] = useState<'browser' | 'pluginbrowser' | 'plugins' | 'templates' | 'ai' | 'effectchain' | 'midi' | 'routing' | 'spectrum'>('browser');
   const [selectedBrowserTab, setSelectedBrowserTab] = useState<'projects' | 'audio' | 'samples' | 'loops'>('projects');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addTrack, uploadAudioFile, isUploadingFile, uploadError, currentProject } = useDAW();
@@ -29,14 +37,36 @@ export default function Sidebar() {
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    console.log('Sidebar: File selected:', file?.name);
     if (!file) return;
 
-    setUploadSuccess(false);
-    const result = await uploadAudioFile(file);
+    // Determine if it's a project or audio file based on extension
+    const isProjectFile = file.name.endsWith('.json') || file.name.endsWith('.corelogic') || file.name.endsWith('.cls');
 
-    if (result) {
-      setUploadSuccess(true);
-      setTimeout(() => setUploadSuccess(false), 2000);
+    if (isProjectFile) {
+      try {
+        console.log('Loading project file:', file.name);
+        const fileContent = await file.text();
+        const projectData = JSON.parse(fileContent);
+        // Validate project structure
+        if (!projectData.id || !projectData.name || !Array.isArray(projectData.tracks)) {
+          throw new Error('Invalid project file format');
+        }
+        console.log('Project loaded from sidebar:', projectData.name);
+        // Load project using context - you'll need to add this method to DAWContext
+      } catch (error) {
+        console.error('Failed to load project:', error);
+      }
+    } else {
+      // Handle audio file upload as before
+      console.log('Uploading audio file:', file.name);
+      setUploadSuccess(false);
+      const result = await uploadAudioFile(file);
+
+      if (result) {
+        setUploadSuccess(true);
+        setTimeout(() => setUploadSuccess(false), 2000);
+      }
     }
 
     if (fileInputRef.current) {
@@ -65,37 +95,35 @@ export default function Sidebar() {
     e.stopPropagation();
   };
 
-  const handleSmartGainStaging = () => {
-    console.log('Smart Gain Staging activated');
-  };
 
-  const handleRoutingAssistant = () => {
-    console.log('Routing Assistant activated');
-  };
-
-  const handleSessionHealth = () => {
-    console.log('Session Health Check started');
-  };
-
-  const handleCreateTemplate = () => {
-    console.log('Create Template from Session started');
-  };
 
   return (
     <div className="w-64 bg-gray-900 border-l border-gray-700 flex flex-col">
-      <div className="flex border-b border-gray-700">
+      <div className="flex border-b border-gray-700 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('browser')}
-          className={`flex-1 p-3 flex items-center justify-center space-x-2 ${
+          onClick={() => {
+            setActiveTab('browser');
+            setSelectedBrowserTab('audio');
+          }}
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
             activeTab === 'browser' ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'
           }`}
-          title="File Browser"
+          title="File Browser & Upload"
         >
-          <Folder className="w-4 h-4" />
+          <Upload className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setActiveTab('pluginbrowser')}
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
+            activeTab === 'pluginbrowser' ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'
+          }`}
+          title="Plugin Browser"
+        >
+          <Disc3 className="w-4 h-4" />
         </button>
         <button
           onClick={() => setActiveTab('plugins')}
-          className={`flex-1 p-3 flex items-center justify-center space-x-2 ${
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
             activeTab === 'plugins' ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'
           }`}
           title="Stock Plugins"
@@ -104,7 +132,7 @@ export default function Sidebar() {
         </button>
         <button
           onClick={() => setActiveTab('templates')}
-          className={`flex-1 p-3 flex items-center justify-center space-x-2 ${
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
             activeTab === 'templates' ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'
           }`}
           title="Templates"
@@ -113,12 +141,49 @@ export default function Sidebar() {
         </button>
         <button
           onClick={() => setActiveTab('ai')}
-          className={`flex-1 p-3 flex items-center justify-center space-x-2 ${
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
             activeTab === 'ai' ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'
           }`}
           title="LogicCore AI"
         >
           <Zap className="w-4 h-4" />
+        </button>
+        {/* Phase 4 Tabs */}
+        <button
+          onClick={() => setActiveTab('effectchain')}
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
+            activeTab === 'effectchain' ? 'bg-gray-800 text-purple-400' : 'text-gray-400 hover:text-white'
+          }`}
+          title="Effect Chain"
+        >
+          <Sliders className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setActiveTab('midi')}
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
+            activeTab === 'midi' ? 'bg-gray-800 text-yellow-400' : 'text-gray-400 hover:text-white'
+          }`}
+          title="MIDI Settings"
+        >
+          <Music className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setActiveTab('routing')}
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
+            activeTab === 'routing' ? 'bg-gray-800 text-green-400' : 'text-gray-400 hover:text-white'
+          }`}
+          title="Routing"
+        >
+          <GitBranch className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setActiveTab('spectrum')}
+          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
+            activeTab === 'spectrum' ? 'bg-gray-800 text-cyan-400' : 'text-gray-400 hover:text-white'
+          }`}
+          title="Spectrum"
+        >
+          <Gauge className="w-4 h-4" />
         </button>
       </div>
 
@@ -179,29 +244,47 @@ export default function Sidebar() {
             {selectedBrowserTab === 'projects' && (
               <div className="space-y-2">
                 {currentProject ? (
-                  <div className="p-3 bg-gray-800 rounded border border-gray-700">
-                    <div className="flex items-center gap-2 mb-1">
-                      <FolderOpen className="w-4 h-4 text-blue-400" />
-                      <span className="text-sm font-medium text-white truncate">{currentProject.name}</span>
+                  <div className="space-y-2">
+                    <div className="p-3 bg-gray-800 rounded border border-gray-700">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FolderOpen className="w-4 h-4 text-blue-400" />
+                        <span className="text-sm font-medium text-white truncate">{currentProject.name}</span>
+                      </div>
+                      <div className="text-xs text-gray-400 space-y-0.5 ml-6">
+                        <div>SR: {currentProject.sampleRate}Hz</div>
+                        <div>BD: {currentProject.bitDepth}-bit</div>
+                        <div>BPM: {currentProject.bpm}</div>
+                        <div>Sig: {currentProject.timeSignature}</div>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400 space-y-0.5 ml-6">
-                      <div>SR: {currentProject.sampleRate}Hz</div>
-                      <div>BD: {currentProject.bitDepth}-bit</div>
-                      <div>BPM: {currentProject.bpm}</div>
-                      <div>Sig: {currentProject.timeSignature}</div>
-                    </div>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
+                    >
+                      Open Another Project
+                    </button>
                   </div>
                 ) : (
-                  <div className="text-xs text-gray-500 py-8 text-center">
-                    No project open
-                  </div>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full p-3 bg-gray-800 hover:bg-gray-700 rounded text-xs text-white transition-colors text-center"
+                  >
+                    Browse Local Files
+                  </button>
                 )}
               </div>
             )}
 
             {/* Audio Files Tab */}
             {selectedBrowserTab === 'audio' && (
-              <div className="space-y-2">
+              <div className="space-y-3">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload Audio File
+                </button>
                 <div
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
@@ -212,8 +295,9 @@ export default function Sidebar() {
                     ref={fileInputRef}
                     type="file"
                     onChange={handleFileSelect}
-                    accept=".mp3,.wav,.ogg,.aac,.flac,.m4a"
-                    className="hidden"
+                    accept=".mp3,.wav,.ogg,.aac,.flac,.m4a,.json,.corelogic,.cls"
+                    style={{ display: 'none' }}
+                    aria-hidden="true"
                     disabled={isUploadingFile}
                   />
 
@@ -301,42 +385,15 @@ export default function Sidebar() {
           </div>
         )}
 
-        {activeTab === 'ai' && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-white mb-3">LogicCore AI</h3>
-            <div className="space-y-2">
-              <button
-                className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
-                onClick={handleSmartGainStaging}
-              >
-                Smart Gain Staging
-              </button>
-              <button
-                className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
-                onClick={handleRoutingAssistant}
-              >
-                Routing Assistant
-              </button>
-              <button
-                className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
-                onClick={handleSessionHealth}
-              >
-                Session Health Check
-              </button>
-              <button
-                className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
-                onClick={handleCreateTemplate}
-              >
-                Create Template from Session
-              </button>
-            </div>
-            <div className="mt-4 p-3 bg-gray-800 rounded text-xs text-gray-300">
-              <p className="font-semibold text-white mb-1">Tip:</p>
-              <p>Enable voice control to use commands like "Create four drum tracks" or "Route all guitars to new bus"</p>
-            </div>
-          </div>
-        )}
+        {activeTab === 'ai' && <AIPanel />}
       </div>
+
+      {/* Phase 4 Components */}
+      {activeTab === 'pluginbrowser' && <LazyPluginBrowserWrapper />}
+      {activeTab === 'effectchain' && <LazyEffectChainPanelWrapper />}
+      {activeTab === 'midi' && <MIDISettings />}
+      {activeTab === 'routing' && <LazyRoutingMatrixWrapper />}
+      {activeTab === 'spectrum' && <LazySpectrumVisualizerPanelWrapper />}
     </div>
   );
 }

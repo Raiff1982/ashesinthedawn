@@ -2,6 +2,13 @@ import { useDAW } from "../contexts/DAWContext";
 import { Sliders } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import MixerTile from "./MixerTile";
+import { useDAW } from '../contexts/DAWContext';
+import { Track } from '../types';
+import { Sliders } from 'lucide-react';
+import { useState, useRef, useEffect, memo } from 'react';
+import MixerTile from './MixerTile';
+import DetachablePluginRack from './DetachablePluginRack';
+import MixerOptionsTile from './MixerOptionsTile';
 
 interface DetachedTileState {
   trackId: string;
@@ -23,6 +30,13 @@ export default function Mixer() {
   const [stripWidth, setStripWidth] = useState(100);
   const [stripHeight, setStripHeight] = useState(400);
   const [detachedTiles, setDetachedTiles] = useState<DetachedTileState[]>([]);
+const MixerComponent = () => {
+  const { tracks, selectedTrack, updateTrack, deleteTrack, selectTrack, addPluginToTrack, removePluginFromTrack, togglePluginEnabled } = useDAW();
+  const [stripWidth] = useState(100);
+  const [stripHeight] = useState(400);
+  const [detachedTiles, setDetachedTiles] = useState<DetachedTileState[]>([]);
+  const [detachedOptionsTile, setDetachedOptionsTile] = useState(false);
+  const [detachedPluginRacks, setDetachedPluginRacks] = useState<Record<string, boolean>>({});
   const [levels, setLevels] = useState<Record<string, number>>({}); // live RMS values
   const [masterFader, setMasterFader] = useState(0.7); // Master fader state (0-1)
 
@@ -56,13 +70,7 @@ export default function Mixer() {
     };
   }, []);
 
-  // Calculate max/min dimensions based on screen size
-  const maxStripWidth = Math.floor(window.innerWidth * 0.9);
-  const maxStripHeight = Math.floor(window.innerHeight * 0.85);
-  const minStripWidth = 60;
-  const minStripHeight = 200;
-
-  // --- Helper Functions ---
+  // Helper Functions ---
   const getMeterColor = (db: number) => {
     if (db > -3) return "rgb(255, 0, 0)";
     if (db > -8) return "rgb(255, 200, 0)";
@@ -164,6 +172,7 @@ export default function Mixer() {
               />
               <span className="ml-2 text-gray-500">{stripHeight}px</span>
             </label>
+            {/* Options moved to Options > Mixer Options menu */}
           </div>
         </div>
 
@@ -280,11 +289,66 @@ export default function Mixer() {
               )}
             </div>
           </div>
+
+          {/* Plugin Rack for Selected Track */}
+          {selectedTrack && selectedTrack.type !== 'master' && !detachedPluginRacks[selectedTrack.id] && (
+            <div className="h-32 border-t border-gray-700 bg-gray-800 p-4 overflow-y-auto">
+              <DetachablePluginRack
+                plugins={selectedTrack.inserts}
+                onAddPlugin={(plugin) => addPluginToTrack(selectedTrack.id, plugin)}
+                onRemovePlugin={(pluginId) => removePluginFromTrack(selectedTrack.id, pluginId)}
+                onTogglePlugin={(pluginId, enabled) => togglePluginEnabled(selectedTrack.id, pluginId, enabled)}
+                trackId={selectedTrack.id}
+                trackName={selectedTrack.name}
+                isDetached={false}
+                onDock={() => setDetachedPluginRacks(prev => ({ ...prev, [selectedTrack.id]: true }))}
+              />
+            </div>
+          )}
         </div>
       </div>
 
       {/* Detached Floating Tiles */}
       <div className="fixed inset-0 pointer-events-none">
+        {/* Detached Options Tile */}
+        {detachedOptionsTile && (
+          <div className="pointer-events-auto">
+            <MixerOptionsTile
+              tracks={tracks}
+              onUpdateTrack={updateTrack}
+              onRemovePlugin={removePluginFromTrack}
+              stripWidth={stripWidth}
+              stripHeight={stripHeight}
+              position={{ x: 400, y: 150 }}
+              onDock={() => setDetachedOptionsTile(false)}
+              isDetached={true}
+            />
+          </div>
+        )}
+
+        {/* Detached Plugin Racks */}
+        {Object.entries(detachedPluginRacks).map(([trackId, isDetached]) => {
+          if (!isDetached) return null;
+          const track = tracks.find(t => t.id === trackId);
+          if (!track) return null;
+
+          return (
+            <div key={`plugin-${trackId}`} className="pointer-events-auto">
+              <DetachablePluginRack
+                plugins={track.inserts}
+                onAddPlugin={(plugin) => addPluginToTrack(trackId, plugin)}
+                onRemovePlugin={(pluginId) => removePluginFromTrack(trackId, pluginId)}
+                onTogglePlugin={(pluginId, enabled) => togglePluginEnabled(trackId, pluginId, enabled)}
+                trackId={trackId}
+                trackName={track.name}
+                isDetached={true}
+                position={{ x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 }}
+                onDock={() => setDetachedPluginRacks(prev => ({ ...prev, [trackId]: false }))}
+              />
+            </div>
+          );
+        })}
+
         {detachedTiles.map((tile) => {
           const track = tracks.find((t) => t.id === tile.trackId);
           if (!track) return null;
@@ -321,3 +385,6 @@ export default function Mixer() {
     </>
   );
 }
+};
+
+export default memo(MixerComponent);

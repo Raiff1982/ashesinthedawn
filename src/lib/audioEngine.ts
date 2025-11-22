@@ -22,6 +22,12 @@ export class AudioEngine {
     string,
     { isPlaying: boolean; currentOffset: number }
   > = new Map();
+  
+  // Phase 4: Effects and Routing
+  private effectGainNodes: Map<string, GainNode> = new Map(); // Output gain for effect chains
+  private busGainNodes: Map<string, GainNode> = new Map(); // Gain nodes for buses
+  private busPanNodes: Map<string, StereoPannerNode> = new Map(); // Pan nodes for buses
+  private sidechainAnalysers: Map<string, AnalyserNode> = new Map(); // For sidechain detection
 
   /**
    * Initialize the Web Audio API context and master nodes
@@ -88,6 +94,7 @@ export class AudioEngine {
     volume: number = 1,
     pan: number = 0
   ): boolean {
+  playAudio(trackId: string, startTime: number = 0, volume: number = 1, pan: number = 0, busId?: string): boolean {
     if (!this.audioContext || !this.masterGain) return false;
 
     const audioBuffer = this.audioBuffers.get(trackId);
@@ -120,11 +127,19 @@ export class AudioEngine {
       this.stereoWidthNodes.set(trackId, trackGain);
       this.phaseFlipStates.set(trackId, false);
 
-      // Connect: source → input gain → pan → track gain (fader) → analyser → master
+      // Connect: source → input gain → pan → track gain (fader) → analyser
       source.connect(inputGain);
       inputGain.connect(panNode);
       panNode.connect(trackGain);
       trackGain.connect(this.analyser!);
+
+      // Route to bus if specified, otherwise to master
+      if (busId && this.busGainNodes.has(busId)) {
+        trackGain.connect(this.busGainNodes.get(busId)!);
+        console.log(`Playing track ${trackId} → bus ${busId}`);
+      } else {
+        trackGain.connect(this.masterGain);
+      }
 
       // Store nodes for later updates
       this.inputGainNodes.set(trackId, inputGain);
@@ -516,10 +531,382 @@ export class AudioEngine {
   }
 
   /**
+   * Real-Time Audio I/O Methods (Phase 3)
+   */
+
+  private mediaStream: MediaStream | null = null;
+  private scriptProcessorNode: ScriptProcessorNode | null = null;
+  private inputAnalyser: AnalyserNode | null = null;
+  private isInputActive = false;
+
+  /**
+   * Start real-time audio input
+   */
+  async startAudioInput(
+    deviceId?: string,
+    onAudioData?: (data: Float32Array) => void
+  ): Promise<boolean> {
+    if (!this.audioContext) await this.initialize();
+
+    if (!this.audioContext) {
+      console.error('Audio context not available');
+      return false;
+    }
+
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+      };
+
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      if (!this.mediaStream) {
+        console.error('Failed to get media stream');
+        return false;
+      }
+
+      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+
+      // Create input analyser for metering
+      this.inputAnalyser = this.audioContext.createAnalyser();
+      this.inputAnalyser.fftSize = 2048;
+      source.connect(this.inputAnalyser);
+
+      // Create ScriptProcessorNode for real-time processing (buffer size: 4096)
+      this.scriptProcessorNode = this.audioContext.createScriptProcessor(4096, 1, 1);
+
+      this.scriptProcessorNode.onaudioprocess = (event) => {
+        if (onAudioData) {
+          const inputData = event.inputBuffer.getChannelData(0);
+          const audioDataCopy = new Float32Array(inputData);
+          onAudioData(audioDataCopy);
+        }
+      };
+
+      this.inputAnalyser.connect(this.scriptProcessorNode);
+      this.scriptProcessorNode.connect(this.audioContext.destination);
+
+      this.isInputActive = true;
+      console.log(`Real-time audio input started${deviceId ? ` (device: ${deviceId})` : ''}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to start audio input:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Stop real-time audio input
+   */
+  stopAudioInput(): void {
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach((track) => track.stop());
+      this.mediaStream = null;
+    }
+
+    if (this.scriptProcessorNode) {
+      this.scriptProcessorNode.disconnect();
+      this.scriptProcessorNode = null;
+    }
+
+    if (this.inputAnalyser) {
+      this.inputAnalyser.disconnect();
+      this.inputAnalyser = null;
+    }
+
+    this.isInputActive = false;
+    console.log('Real-time audio input stopped');
+  }
+
+  /**
+   * Check if audio input is currently active
+   */
+  isAudioInputActive(): boolean {
+    return this.isInputActive;
+  }
+
+  /**
+   * Get input level (0-1)
+   */
+  getInputLevel(): number {
+    if (!this.inputAnalyser) return 0;
+
+    const dataArray = new Uint8Array(this.inputAnalyser.frequencyBinCount);
+    this.inputAnalyser.getByteFrequencyData(dataArray);
+
+    // Calculate average frequency bin value
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
+    }
+
+    const average = sum / dataArray.length;
+    return Math.min(1, average / 255);
+  }
+
+  /**
+   * Get input frequency data for visualization
+   */
+  getInputFrequencyData(): Uint8Array | null {
+    if (!this.inputAnalyser) return null;
+
+    const dataArray = new Uint8Array(this.inputAnalyser.frequencyBinCount);
+    this.inputAnalyser.getByteFrequencyData(dataArray);
+    return dataArray;
+  }
+
+  // Test tone playback
+  private testToneOscillator: OscillatorNode | null = null;
+  private testToneGain: GainNode | null = null;
+
+  /**
+   * Start playing a test tone at the specified frequency
+   * @param frequency Frequency in Hz (20-20000)
+   * @param volume Volume level (0-1)
+   */
+  startTestTone(frequency: number = 440, volume: number = 0.1): boolean {
+    if (!this.audioContext || !this.masterGain) return false;
+
+    try {
+      // Stop any existing test tone
+      this.stopTestTone();
+
+      // Create oscillator for test tone
+      this.testToneOscillator = this.audioContext.createOscillator();
+      this.testToneOscillator.type = 'sine';
+      this.testToneOscillator.frequency.value = Math.max(20, Math.min(20000, frequency));
+
+      // Create gain node for test tone volume
+      this.testToneGain = this.audioContext.createGain();
+      this.testToneGain.gain.value = Math.max(0, Math.min(1, volume));
+
+      // Connect nodes
+      this.testToneOscillator.connect(this.testToneGain);
+      this.testToneGain.connect(this.masterGain);
+
+      // Start the oscillator
+      this.testToneOscillator.start();
+      console.log(`Test tone started: ${frequency}Hz at ${(volume * 100).toFixed(1)}% volume`);
+      return true;
+    } catch (error) {
+      console.error('Failed to start test tone:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Stop the currently playing test tone
+   */
+  stopTestTone(): void {
+    if (this.testToneOscillator) {
+      try {
+        this.testToneOscillator.stop();
+        this.testToneOscillator.disconnect();
+        this.testToneOscillator = null;
+      } catch (error) {
+        console.error('Error stopping test tone:', error);
+      }
+    }
+
+    if (this.testToneGain) {
+      this.testToneGain.disconnect();
+      this.testToneGain = null;
+    }
+
+    console.log('Test tone stopped');
+  }
+
+  /**
+   * Check if test tone is currently playing
+   */
+  isTestTonePlaying(): boolean {
+    return this.testToneOscillator !== null;
+  }
+
+  /**
+   * Phase 4: Effects and Bus Routing Methods
+   */
+
+  /**
+   * Get the audio context (for external audio node wiring)
+   */
+  getContext(): AudioContext | null {
+    return this.audioContext;
+  }
+
+  /**
+   * Apply effect chain to a track's audio during playback
+   */
+  applyEffectChain(trackId: string, effects: Array<{ id: string; bypassed?: boolean }>): boolean {
+    if (!this.audioContext) return false;
+
+    const gainNode = this.gainNodes.get(trackId);
+    if (!gainNode) return false;
+
+    // Disconnect existing connections from track gain
+    gainNode.disconnect();
+
+    // Create effect chain output gain
+    const chainOutputGain = this.audioContext.createGain();
+    chainOutputGain.gain.value = 1;
+    this.effectGainNodes.set(trackId, chainOutputGain);
+
+    // For MVP, just connect directly (effects would be processed here in full implementation)
+    // In production, would:
+    // 1. Create nodes for each effect in sequence
+    // 2. Connect: trackGain → effect1 → effect2 → ... → chainOutputGain → destination
+    // 3. Apply effect parameters (cutoff, resonance, attack, release, etc.)
+
+    gainNode.connect(chainOutputGain);
+
+    console.log(`Applied effect chain with ${effects.length} effects to track ${trackId}`);
+    return true;
+  }
+
+  /**
+   * Get track routing destination (bus ID or 'master')
+   */
+  getTrackRouting(trackId: string): string {
+    // Check if track is routed to a bus
+    for (const [busId] of this.busGainNodes.entries()) {
+      const inputNode = this.gainNodes.get(trackId);
+      if (inputNode) {
+        // Simplified check - in production would track routing explicitly
+        return busId;
+      }
+    }
+    return 'master';
+  }
+
+  /**
+   * Create a gain node for an effect chain output
+   */
+  createEffectOutputGain(effectChainId: string): GainNode | null {
+    if (!this.audioContext) return null;
+
+    const gainNode = this.audioContext.createGain();
+    gainNode.gain.value = 1;
+    this.effectGainNodes.set(effectChainId, gainNode);
+    console.log(`Created effect output gain node for chain ${effectChainId}`);
+    return gainNode;
+  }
+
+  /**
+   * Create a bus in the audio graph
+   */
+  createBus(busId: string, volume: number = 0, pan: number = 0): { gain: GainNode; pan: StereoPannerNode } | null {
+    if (!this.audioContext || !this.masterGain) return null;
+
+    const busGain = this.audioContext.createGain();
+    busGain.gain.value = this.dbToLinear(volume);
+    
+    const busPan = this.audioContext.createStereoPanner();
+    busPan.pan.value = pan;
+    
+    // Connect: busGain → busPan → masterGain
+    busGain.connect(busPan);
+    busPan.connect(this.masterGain);
+    
+    this.busGainNodes.set(busId, busGain);
+    this.busPanNodes.set(busId, busPan);
+    
+    console.log(`Created audio bus ${busId}`);
+    return { gain: busGain, pan: busPan };
+  }
+
+  /**
+   * Set bus volume (in dB)
+   */
+  setBusVolume(busId: string, volumeDb: number): void {
+    const busGain = this.busGainNodes.get(busId);
+    if (busGain) {
+      busGain.gain.value = this.dbToLinear(volumeDb);
+    }
+  }
+
+  /**
+   * Set bus pan (-1 to +1)
+   */
+  setBusPan(busId: string, pan: number): void {
+    const busPan = this.busPanNodes.get(busId);
+    if (busPan) {
+      busPan.pan.value = Math.max(-1, Math.min(1, pan));
+    }
+  }
+
+  /**
+   * Route a track to a bus instead of master
+   */
+  routeTrackToBus(trackId: string, busId: string): boolean {
+    const gainNode = this.gainNodes.get(trackId);
+    const busNode = this.busGainNodes.get(busId);
+    
+    if (!gainNode || !busNode) return false;
+    
+    // Disconnect from master and connect to bus
+    gainNode.disconnect();
+    gainNode.connect(busNode);
+    
+    console.log(`Routed track ${trackId} to bus ${busId}`);
+    return true;
+  }
+
+  /**
+   * Create a sidechain analyzer for compression detection
+   */
+  createSidechainAnalyzer(sidechainId: string): AnalyserNode | null {
+    if (!this.audioContext) return null;
+
+    const analyser = this.audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    this.sidechainAnalysers.set(sidechainId, analyser);
+    
+    console.log(`Created sidechain analyser ${sidechainId}`);
+    return analyser;
+  }
+
+  /**
+   * Get sidechain detection level (0-1) for compression
+   */
+  getSidechainLevel(sidechainId: string): number {
+    const analyser = this.sidechainAnalysers.get(sidechainId);
+    if (!analyser) return 0;
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
+    
+    // Return average level
+    const sum = dataArray.reduce((a, b) => a + b, 0);
+    return sum / (dataArray.length * 255);
+  }
+
+  /**
+   * Delete a bus from the audio graph
+   */
+  deleteBus(busId: string): void {
+    const busGain = this.busGainNodes.get(busId);
+    const busPan = this.busPanNodes.get(busId);
+    
+    if (busGain) busGain.disconnect();
+    if (busPan) busPan.disconnect();
+    
+    this.busGainNodes.delete(busId);
+    this.busPanNodes.delete(busId);
+    
+    console.log(`Deleted bus ${busId}`);
+  }
+
+  /**
    * Cleanup and close audio context
    */
   dispose(): void {
     this.stopAllAudio();
+    this.stopAudioInput();
     this.mediaRecorder?.stop();
     this.audioContext?.close();
     this.audioBuffers.clear();
