@@ -13,6 +13,9 @@ import {
   Marker,
   LoopRegion,
   MetronomeSettings,
+  Bus,
+  MidiDevice,
+  MidiRoute,
 } from "../types";
 import { supabase } from "../lib/supabase";
 import { getAudioEngine } from "../lib/audioEngine";
@@ -76,6 +79,58 @@ interface DAWContextType {
   toggleMetronome: () => void;
   setMetronomeVolume: (volume: number) => void;
   setMetronomeBeatSound: (sound: MetronomeSettings["beatSound"]) => void;
+  // Modal State
+  showNewProjectModal: boolean;
+  openNewProjectModal: () => void;
+  closeNewProjectModal: () => void;
+  showExportModal: boolean;
+  openExportModal: () => void;
+  closeExportModal: () => void;
+  showAudioSettingsModal: boolean;
+  openAudioSettingsModal: () => void;
+  closeAudioSettingsModal: () => void;
+  showAboutModal: boolean;
+  openAboutModal: () => void;
+  closeAboutModal: () => void;
+  // Additional Modals
+  showSaveAsModal: boolean;
+  openSaveAsModal: () => void;
+  closeSaveAsModal: () => void;
+  showOpenProjectModal: boolean;
+  openOpenProjectModal: () => void;
+  closeOpenProjectModal: () => void;
+  showMidiSettingsModal: boolean;
+  openMidiSettingsModal: () => void;
+  closeMidiSettingsModal: () => void;
+  showMixerOptionsModal: boolean;
+  openMixerOptionsModal: () => void;
+  closeMixerOptionsModal: () => void;
+  showPreferencesModal: boolean;
+  openPreferencesModal: () => void;
+  closePreferencesModal: () => void;
+  showShortcutsModal: boolean;
+  openShortcutsModal: () => void;
+  closeShortcutsModal: () => void;
+  // Export
+  exportAudio: (format: string, quality: string) => Promise<void>;
+  // Bus/Routing functions
+  buses: Bus[];
+  createBus: (name: string) => void;
+  deleteBus: (busId: string) => void;
+  addTrackToBus: (trackId: string, busId: string) => void;
+  removeTrackFromBus: (trackId: string, busId: string) => void;
+  createSidechain: (sourceTrackId: string, targetTrackId: string) => void;
+  // Plugin functions
+  loadPlugin: (trackId: string, pluginName: string) => void;
+  unloadPlugin: (trackId: string, pluginId: string) => void;
+  loadedPlugins: Map<string, Plugin[]>;
+  // MIDI functions
+  midiDevices: MidiDevice[];
+  createMIDIRoute: (sourceDeviceId: string, targetTrackId: string) => void;
+  deleteMIDIRoute: (routeId: string) => void;
+  getMIDIRoutesForTrack: (trackId: string) => MidiRoute[];
+  // Utility
+  cpuUsageDetailed: Record<string, number>;
 }
 
 const DAWContext = createContext<DAWContextType | undefined>(undefined);
@@ -109,6 +164,32 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       accentFirst: true,
     }
   );
+  // Modal State
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showAudioSettingsModal, setShowAudioSettingsModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showSaveAsModal, setShowSaveAsModal] = useState(false);
+  const [showOpenProjectModal, setShowOpenProjectModal] = useState(false);
+  const [showMidiSettingsModal, setShowMidiSettingsModal] = useState(false);
+  const [showMixerOptionsModal, setShowMixerOptionsModal] = useState(false);
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  // Bus/Routing State
+  const [buses, setBuses] = useState<Bus[]>([]);
+  // Plugin State
+  const [loadedPlugins, setLoadedPlugins] = useState<Map<string, Plugin[]>>(new Map());
+  // MIDI State
+  const [midiDevices, setMidiDevices] = useState<MidiDevice[]>([]);
+  const [midiRoutes, setMidiRoutes] = useState<MidiRoute[]>([]);
+  // CPU usage detailed
+  const [cpuUsageDetailedState] = useState<Record<string, number>>({
+    audio: 2,
+    ui: 3,
+    effects: 4,
+    metering: 1,
+    other: 2,
+  });
   const zoom = 1;
   const cpuUsage = 12;
   const audioEngineRef = useRef(getAudioEngine());
@@ -875,6 +956,147 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     console.log(`Metronome beat sound set to: ${sound}`);
   };
 
+  // Modal handlers
+  const openNewProjectModal = () => setShowNewProjectModal(true);
+  const closeNewProjectModal = () => setShowNewProjectModal(false);
+  const openExportModal = () => setShowExportModal(true);
+  const closeExportModal = () => setShowExportModal(false);
+  const openAudioSettingsModal = () => setShowAudioSettingsModal(true);
+  const closeAudioSettingsModal = () => setShowAudioSettingsModal(false);
+  const openAboutModal = () => setShowAboutModal(true);
+  const closeAboutModal = () => setShowAboutModal(false);
+  const openSaveAsModal = () => setShowSaveAsModal(true);
+  const closeSaveAsModal = () => setShowSaveAsModal(false);
+  const openOpenProjectModal = () => setShowOpenProjectModal(true);
+  const closeOpenProjectModal = () => setShowOpenProjectModal(false);
+  const openMidiSettingsModal = () => setShowMidiSettingsModal(true);
+  const closeMidiSettingsModal = () => setShowMidiSettingsModal(false);
+  const openMixerOptionsModal = () => setShowMixerOptionsModal(true);
+  const closeMixerOptionsModal = () => setShowMixerOptionsModal(false);
+  const openPreferencesModal = () => setShowPreferencesModal(true);
+  const closePreferencesModal = () => setShowPreferencesModal(false);
+  const openShortcutsModal = () => setShowShortcutsModal(true);
+  const closeShortcutsModal = () => setShowShortcutsModal(false);
+
+  // Export audio stub
+  const exportAudio = async (format: string, quality: string) => {
+    console.log(`Exporting audio as ${format} with ${quality} quality`);
+    // Simulate export process
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        console.log(`Export complete: ${currentProject?.name}.${format}`);
+        const message = `Audio exported as ${format.toUpperCase()}`;
+        alert(message);
+        resolve();
+      }, 1500);
+    });
+  };
+
+  // Bus/Routing functions
+  const createBus = (name: string) => {
+    const newBus: Bus = {
+      id: `bus-${Date.now()}`,
+      name,
+      color: '#4F46E5',
+      volume: 0,
+      pan: 0,
+      muted: false,
+      trackIds: [],
+      inserts: [],
+    };
+    setBuses([...buses, newBus]);
+  };
+
+  const deleteBus = (busId: string) => {
+    setBuses(buses.filter(b => b.id !== busId));
+    // Remove tracks from bus
+    setTracks(tracks.map(t => ({
+      ...t,
+      routing: t.routing === busId ? 'master' : t.routing,
+    })));
+  };
+
+  const addTrackToBus = (trackId: string, busId: string) => {
+    const bus = buses.find(b => b.id === busId);
+    if (bus && !bus.trackIds.includes(trackId)) {
+      setBuses(buses.map(b =>
+        b.id === busId
+          ? { ...b, trackIds: [...b.trackIds, trackId] }
+          : b
+      ));
+      setTracks(tracks.map(t =>
+        t.id === trackId
+          ? { ...t, routing: busId }
+          : t
+      ));
+    }
+  };
+
+  const removeTrackFromBus = (trackId: string, busId: string) => {
+    setBuses(buses.map(b =>
+      b.id === busId
+        ? { ...b, trackIds: b.trackIds.filter(id => id !== trackId) }
+        : b
+    ));
+    setTracks(tracks.map(t =>
+      t.id === trackId
+        ? { ...t, routing: 'master' }
+        : t
+    ));
+  };
+
+  const createSidechain = (sourceTrackId: string, targetTrackId: string) => {
+    console.log(`Created sidechain from ${sourceTrackId} to ${targetTrackId}`);
+    // This would typically update a compressor on the target track to receive sidechain input
+  };
+
+  // Plugin functions
+  const loadPlugin = (trackId: string, pluginName: string) => {
+    const track = tracks.find(t => t.id === trackId);
+    if (track) {
+      const newPlugin: Plugin = {
+        id: `plugin-${Date.now()}`,
+        name: pluginName,
+        type: 'third-party',
+        enabled: true,
+        parameters: {},
+      };
+      const updated = tracks.map(t =>
+        t.id === trackId
+          ? { ...t, inserts: [...t.inserts, newPlugin] }
+          : t
+      );
+      setTracks(updated);
+    }
+  };
+
+  const unloadPlugin = (trackId: string, pluginId: string) => {
+    setTracks(tracks.map(t =>
+      t.id === trackId
+        ? { ...t, inserts: t.inserts.filter(p => p.id !== pluginId) }
+        : t
+    ));
+  };
+
+  // MIDI functions
+  const createMIDIRoute = (sourceDeviceId: string, targetTrackId: string) => {
+    const newRoute: MidiRoute = {
+      id: `route-${Date.now()}`,
+      sourceDeviceId,
+      targetTrackId,
+      channel: 0,
+    };
+    setMidiRoutes([...midiRoutes, newRoute]);
+  };
+
+  const deleteMIDIRoute = (routeId: string) => {
+    setMidiRoutes(midiRoutes.filter(r => r.id !== routeId));
+  };
+
+  const getMIDIRoutesForTrack = (trackId: string) => {
+    return midiRoutes.filter(r => r.targetTrackId === trackId);
+  };
+
   return (
     <DAWContext.Provider
       value={{
@@ -930,6 +1152,58 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         toggleMetronome,
         setMetronomeVolume,
         setMetronomeBeatSound,
+        // Modal state
+        showNewProjectModal,
+        openNewProjectModal,
+        closeNewProjectModal,
+        showExportModal,
+        openExportModal,
+        closeExportModal,
+        showAudioSettingsModal,
+        openAudioSettingsModal,
+        closeAudioSettingsModal,
+        showAboutModal,
+        openAboutModal,
+        closeAboutModal,
+        // Additional modals
+        showSaveAsModal,
+        openSaveAsModal,
+        closeSaveAsModal,
+        showOpenProjectModal,
+        openOpenProjectModal,
+        closeOpenProjectModal,
+        showMidiSettingsModal,
+        openMidiSettingsModal,
+        closeMidiSettingsModal,
+        showMixerOptionsModal,
+        openMixerOptionsModal,
+        closeMixerOptionsModal,
+        showPreferencesModal,
+        openPreferencesModal,
+        closePreferencesModal,
+        showShortcutsModal,
+        openShortcutsModal,
+        closeShortcutsModal,
+        // Export
+        exportAudio,
+        // Bus/Routing
+        buses,
+        createBus,
+        deleteBus,
+        addTrackToBus,
+        removeTrackFromBus,
+        createSidechain,
+        // Plugin management
+        loadPlugin,
+        unloadPlugin,
+        loadedPlugins,
+        // MIDI
+        midiDevices,
+        createMIDIRoute,
+        deleteMIDIRoute,
+        getMIDIRoutesForTrack,
+        // CPU Usage
+        cpuUsageDetailed: cpuUsageDetailedState,
       }}
     >
       {children}
