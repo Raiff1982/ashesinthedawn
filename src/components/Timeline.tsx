@@ -1,13 +1,15 @@
 import { useDAW } from '../contexts/DAWContext';
 import { Track } from '../types';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 
-export default function Timeline() {
-  const { tracks, currentTime, getAudioDuration, seek, getWaveformData, isPlaying } = useDAW();
+const TimelineComponent = () => {
+  const { tracks, currentTime, getAudioDuration, seek, getWaveformData, isPlaying, uploadAudioFile, addTrack, selectTrack } = useDAW();
   const timelineRef = useRef<HTMLDivElement>(null);
   const waveformsRef = useRef<Record<string, number[]>>({});
   const [, setWaveformUpdateCounter] = useState(0);
   const [zoom, setZoom] = useState(1.0);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
 
   const bars = 32;
   const basePixelsPerBar = 120;
@@ -59,6 +61,71 @@ export default function Timeline() {
     const clickX = e.clientX - rect.left + timelineRef.current.scrollLeft;
     const clickTime = Math.max(0, clickX / pixelsPerSecond);
     seek(clickTime);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.items) {
+      const hasAudioFiles = Array.from(e.dataTransfer.items).some(item => {
+        return item.type.startsWith('audio/') || item.type === 'application/octet-stream';
+      });
+      if (hasAudioFiles) {
+        setIsDraggingOver(true);
+      }
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    // Only set to false if leaving the timeline entirely
+    if (e.target === timelineRef.current) {
+      setIsDraggingOver(false);
+      setDragOverTrackId(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    setDragOverTrackId(null);
+
+    const files = e.dataTransfer.files;
+    if (files.length === 0) return;
+
+    // Process each audio file
+    for (let i = 0; i < Math.min(files.length, 5); i++) {
+      const file = files[i];
+      if (!file.type.startsWith('audio/') && file.type !== 'application/octet-stream') continue;
+
+      // Create audio track if needed
+      if (tracks.length === 0) {
+        addTrack('audio');
+      }
+
+      // Get or create target audio track
+      const audioTracks = tracks.filter(t => t.type === 'audio');
+      const targetTrack = audioTracks[i % audioTracks.length] || audioTracks[0];
+
+      if (targetTrack) {
+        selectTrack(targetTrack.id);
+        await uploadAudioFile(file);
+      }
+    }
+  };
+
+  const handleTrackDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTrackId((e.currentTarget as any).dataset.trackId);
+  };
+
+  const handleTrackDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.currentTarget === e.target) {
+      setDragOverTrackId(null);
+    }
   };
 
   const renderAudioRegion = (track: Track, trackIndex: number) => {
@@ -222,9 +289,14 @@ export default function Timeline() {
 
       {/* Timeline Content */}
       <div 
-        className="flex-1 overflow-auto relative bg-gray-950 cursor-pointer" 
+        className={`flex-1 overflow-auto relative cursor-pointer transition-colors ${
+          isDraggingOver ? 'bg-blue-900/20 ring-2 ring-blue-400' : 'bg-gray-950'
+        }`}
         ref={timelineRef} 
         onClick={handleTimelineClick}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         {/* Playhead */}
         <div
@@ -244,12 +316,30 @@ export default function Timeline() {
           />
         </div>
 
+        {/* Drag and Drop Overlay */}
+        {isDraggingOver && (
+          <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+            <div className="bg-blue-600/90 text-white px-6 py-4 rounded-lg shadow-xl text-center">
+              <p className="font-semibold text-lg">Drop audio files to import</p>
+              <p className="text-sm text-blue-100 mt-1">Files will be added to audio tracks</p>
+            </div>
+          </div>
+        )}
+
         {/* Tracks */}
         {tracks.map((track, trackIndex) => (
           <div
             key={track.id}
-            className="h-20 border-b-2 border-gray-700 hover:bg-gray-900/30 transition-colors relative flex-shrink-0"
+            data-track-id={track.id}
+            className={`h-20 border-b-2 border-gray-700 relative flex-shrink-0 transition-colors ${
+              dragOverTrackId === track.id 
+                ? 'bg-green-900/40 border-b-2 border-green-500' 
+                : 'hover:bg-gray-900/30'
+            }`}
             style={{ width: `${bars * pixelsPerBar}px` }}
+            onDragOver={handleTrackDragOver}
+            onDragLeave={handleTrackDragLeave}
+            onDrop={handleDrop}
           >
             {/* Grid lines */}
             <div className="absolute top-0 left-0 right-0 bottom-0 flex pointer-events-none">
@@ -283,4 +373,6 @@ export default function Timeline() {
       </div>
     </div>
   );
-}
+};
+
+export default memo(TimelineComponent);

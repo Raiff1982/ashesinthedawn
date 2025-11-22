@@ -1,9 +1,9 @@
 import { Plus, Music, Mic2, Piano, Radio, Eye, X } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
 import { Track } from '../types';
-import { useState } from 'react';
+import { useState, memo } from 'react';
 
-export default function TrackList() {
+const TrackListComponent = () => {
   const { tracks, selectedTrack, addTrack, selectTrack, updateTrack, deleteTrack } = useDAW();
   const [showAddMenu, setShowAddMenu] = useState(false);
 
@@ -189,4 +189,6 @@ export default function TrackList() {
       </div>
     </div>
   );
-}
+};
+
+export default memo(TrackListComponent);

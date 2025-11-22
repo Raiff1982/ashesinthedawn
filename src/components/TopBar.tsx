@@ -1,5 +1,6 @@
 import { Play, Pause, Square, Circle, Settings, Search, SkipBack, SkipForward, Zap, AlertCircle } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
+import { useEffect } from 'react';
 
 export default function TopBar() {
   const {
@@ -19,6 +20,43 @@ export default function TopBar() {
     audioIOError,
     openAudioSettingsModal,
   } = useDAW();
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      // Playback controls
+      if (e.code === 'Space' && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+        e.preventDefault();
+        togglePlay();
+        return;
+      }
+
+      // Stop playback
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        stop();
+        return;
+      }
+
+      // Record
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyR') {
+        e.preventDefault();
+        toggleRecord();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, stop, toggleRecord]);
 
   const handleSearch = () => {
     // Focus on first track if none selected
@@ -152,15 +190,21 @@ export default function TopBar() {
 
       {/* RIGHT SECTION: Selection indicator and time markers */}
       <div className="flex items-center gap-4">
-        {/* Selection indicator */}
+        {/* Current selection time display */}
         <div className="text-xs text-gray-400">
-          Sel: <span className="text-gray-200 font-mono">2:2.00</span>
+          Sel: <span className="text-gray-200 font-mono">{formatTime(currentTime)}</span>
         </div>
 
-        {/* Additional time markers */}
-        <div className="text-xs text-gray-500">
-          <span className="text-gray-300">10:2.00</span> / <span className="text-gray-300">8:0.00</span>
-        </div>
+        {/* Calculation of max track duration for total time display */}
+        {(() => {
+          const maxDuration = tracks.reduce((max, track) => Math.max(max, track.duration || 0), 0);
+          const endTime = Math.max(maxDuration, currentTime);
+          return (
+            <div className="text-xs text-gray-500">
+              <span className="text-gray-300">{formatTime(endTime)}</span> / <span className="text-gray-300">{formatTime(maxDuration)}</span>
+            </div>
+          );
+        })()}
 
         <div className="w-px h-6 bg-gray-700" />
 

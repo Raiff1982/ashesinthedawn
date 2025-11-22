@@ -1,7 +1,7 @@
 import { useDAW } from '../contexts/DAWContext';
 import { Track } from '../types';
 import { Sliders } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
 import MixerOptionsTile from './MixerOptionsTile';
@@ -12,7 +12,7 @@ interface DetachedTileState {
   size: { width: number; height: number };
 }
 
-export default function Mixer() {
+const MixerComponent = () => {
   const { tracks, selectedTrack, updateTrack, deleteTrack, selectTrack, addPluginToTrack, removePluginFromTrack, togglePluginEnabled } = useDAW();
   const [stripWidth] = useState(100);
   const [stripHeight] = useState(400);
@@ -285,4 +285,6 @@ export default function Mixer() {
       </div>
     </>
   );
-}
+};
+
+export default memo(MixerComponent);
