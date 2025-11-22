@@ -3,7 +3,6 @@ import { useDAW } from '../contexts/DAWContext';
 
 export default function TopBar() {
   const {
-    currentProject,
     isPlaying,
     isRecording,
     currentTime,
@@ -15,6 +14,16 @@ export default function TopBar() {
     toggleRecord,
     stop,
   } = useDAW();
+
+  const handleSearch = () => {
+    // Placeholder for search functionality
+    console.log('Search opened');
+  };
+
+  const handleSettings = () => {
+    // Placeholder for settings functionality
+    console.log('Settings opened');
+  };
 
   const formatTime = (seconds: number) => {
     const bars = Math.floor(seconds / 4);
@@ -92,6 +101,7 @@ export default function TopBar() {
 
           {/* Pause Button */}
           <button
+            onClick={isPlaying ? togglePlay : undefined}
             className={`p-1.5 rounded transition ${isPlaying ? 'hover:bg-gray-800 text-gray-300' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
             disabled={!isPlaying}
             title="Pause"
@@ -143,10 +153,18 @@ export default function TopBar() {
         <span className="text-gray-400">CPU: <span className="text-gray-200 font-semibold">{cpuUsage}%</span></span>
 
         {/* Settings & Search buttons */}
-        <button className="p-1.5 rounded hover:bg-gray-800 text-gray-300 transition" title="Search">
+        <button 
+          onClick={handleSearch}
+          className="p-1.5 rounded hover:bg-gray-800 text-gray-300 transition" 
+          title="Search"
+        >
           <Search className="w-4 h-4" />
         </button>
-        <button className="p-1.5 rounded hover:bg-gray-800 text-gray-300 transition" title="Settings">
+        <button 
+          onClick={handleSettings}
+          className="p-1.5 rounded hover:bg-gray-800 text-gray-300 transition" 
+          title="Settings"
+        >
           <Settings className="w-4 h-4" />
         </button>
       </div>

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { Track, Project, LogicCoreMode } from '../types';
+import { Track, Project, LogicCoreMode, Plugin } from '../types';
 import { supabase } from '../lib/supabase';
 import { getAudioEngine } from '../lib/audioEngine';
 
@@ -33,6 +33,9 @@ interface DAWContextType {
   getAudioDuration: (trackId: string) => number;
   seek: (timeSeconds: number) => void;
   setTrackInputGain: (trackId: string, gainDb: number) => void;
+  addPluginToTrack: (trackId: string, plugin: Plugin) => void;
+  removePluginFromTrack: (trackId: string, pluginId: string) => void;
+  togglePluginEnabled: (trackId: string, pluginId: string, enabled: boolean) => void;
 }
 
 const DAWContext = createContext<DAWContextType | undefined>(undefined);
@@ -110,9 +113,11 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   }, [tracks, isPlaying]);
 
   // Cleanup on unmount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     return () => {
-      audioEngineRef.current.dispose();
+      const engineRef = audioEngineRef.current;
+      engineRef.dispose();
     };
   }, []);
 
@@ -296,8 +301,70 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     setTracks(prev => prev.map(t => t.id === trackId ? { ...t, inputGain: gainDb } : t));
     try {
       audioEngineRef.current.setTrackInputGain(trackId, gainDb);
-    } catch (err) {
+    } catch (error: unknown) {
       // audio engine might not be initialized yet — that's fine
+      console.debug('setTrackInputGain error:', error);
+    }
+  };
+
+  // Add a plugin to a track's insert chain
+  const addPluginToTrack = (trackId: string, plugin: Plugin) => {
+    setTracks(prev =>
+      prev.map(t =>
+        t.id === trackId
+          ? { ...t, inserts: [...t.inserts, plugin] }
+          : t
+      )
+    );
+    // Update selected track if it was modified
+    if (selectedTrack?.id === trackId) {
+      setSelectedTrack(prev => prev ? { ...prev, inserts: [...prev.inserts, plugin] } : null);
+    }
+  };
+
+  // Remove a plugin from a track's insert chain
+  const removePluginFromTrack = (trackId: string, pluginId: string) => {
+    setTracks(prev =>
+      prev.map(t =>
+        t.id === trackId
+          ? { ...t, inserts: t.inserts.filter(p => p.id !== pluginId) }
+          : t
+      )
+    );
+    // Update selected track if it was modified
+    if (selectedTrack?.id === trackId) {
+      setSelectedTrack(prev =>
+        prev ? { ...prev, inserts: prev.inserts.filter(p => p.id !== pluginId) } : null
+      );
+    }
+  };
+
+  // Toggle plugin enabled/disabled
+  const togglePluginEnabled = (trackId: string, pluginId: string, enabled: boolean) => {
+    setTracks(prev =>
+      prev.map(t =>
+        t.id === trackId
+          ? {
+              ...t,
+              inserts: t.inserts.map(p =>
+                p.id === pluginId ? { ...p, enabled } : p
+              ),
+            }
+          : t
+      )
+    );
+    // Update selected track if it was modified
+    if (selectedTrack?.id === trackId) {
+      setSelectedTrack(prev =>
+        prev
+          ? {
+              ...prev,
+              inserts: prev.inserts.map(p =>
+                p.id === pluginId ? { ...p, enabled } : p
+              ),
+            }
+          : null
+      );
     }
   };
 
@@ -452,7 +519,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       setTracks(prev => [...prev, newTrack]);
       setIsUploadingFile(false);
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
+      console.error('Upload error:', error);
       setUploadError('Failed to upload file');
       setIsUploadingFile(false);
       return false;
@@ -550,6 +618,9 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         getAudioDuration,
         seek,
         setTrackInputGain,
+        addPluginToTrack,
+        removePluginFromTrack,
+        togglePluginEnabled,
       }}
     >
       {children}
@@ -557,6 +628,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useDAW() {
   const context = useContext(DAWContext);
   if (!context) {
