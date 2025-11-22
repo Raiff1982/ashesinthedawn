@@ -8,6 +8,7 @@ import {
   LazySpectrumVisualizerPanelWrapper,
 } from './LazyComponents';
 import MIDISettings from './MIDISettings';
+import AIPanel from './AIPanel';
 
 export default function Sidebar() {
   const [activeTab, setActiveTab] = useState<'browser' | 'pluginbrowser' | 'plugins' | 'templates' | 'ai' | 'effectchain' | 'midi' | 'routing' | 'spectrum'>('browser');
@@ -94,21 +95,7 @@ export default function Sidebar() {
     e.stopPropagation();
   };
 
-  const handleSmartGainStaging = () => {
-    console.log('Smart Gain Staging activated');
-  };
 
-  const handleRoutingAssistant = () => {
-    console.log('Routing Assistant activated');
-  };
-
-  const handleSessionHealth = () => {
-    console.log('Session Health Check started');
-  };
-
-  const handleCreateTemplate = () => {
-    console.log('Create Template from Session started');
-  };
 
   return (
     <div className="w-64 bg-gray-900 border-l border-gray-700 flex flex-col">
@@ -398,41 +385,7 @@ export default function Sidebar() {
           </div>
         )}
 
-        {activeTab === 'ai' && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-white mb-3">LogicCore AI</h3>
-            <div className="space-y-2">
-              <button
-                className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
-                onClick={handleSmartGainStaging}
-              >
-                Smart Gain Staging
-              </button>
-              <button
-                className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
-                onClick={handleRoutingAssistant}
-              >
-                Routing Assistant
-              </button>
-              <button
-                className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
-                onClick={handleSessionHealth}
-              >
-                Session Health Check
-              </button>
-              <button
-                className="w-full p-2 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white transition-colors"
-                onClick={handleCreateTemplate}
-              >
-                Create Template from Session
-              </button>
-            </div>
-            <div className="mt-4 p-3 bg-gray-800 rounded text-xs text-gray-300">
-              <p className="font-semibold text-white mb-1">Tip:</p>
-              <p>Enable voice control to use commands like "Create four drum tracks" or "Route all guitars to new bus"</p>
-            </div>
-          </div>
-        )}
+        {activeTab === 'ai' && <AIPanel />}
       </div>
 
       {/* Phase 4 Components */}

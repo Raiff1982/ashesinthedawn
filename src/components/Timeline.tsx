@@ -118,6 +118,7 @@ const TimelineComponent = () => {
   const handleTrackDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setDragOverTrackId((e.currentTarget as any).dataset.trackId);
   };
 
