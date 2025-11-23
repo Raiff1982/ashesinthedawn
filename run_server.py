@@ -1,21 +1,44 @@
 #!/usr/bin/env python
 """
-Simple launcher for codette_server
+Codette Server - Simple wrapper
+Keeps the server running and handles restarts
 """
 import subprocess
 import sys
+import time
 
 if __name__ == "__main__":
-    # Run uvicorn pointing to the app defined in codette_server module
-    # Keep stdout/stderr attached so we can see what's happening
-    result = subprocess.run([
-        sys.executable, "-m", "uvicorn",
-        "codette_server:app",
-        "--host", "0.0.0.0",
-        "--port", "8000",
-        "--log-level", "info",
-    ])
-    print(f"Server exited with code {result.returncode}")
+    print("\n" + "="*70)
+    print("Codette AI Server Launcher")
+    print("="*70)
+    print("Starting server on http://localhost:8000")
+    print("Press Ctrl+C to stop\n")
+    
+    while True:
+        try:
+            # Run uvicorn
+            result = subprocess.run([
+                sys.executable, "-m", "uvicorn",
+                "codette_server:app",
+                "--host", "0.0.0.0",
+                "--port", "8000",
+                "--log-level", "info",
+            ])
+            
+            if result.returncode != 0:
+                print(f"\nServer exited with code {result.returncode}")
+                print("Restarting in 2 seconds...")
+                time.sleep(2)
+            else:
+                break
+                
+        except KeyboardInterrupt:
+            print("\n\nServer stopped by user")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error: {e}")
+            print("Retrying in 2 seconds...")
+            time.sleep(2)
 
 
 

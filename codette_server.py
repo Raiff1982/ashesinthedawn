@@ -70,6 +70,8 @@ except Exception as e:
 
 app = FastAPI(title="Codette AI Server", version="1.0.0")
 
+print("[DEBUG] FastAPI app created")
+
 # Enable CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
@@ -78,6 +80,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+print("[DEBUG] CORS middleware added")
 
 # Models
 class ChatRequest(BaseModel):
