@@ -3,7 +3,7 @@ import { Gauge, AlertCircle, Zap } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
 
 export default function SpectrumVisualizerPanel() {
-  const { cpuUsageDetailed, buses } = useDAW();
+  const { cpuUsage, buses } = useDAW();
   const [showDetailedMetrics, setShowDetailedMetrics] = useState(false);
 
   // Mock frequency data for visualization
@@ -93,19 +93,19 @@ export default function SpectrumVisualizerPanel() {
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
               <span className="text-gray-400">CPU Usage</span>
-              <span className="text-gray-300 font-medium">{cpuUsageDetailed.toFixed(1)}%</span>
+              <span className="text-gray-300 font-medium">{cpuUsage.toFixed(1)}%</span>
             </div>
             <div className="h-1.5 bg-gray-900 rounded overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-green-500 to-yellow-500"
-                style={{ width: `${Math.min(cpuUsageDetailed, 100)}%` }}
+                style={{ width: `${Math.min(cpuUsage, 100)}%` }}
               />
             </div>
             <div className="flex justify-between text-xs pt-1">
               <span className="text-gray-400">Buses</span>
               <span className="text-gray-300 font-medium">{buses.length}</span>
             </div>
-            {cpuUsageDetailed > 80 && (
+            {cpuUsage > 80 && (
               <div className="flex items-center gap-1 mt-2 p-2 bg-yellow-500/10 rounded border border-yellow-500/30">
                 <AlertCircle className="w-3 h-3 text-yellow-500" />
                 <span className="text-xs text-yellow-600">High CPU usage</span>

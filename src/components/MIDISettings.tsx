@@ -33,16 +33,7 @@ export default function MIDISettings() {
 
     const device = availableInputs.find(d => d.id === deviceId);
     if (device) {
-      // Convert to proper MIDIDevice interface
-      const midiDevice = {
-        deviceId: device.id,
-        name: device.name,
-        kind: 'input' as const,
-        manufacturer: 'Unknown',
-        state: 'connected' as const,
-        channel: 1,
-      };
-      createMIDIRoute(device, selectedTrack.id);
+      createMIDIRoute(device.id, selectedTrack.id);
     }
   };
 
@@ -108,7 +99,7 @@ export default function MIDISettings() {
                         expandedRoute === route.id ? 'rotate-180' : ''
                       }`}
                     />
-                    <span className="text-xs text-gray-300">{route.midiDevice?.name}</span>
+                    <span className="text-xs text-gray-300">{route.sourceDeviceId}</span>
                   </div>
                   <button
                     onClick={(e) => {
@@ -126,7 +117,7 @@ export default function MIDISettings() {
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Channel</p>
                       <select
-                        value={route.midiChannel}
+                        value={route.channel}
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-300"
                       >
                         {Array.from({ length: 16 }, (_, i) => (
@@ -135,16 +126,6 @@ export default function MIDISettings() {
                           </option>
                         ))}
                       </select>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Transpose (semitones)</p>
-                      <input
-                        type="number"
-                        min="-24"
-                        max="24"
-                        defaultValue={route.transpose}
-                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-300"
-                      />
                     </div>
                   </div>
                 )}

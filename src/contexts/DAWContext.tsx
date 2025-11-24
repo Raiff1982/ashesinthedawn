@@ -185,18 +185,18 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   // Bus/Routing State
   const [buses, setBuses] = useState<Bus[]>([]);
   // Plugin State
-  const [loadedPlugins, setLoadedPlugins] = useState<Map<string, Plugin[]>>(new Map());
+  const [loadedPlugins] = useState<Map<string, Plugin[]>>(new Map());
   // MIDI State
-  const [midiDevices, setMidiDevices] = useState<MidiDevice[]>([]);
+  const [midiDevices] = useState<MidiDevice[]>([]);
   const [midiRoutes, setMidiRoutes] = useState<MidiRoute[]>([]);
-  // Audio I/O State
-  const [inputLevel, setInputLevel] = useState(0);
-  const [latencyMs, setLatencyMs] = useState(5);
-  const [bufferUnderruns, setBufferUnderruns] = useState(0);
-  const [bufferOverruns, setBufferOverruns] = useState(0);
-  const [isAudioIOActive, setIsAudioIOActive] = useState(false);
-  const [audioIOError, setAudioIOError] = useState<string | null>(null);
-  const [selectedInputDevice, setSelectedInputDevice] = useState<{ label: string } | null>(null);
+  // Audio I/O State (placeholder for future real-time audio I/O features)
+  const inputLevel = 0;
+  const latencyMs = 5;
+  const bufferUnderruns = 0;
+  const bufferOverruns = 0;
+  const isAudioIOActive = false;
+  const audioIOError: string | null = null;
+  const selectedInputDevice: { label: string } | null = null;
   // CPU usage detailed
   const [cpuUsageDetailedState] = useState<Record<string, number>>({
     audio: 2,
@@ -273,11 +273,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   }, [tracks, isPlaying]);
 
   // Cleanup on unmount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    const engineRef = audioEngineRef.current;
     return () => {
-      const engineRef = audioEngineRef.current;
-      engineRef.dispose();
+      engineRef?.dispose();
     };
   }, []);
 

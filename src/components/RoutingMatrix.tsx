@@ -10,8 +10,7 @@ export default function RoutingMatrix() {
 
   const handleCreateBus = () => {
     if (newBusName.trim()) {
-      const color = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b'][Math.floor(Math.random() * 4)];
-      createBus(newBusName, color);
+      createBus(newBusName);
       setNewBusName('');
       setShowNewBusForm(false);
     }
@@ -25,7 +24,7 @@ export default function RoutingMatrix() {
 
   const handleCreateSidechain = (busId: string) => {
     if (selectedTrack) {
-      createSidechain(selectedTrack.id, busId, 1000, 'lowpass');
+      createSidechain(selectedTrack.id, busId);
     }
   };
 
@@ -85,7 +84,7 @@ export default function RoutingMatrix() {
             {expandedBus === bus.id && (
               <div className="bg-gray-900 border-t border-gray-700 p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Tracks: {bus.tracks.length}</span>
+                  <span className="text-xs text-gray-400">Tracks: {bus.trackIds.length}</span>
                   <button
                     onClick={() => handleAddTrackToBus(bus.id)}
                     disabled={!selectedTrack}
@@ -121,15 +120,15 @@ export default function RoutingMatrix() {
                 </div>
 
                 {/* Tracks in Bus */}
-                {bus.tracks.length > 0 && (
+                {bus.trackIds.length > 0 && (
                   <div className="pt-2 border-t border-gray-700">
                     <p className="text-xs text-gray-500 mb-1">Routed Tracks</p>
                     <div className="space-y-1">
-                      {bus.tracks.map(trackId => (
+                      {bus.trackIds.map((trackId: string) => (
                         <div key={trackId} className="flex items-center justify-between bg-gray-800 p-1 rounded">
                           <span className="text-xs text-gray-300 truncate">{trackId}</span>
                           <button
-                            onClick={() => removeTrackFromBus(trackId)}
+                            onClick={() => removeTrackFromBus(trackId, bus.id)}
                             className="p-0.5 hover:bg-red-600/20 rounded"
                           >
                             <Trash2 className="w-3 h-3 text-red-400" />
