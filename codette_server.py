@@ -1,6 +1,7 @@
 """
 Codette AI FastAPI Server
 Bridges CoreLogic Studio frontend with Codette Python AI engine
+Now with integrated training data and enhanced analysis
 """
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -15,6 +16,19 @@ from pathlib import Path
 import asyncio
 import json
 import time
+
+# Import Codette training and analysis modules
+try:
+    from codette_training_data import training_data, get_training_context
+    from codette_analysis_module import analyze_session as enhanced_analyze
+    TRAINING_AVAILABLE = True
+    print("[OK] Codette training data loaded successfully")
+except ImportError as e:
+    print(f"[WARNING] Could not import Codette training modules: {e}")
+    TRAINING_AVAILABLE = False
+    training_data = None
+    get_training_context = None
+    enhanced_analyze = None
 
 # Verify dependencies on startup
 def verify_dependencies():
@@ -273,12 +287,56 @@ async def health():
             "status": "healthy",
             "service": "Codette AI Server",
             "codette_available": codette is not None,
+            "training_available": TRAINING_AVAILABLE,
         }
     except Exception as e:
         print(f"ERROR in /health: {e}")
         import traceback
         traceback.print_exc()
         return {"status": "error", "error": str(e)}
+
+@app.get("/api/training/context")
+async def get_training_context():
+    """Get Codette AI training context"""
+    try:
+        if TRAINING_AVAILABLE and get_training_context:
+            context = get_training_context()
+            return {
+                "success": True,
+                "data": context,
+                "message": "Training context loaded successfully"
+            }
+        else:
+            return {
+                "success": False,
+                "data": None,
+                "message": "Training context not available"
+            }
+    except Exception as e:
+        print(f"[ERROR] in /api/training/context: {e}")
+        return {
+            "success": False,
+            "data": None,
+            "error": str(e)
+        }
+
+@app.get("/api/training/health")
+async def training_health():
+    """Check training module health"""
+    try:
+        return {
+            "success": True,
+            "training_available": TRAINING_AVAILABLE,
+            "modules": {
+                "training_data": TRAINING_AVAILABLE,
+                "analysis": TRAINING_AVAILABLE and enhanced_analyze is not None,
+            }
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @app.post("/codette/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
@@ -484,40 +542,48 @@ async def api_health():
 
 @app.post("/api/analyze/gain-staging")
 async def analyze_gain_staging(request: Dict[str, Any]) -> AnalysisResponse:
-    """Analyze gain staging across tracks"""
+    """Analyze gain staging across tracks - with training data"""
     try:
-        tracks = request.get("tracks", [])
-        
-        # Find clipping tracks
-        clipping_tracks = []
-        low_headroom = []
-        
-        for track in tracks:
-            peak = track.get("peak", -60)
-            if peak > -1:
-                clipping_tracks.append(track["id"])
-            elif peak > -6:
-                low_headroom.append(track["id"])
-        
-        # Generate prediction
-        if clipping_tracks:
-            prediction = f"⚠️ CLIPPING DETECTED on {len(clipping_tracks)} track(s). Reduce gain immediately to prevent digital distortion. Target: -6dB headroom minimum."
-            confidence = 0.95
-            action_items = [
-                {"action": "Reduce", "parameter": f"Track {tid} Gain", "value": -3, "priority": "high"}
-                for tid in clipping_tracks[:3]
-            ]
-        elif low_headroom:
-            prediction = f"⚡ Low headroom on {len(low_headroom)} track(s). Recommended target: -6dB peak level for safe mixing margin."
-            confidence = 0.85
-            action_items = [
-                {"action": "Reduce", "parameter": f"Track {tid} Gain", "value": -2, "priority": "medium"}
-                for tid in low_headroom[:3]
-            ]
+        # Use enhanced analysis if available
+        if TRAINING_AVAILABLE and enhanced_analyze:
+            analysis_result = enhanced_analyze("gain_staging", request)
+            prediction = " ".join(analysis_result.get("findings", []))
+            confidence = (analysis_result.get("score", 50) / 100.0)
+            action_items = analysis_result.get("recommendations", [])
         else:
-            prediction = "✅ Excellent gain staging! Levels are well-optimized with good headroom across all tracks."
-            confidence = 0.90
-            action_items = []
+            # Fallback to basic analysis
+            tracks = request.get("tracks", [])
+            
+            # Find clipping tracks
+            clipping_tracks = []
+            low_headroom = []
+            
+            for track in tracks:
+                peak = track.get("peak", -60)
+                if peak > -1:
+                    clipping_tracks.append(track["id"])
+                elif peak > -6:
+                    low_headroom.append(track["id"])
+            
+            # Generate prediction
+            if clipping_tracks:
+                prediction = f"⚠️ CLIPPING DETECTED on {len(clipping_tracks)} track(s). Reduce gain immediately to prevent digital distortion. Target: -6dB headroom minimum."
+                confidence = 0.95
+                action_items = [
+                    {"action": "Reduce", "parameter": f"Track {tid} Gain", "value": -3, "priority": "high"}
+                    for tid in clipping_tracks[:3]
+                ]
+            elif low_headroom:
+                prediction = f"⚡ Low headroom on {len(low_headroom)} track(s). Recommended target: -6dB peak level for safe mixing margin."
+                confidence = 0.85
+                action_items = [
+                    {"action": "Reduce", "parameter": f"Track {tid} Gain", "value": -2, "priority": "medium"}
+                    for tid in low_headroom[:3]
+                ]
+            else:
+                prediction = "✅ Excellent gain staging! Levels are well-optimized with good headroom across all tracks."
+                confidence = 0.90
+                action_items = []
         
         return AnalysisResponse(
             prediction=prediction,
@@ -525,6 +591,7 @@ async def analyze_gain_staging(request: Dict[str, Any]) -> AnalysisResponse:
             actionItems=action_items
         )
     except Exception as e:
+        print(f"[ERROR] in analyze_gain_staging: {e}")
         return AnalysisResponse(
             prediction=f"Error analyzing gain staging: {str(e)}",
             confidence=0,
