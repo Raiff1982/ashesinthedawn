@@ -336,53 +336,70 @@ export default function MixerTile({
         {/* CONTENT AREA */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {activeTab === "controls" ? (
-            // CONTROLS TAB: METER + FADER
-            <div className="flex flex-col items-center justify-end flex-1 gap-2 w-full">
-              {/* Meter */}
+            // CONTROLS TAB: METER (LEFT) + FADER (MIDDLE) + dB DISPLAY
+            <div className="flex items-end justify-center flex-1 gap-2 w-full">
+              {/* Meter - Line Graph on Left */}
               <div
-                className="rounded border border-gray-700 bg-gray-950 flex flex-col-reverse shadow-inner"
+                className="rounded border border-gray-600 bg-gray-950 shadow-inner flex items-end justify-center"
                 style={{
-                  width: `${meterWidth}px`,
-                  height: "60%",
-                  minHeight: "40px",
+                  width: `${Math.max(currentWidth * 0.3, 20)}px`,
+                  height: "100%",
+                  padding: "4px 2px",
                 }}
               >
-                <div
-                  style={{
-                    height: `${meter * 100}%`,
-                    backgroundColor: getMeterColor(db),
-                    transition: "height 0.1s linear",
-                    borderRadius: "1px",
-                  }}
-                />
+                {/* Line graph visualization: -∞ to +12 dB */}
+                <svg
+                  width="100%"
+                  height="100%"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  style={{ filter: "drop-shadow(0 0 1px rgba(0, 255, 0, 0.5))" }}
+                >
+                  {/* Grid lines for reference */}
+                  <line x1="0" y1="75" x2="100" y2="75" stroke="rgba(100, 100, 100, 0.3)" strokeWidth="0.5" />
+                  <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(100, 100, 100, 0.3)" strokeWidth="0.5" />
+                  <line x1="0" y1="25" x2="100" y2="25" stroke="rgba(100, 100, 100, 0.3)" strokeWidth="0.5" />
+                  
+                  {/* Level indicator line */}
+                  <line
+                    x1="0"
+                    y1={Math.max(5, Math.min(95, 95 - (db + 60) / 72 * 90))}
+                    x2="100"
+                    y2={Math.max(5, Math.min(95, 95 - (db + 60) / 72 * 90))}
+                    stroke={getMeterColor(db)}
+                    strokeWidth="2"
+                    style={{ transition: "y1 0.1s linear, y2 0.1s linear" }}
+                  />
+                </svg>
               </div>
 
-              {/* dB Display */}
-              <Tooltip content="RMS level in decibels" position="right">
-                <div
-                  className="font-mono text-xs text-gray-400 text-center cursor-help"
-                  style={{
-                    padding: "2px",
-                    minHeight: "16px",
-                  }}
-                >
-                  {db.toFixed(1)} dB
-                </div>
-              </Tooltip>
-
-              {/* Professional Volume Fader */}
+              {/* Professional Volume Fader - Middle */}
               <VolumeFader
                 trackId={track.id}
                 currentVolume={track.volume}
                 onVolumeChange={(vol) => onUpdate(track.id, { volume: vol })}
                 label="VOL"
-                height={Math.max(currentHeight * 0.4, 80)}
+                height={Math.max(currentHeight * 0.7, 120)}
                 showLabel={true}
                 showValue={true}
               />
+
+              {/* dB Display - Right */}
+              <Tooltip content="RMS level in decibels" position="left">
+                <div
+                  className="font-mono text-xs text-gray-400 text-center cursor-help flex-shrink-0"
+                  style={{
+                    padding: "2px",
+                    minHeight: "16px",
+                    width: `${Math.max(currentWidth * 0.2, 24)}px`,
+                  }}
+                >
+                  {db.toFixed(1)}
+                </div>
+              </Tooltip>
             </div>
           ) : (
-            // PLUGINS TAB: PLUGIN LIST
+            // PLUGINS TAB: PLUGIN LIST ONLY (NO POPUP MENU)
             <div className="flex-1 overflow-y-auto flex flex-col gap-2 w-full">
               {/* Plugin List */}
               <div className="space-y-1 flex-1 overflow-y-auto">
@@ -420,35 +437,33 @@ export default function MixerTile({
               </div>
 
               {/* Add Plugin Button */}
-              <div className="relative flex-shrink-0">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowPluginMenu(!showPluginMenu);
-                  }}
-                  className="w-full flex items-center justify-center gap-1 px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition"
-                >
-                  <Plus className="w-3 h-3" /> Add
-                </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPluginMenu(!showPluginMenu);
+                }}
+                className="w-full flex items-center justify-center gap-1 px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition flex-shrink-0"
+              >
+                <Plus className="w-3 h-3" /> Add
+              </button>
 
-                {showPluginMenu && (
-                  <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-900 border border-gray-600 rounded shadow-lg z-50 max-h-48 overflow-y-auto">
-                    {AVAILABLE_PLUGINS.map((plugin) => (
-                      <button
-                        key={plugin.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          addPlugin(plugin.id);
-                        }}
-                        className="w-full text-left px-2 py-1 text-xs text-gray-300 hover:bg-gray-700 hover:text-white transition first:rounded-t last:rounded-b whitespace-nowrap flex items-center gap-2"
-                      >
-                        <span>{plugin.icon}</span>
-                        <span className="truncate">{plugin.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {showPluginMenu && (
+                <div className="flex-1 overflow-y-auto bg-gray-900 border border-gray-600 rounded shadow-lg z-50">
+                  {AVAILABLE_PLUGINS.map((plugin) => (
+                    <button
+                      key={plugin.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addPlugin(plugin.id);
+                      }}
+                      className="w-full text-left px-2 py-1 text-xs text-gray-300 hover:bg-gray-700 hover:text-white transition first:rounded-t last:rounded-b whitespace-nowrap flex items-center gap-2"
+                    >
+                      <span>{plugin.icon}</span>
+                      <span className="truncate">{plugin.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
