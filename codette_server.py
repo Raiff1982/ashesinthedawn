@@ -296,15 +296,16 @@ async def health():
         return {"status": "error", "error": str(e)}
 
 @app.get("/api/training/context")
-async def get_training_context():
+async def get_training_context_endpoint():
     """Get Codette AI training context"""
     try:
         if TRAINING_AVAILABLE and get_training_context:
+            # Get complete training context from training module
             context = get_training_context()
             return {
                 "success": True,
                 "data": context,
-                "message": "Training context loaded successfully"
+                "message": "Training context available"
             }
         else:
             return {
@@ -314,6 +315,8 @@ async def get_training_context():
             }
     except Exception as e:
         print(f"[ERROR] in /api/training/context: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "success": False,
             "data": None,
