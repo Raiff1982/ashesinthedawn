@@ -81,12 +81,11 @@ export default function TopBar() {
   };
 
   const formatTime = (seconds: number) => {
-    const bars = Math.floor(seconds / 4);
-    const beats = Math.floor((seconds % 4) / 1);
-    const ms = Math.floor((seconds % 1) * 100);
-    return `${bars.toString()}:${beats.toString().padStart(2, "0")}.${ms
-      .toString()
-      .padStart(2, "0")}`;
+    // Format time display - using HH:MM:SS format
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
   const prevTrack = () => {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DAWProvider, useDAW } from './contexts/DAWContext';
+import { ThemeProvider } from './themes/ThemeContext';
 import MenuBar from './components/MenuBar';
 import TopBar from './components/TopBar';
 import TrackList from './components/TrackList';
@@ -13,6 +14,8 @@ import ModalsContainer from './components/ModalsContainer';
 function AppContent() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const [mixerHeight, setMixerHeight] = useState(288); // h-72 = 288px
+  const [isResizingMixer, setIsResizingMixer] = useState(false);
   const { uploadAudioFile, addTrack, selectTrack, tracks } = useDAW();
 
   // Debug: Verify MenuBar and AIPanel are imported
@@ -71,6 +74,20 @@ function AppContent() {
     }
   };
 
+  const handleMixerResizeStart = () => {
+    setIsResizingMixer(true);
+  };
+
+  const handleMixerResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isResizingMixer) return;
+    const newHeight = Math.max(120, Math.min(600, window.innerHeight - e.clientY));
+    setMixerHeight(newHeight);
+  };
+
+  const handleMixerResizeEnd = () => {
+    setIsResizingMixer(false);
+  };
+
   return (
     <div 
       className={`h-screen flex flex-col bg-gray-950 overflow-hidden transition-colors ${
@@ -79,6 +96,10 @@ function AppContent() {
       onDragOver={handleGlobalDragOver}
       onDragLeave={handleGlobalDragLeave}
       onDrop={handleGlobalDrop}
+      onMouseMove={handleMixerResize}
+      onMouseUp={handleMixerResizeEnd}
+      onMouseLeave={handleMixerResizeEnd}
+      style={{ cursor: isResizingMixer ? 'ns-resize' : 'default' }}
     >
       {/* Menu Bar */}
       <MenuBar />
@@ -127,9 +148,11 @@ function AppContent() {
 
 function App() {
   return (
-    <DAWProvider>
-      <AppContent />
-    </DAWProvider>
+    <ThemeProvider initialTheme="codette-graphite">
+      <DAWProvider>
+        <AppContent />
+      </DAWProvider>
+    </ThemeProvider>
   );
 }
 

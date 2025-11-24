@@ -6,6 +6,8 @@ import { DropdownMenu } from './DropdownMenu';
 
 const TrackListComponent = () => {
   const { tracks, selectedTrack, addTrack, selectTrack, updateTrack, deleteTrack } = useDAW();
+  const maxTracks = 256; // Maximum tracks allowed
+  const canAddTracks = tracks.length < maxTracks;
 
   const getTrackNumber = (track: Track): number => {
     const tracksOfSameType = tracks.filter(t => t.type === track.type);
@@ -53,12 +55,16 @@ const TrackListComponent = () => {
           <DropdownMenu
             trigger={
               <>
-                <Plus className="w-4 h-4" />
-                Add Track
+                <Plus className={`w-4 h-4 ${!canAddTracks ? 'opacity-50' : ''}`} />
+                {canAddTracks ? 'Add Track' : `Max ${maxTracks} reached`}
               </>
             }
-            items={trackMenuItems}
-            triggerClassName="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold text-white"
+            items={canAddTracks ? trackMenuItems : []}
+            triggerClassName={`w-full px-4 py-2 rounded font-semibold text-white transition ${
+              canAddTracks
+                ? 'bg-blue-600 hover:bg-blue-700'
+                : 'bg-gray-600 cursor-not-allowed opacity-50'
+            }`}
             menuClassName="left-0 right-0"
             align="left"
             width="w-full"

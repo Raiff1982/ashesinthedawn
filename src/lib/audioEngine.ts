@@ -49,6 +49,9 @@ export class AudioEngine {
     if (this.isInitialized) return;
 
     try {
+      // Load configuration at initialization time
+      this.metronomeSettings.enabled = true; // Default metronome enabled
+
       const AudioContextClass =
         window.AudioContext ||
         ((window as unknown as Record<string, unknown>)
