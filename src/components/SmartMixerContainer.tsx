@@ -156,22 +156,22 @@ export default function SmartMixerContainer({ children, onPositionChange }: Smar
   const toggleMaximize = () => {
     if (position.isMaximized) {
       // Restore previous size
-      setPosition((prev) => ({
+      setPosition({
         x: 10,
         y: TASKBAR_HEIGHT + 10,
         width: 800,
         height: 500,
         isMaximized: false,
-      }));
+      });
     } else {
       // Maximize
-      setPosition((prev) => ({
+      setPosition({
         x: 0,
         y: TASKBAR_HEIGHT,
         width: window.innerWidth,
         height: window.innerHeight - TASKBAR_HEIGHT,
         isMaximized: true,
-      }));
+      });
     }
   };
 
