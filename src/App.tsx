@@ -5,6 +5,7 @@ import TopBar from './components/TopBar';
 import TrackList from './components/TrackList';
 import Timeline from './components/Timeline';
 import Mixer from './components/Mixer';
+import SmartMixerContainer from './components/SmartMixerContainer';
 import EnhancedSidebar from './components/EnhancedSidebar';
 import WelcomeModal from './components/WelcomeModal';
 import ModalsContainer from './components/ModalsContainer';
@@ -104,9 +105,9 @@ function AppContent() {
       <TopBar />
 
       {/* SECTION 3: BOTTOM - Mixer View with Channel Strips */}
-      <div className="h-72 bg-gray-900 border-t border-gray-700 flex flex-col overflow-hidden">
+      <SmartMixerContainer>
         <Mixer />
-      </div>
+      </SmartMixerContainer>
 
       {/* Global Drag Overlay */}
       {isDraggingGlobal && (

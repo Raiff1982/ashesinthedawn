@@ -96,6 +96,7 @@ export default function MenuBar() {
     addTrack, 
     deleteTrack,
     selectedTrack,
+    tracks,
     undo,
     redo,
     updateTrack,
@@ -109,15 +110,15 @@ export default function MenuBar() {
       { label: 'New Project', onClick: () => { openNewProjectModal(); setActiveMenu(null); }, shortcut: 'Ctrl+N' },
       { label: 'Open Project', onClick: () => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.corelogic,.cls'; input.onchange = (e: Event) => { const target = e.target as HTMLInputElement; const file = target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (ev: ProgressEvent<FileReader>) => { try { const result = ev.target?.result; const project = JSON.parse(result as string); console.log('Opening project:', project); } catch { console.error('Invalid project file'); } }; reader.readAsText(file); } }; input.click(); setActiveMenu(null); }, shortcut: 'Ctrl+O' },
       { label: 'Save', onClick: () => { saveProject(); setActiveMenu(null); }, shortcut: 'Ctrl+S' },
-      { label: 'Save As...', onClick: () => { setActiveMenu(null); }, shortcut: 'Ctrl+Shift+S', disabled: true },
+      { label: 'Save As...', onClick: () => { const name = prompt('Project name:', 'My Project'); if (name) { console.log('Saving as:', name); saveProject(); } setActiveMenu(null); }, shortcut: 'Ctrl+Shift+S' },
       { divider: true },
       {
         label: 'Export',
         submenu: [
-          { label: 'MP3 (320kbps)', onClick: () => { openExportModal(); setActiveMenu(null); }, disabled: true },
-          { label: 'WAV (16-bit)', onClick: () => { openExportModal(); setActiveMenu(null); }, disabled: true },
-          { label: 'AAC (256kbps)', onClick: () => { openExportModal(); setActiveMenu(null); }, disabled: true },
-          { label: 'FLAC (lossless)', onClick: () => { openExportModal(); setActiveMenu(null); }, disabled: true },
+          { label: 'MP3 (320kbps)', onClick: () => { openExportModal(); setActiveMenu(null); } },
+          { label: 'WAV (16-bit)', onClick: () => { openExportModal(); setActiveMenu(null); } },
+          { label: 'AAC (256kbps)', onClick: () => { openExportModal(); setActiveMenu(null); } },
+          { label: 'FLAC (lossless)', onClick: () => { openExportModal(); setActiveMenu(null); } },
         ],
       },
       { divider: true },
@@ -134,12 +135,7 @@ export default function MenuBar() {
       { label: 'Select All', onClick: () => { document.execCommand('selectAll'); setActiveMenu(null); }, shortcut: 'Ctrl+A', disabled: true },
     ],
     View: [
-      { label: 'Zoom In', onClick: () => { console.log('Zoom in'); setActiveMenu(null); }, shortcut: 'Ctrl++', disabled: true },
-      { label: 'Zoom Out', onClick: () => { console.log('Zoom out'); setActiveMenu(null); }, shortcut: 'Ctrl+-', disabled: true },
-      { label: 'Reset Zoom', onClick: () => { console.log('Reset zoom'); setActiveMenu(null); }, shortcut: 'Ctrl+0', disabled: true },
-      { divider: true },
       { label: 'Full Screen', onClick: () => { if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen(); } setActiveMenu(null); }, shortcut: 'F11' },
-      { label: 'Show Mixer', onClick: () => { console.log('Show mixer'); setActiveMenu(null); }, shortcut: 'Ctrl+M', disabled: true },
     ],
     Track: [
       {
@@ -159,8 +155,8 @@ export default function MenuBar() {
       { label: 'Mute', onClick: () => { if (selectedTrack) updateTrack(selectedTrack.id, { muted: !selectedTrack.muted }); setActiveMenu(null); }, disabled: !selectedTrack },
       { label: 'Solo', onClick: () => { if (selectedTrack) updateTrack(selectedTrack.id, { soloed: !selectedTrack.soloed }); setActiveMenu(null); }, disabled: !selectedTrack },
       { divider: true },
-      { label: 'Mute All Tracks', onClick: () => { console.log('Mute all tracks'); setActiveMenu(null); }, disabled: true },
-      { label: 'Unmute All Tracks', onClick: () => { console.log('Unmute all tracks'); setActiveMenu(null); }, disabled: true },
+      { label: 'Mute All Tracks', onClick: () => { const allTracks = tracks.filter(t => !t.muted); allTracks.forEach(t => updateTrack(t.id, { muted: true })); setActiveMenu(null); }, disabled: !tracks.some(t => !t.muted) },
+      { label: 'Unmute All Tracks', onClick: () => { const mutedTracks = tracks.filter(t => t.muted); mutedTracks.forEach(t => updateTrack(t.id, { muted: false })); setActiveMenu(null); }, disabled: !tracks.some(t => t.muted) },
     ],
     Clip: [
       { label: 'New Clip', onClick: () => { console.log('Create clip'); setActiveMenu(null); }, disabled: !selectedTrack },
