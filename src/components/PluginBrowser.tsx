@@ -58,8 +58,10 @@ export default function PluginBrowser() {
 
     setLoadingPlugin(pluginName);
     try {
-      loadPlugin(selectedTrack.id, pluginName);
-      console.log(`Loaded ${pluginName} on ${selectedTrack.name}`);
+      const success = await loadPlugin(pluginName, selectedTrack.id);
+      if (success) {
+        console.log(`Loaded ${pluginName} on ${selectedTrack.name}`);
+      }
     } catch (error) {
       console.error('Failed to load plugin:', error);
     } finally {

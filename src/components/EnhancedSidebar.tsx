@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Music, Plus, Grid, Zap } from 'lucide-react';
+import { Settings, Music, Plus, Grid, Zap, MessageCircle } from 'lucide-react';
 import Sidebar from './Sidebar';
 import AudioMonitor from './AudioMonitor';
 import TrackDetailsPanel from './TrackDetailsPanel';
@@ -8,8 +8,9 @@ import PluginBrowser from './PluginBrowser';
 import MIDISettings from './MIDISettings';
 import SpectrumVisualizerPanel from './SpectrumVisualizerPanel';
 import MarkerPanel from './MarkerPanel';
+import CodettePanel from './CodettePanel';
 
-type SidebarTab = 'files' | 'track' | 'routing' | 'plugins' | 'midi' | 'spectrum' | 'markers' | 'monitor';
+type SidebarTab = 'files' | 'track' | 'routing' | 'plugins' | 'midi' | 'spectrum' | 'markers' | 'monitor' | 'codette';
 
 export default function EnhancedSidebar() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('track');
@@ -23,6 +24,7 @@ export default function EnhancedSidebar() {
     { id: 'spectrum', label: 'Analysis', icon: <Grid className="w-4 h-4" /> },
     { id: 'markers', label: 'Markers', icon: <Plus className="w-4 h-4" /> },
     { id: 'monitor', label: 'Monitor', icon: <Settings className="w-4 h-4" /> },
+    { id: 'codette', label: 'Codette', icon: <MessageCircle className="w-4 h-4" /> },
   ];
 
   return (
@@ -56,6 +58,7 @@ export default function EnhancedSidebar() {
         {activeTab === 'spectrum' && <SpectrumVisualizerPanel />}
         {activeTab === 'markers' && <MarkerPanel />}
         {activeTab === 'monitor' && <AudioMonitor />}
+        {activeTab === 'codette' && <CodettePanel isVisible={true} />}
       </div>
     </div>
   );

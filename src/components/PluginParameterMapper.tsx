@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Trash2, Zap, Download, Upload } from 'lucide-react';
 import { ParameterMapping, getParameterMapperEngine } from '../lib/parameterMapperEngine';
 import { useDAW } from '../contexts/DAWContext';
-import type { MidiDevice } from '../types';
 
 interface PluginParameterMapperProps {
   pluginId: string;
@@ -137,7 +136,7 @@ export const PluginParameterMapper: React.FC<PluginParameterMapperProps> = ({
     }
   };
 
-  const inputDevices = midiDevices.filter((d): d is MidiDevice => d !== null);
+  const inputDevices = midiDevices.filter(d => d.kind === 'input' && d.state === 'connected');
 
   return (
     <div className="bg-gray-900 rounded border border-gray-700 p-4">
