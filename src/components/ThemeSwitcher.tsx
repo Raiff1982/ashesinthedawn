@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Palette, Plus, Download, Upload, Trash2, Edit2 } from 'lucide-react';
+import { Palette, Plus, Download, Upload, Trash2 } from 'lucide-react';
 import { useTheme } from '../themes/ThemeContext';
 import { Theme } from '../themes/types';
 
