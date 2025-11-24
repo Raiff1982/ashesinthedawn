@@ -15,14 +15,9 @@ interface DetachedTileState {
 const MIN_STRIP_WIDTH = 60;
 const MAX_STRIP_WIDTH = 200;
 const MIN_STRIP_HEIGHT = 300;
-const MAX_STRIP_HEIGHT = 600;
-const DEFAULT_STRIP_WIDTH = 100;
-const DEFAULT_STRIP_HEIGHT = 400;
 
 const MixerComponent = () => {
   const { tracks, selectedTrack, updateTrack, deleteTrack, selectTrack, addPluginToTrack, removePluginFromTrack, togglePluginEnabled, addTrack } = useDAW();
-  const [stripWidth, setStripWidth] = useState(DEFAULT_STRIP_WIDTH);
-  const [stripHeight, setStripHeight] = useState(DEFAULT_STRIP_HEIGHT);
   const [detachedTiles, setDetachedTiles] = useState<DetachedTileState[]>([]);
   const [detachedOptionsTile, setDetachedOptionsTile] = useState(false);
   const [detachedPluginRacks, setDetachedPluginRacks] = useState<Record<string, boolean>>({});
@@ -32,6 +27,19 @@ const MixerComponent = () => {
   const animationRef = useRef<number | null>(null);
   const faderDraggingRef = useRef(false);
   const faderContainerRef = useRef<HTMLDivElement>(null);
+
+  // Calculate dynamic strip dimensions based on available space
+  const containerWidth = typeof window !== 'undefined' ? window.innerWidth - 80 : 800;
+  const gapWidth = 8; // gap-2 = 8px
+  const paddingWidth = 24; // p-3 = 12px * 2
+  const totalAvailableWidth = containerWidth - paddingWidth;
+  const stripCount = tracks.filter(t => t.type !== 'master').length + 1; // +1 for master
+  const calculatedStripWidth = Math.max(
+    MIN_STRIP_WIDTH,
+    Math.floor((totalAvailableWidth - (stripCount - 1) * gapWidth) / stripCount)
+  );
+  const effectiveStripWidth = Math.min(calculatedStripWidth, MAX_STRIP_WIDTH);
+  const effectiveStripHeight = MIN_STRIP_HEIGHT;
 
   // --- Global Drag Handler for Master Fader ---
   useEffect(() => {
@@ -114,7 +122,7 @@ const MixerComponent = () => {
             x: 200 + Math.random() * 100,
             y: 150 + Math.random() * 100,
           },
-          size: { width: stripWidth, height: stripHeight },
+          size: { width: effectiveStripWidth, height: effectiveStripHeight },
         },
       ]);
     }
@@ -136,32 +144,8 @@ const MixerComponent = () => {
               {detachedTiles.length > 0 && `• ${detachedTiles.length} floating`}
             </span>
           </div>
-          <div className="flex items-center gap-4 text-xs text-gray-400">
-            <label>
-              W:
-              <input
-                type="range"
-                min={MIN_STRIP_WIDTH}
-                max={MAX_STRIP_WIDTH}
-                value={stripWidth}
-                onChange={(e) => setStripWidth(parseInt(e.target.value))}
-                className="w-20 accent-blue-500 ml-2"
-              />
-              <span className="ml-2 text-gray-500">{stripWidth}px</span>
-            </label>
-            <label>
-              H:
-              <input
-                type="range"
-                min={MIN_STRIP_HEIGHT}
-                max={MAX_STRIP_HEIGHT}
-                value={stripHeight}
-                onChange={(e) => setStripHeight(parseInt(e.target.value))}
-                className="w-20 accent-blue-500 ml-2"
-              />
-              <span className="ml-2 text-gray-500">{stripHeight}px</span>
-            </label>
-            {/* Options moved to Options > Mixer Options menu */}
+          <div className="text-xs text-gray-500">
+            Drag mixer edge to resize • Double-click to add tracks
           </div>
         </div>
 
@@ -181,8 +165,8 @@ const MixerComponent = () => {
               <div
                 className="flex-shrink-0 select-none"
                 style={{
-                  width: `${stripWidth}px`,
-                  height: `${stripHeight}px`,
+                  width: `${effectiveStripWidth}px`,
+                  height: `${effectiveStripHeight}px`,
                   border: "2px solid rgb(202, 138, 4)",
                   backgroundColor: "rgb(30, 24, 15)",
                   borderRadius: "4px",
@@ -269,8 +253,8 @@ const MixerComponent = () => {
                       onAddPlugin={addPluginToTrack}
                       onRemovePlugin={removePluginFromTrack}
                       levels={levels}
-                      stripWidth={stripWidth}
-                      stripHeight={stripHeight}
+                      stripWidth={effectiveStripWidth}
+                      stripHeight={effectiveStripHeight}
                       isDetached={false}
                       onDetach={() => handleDetachTile(track.id)}
                     />
@@ -306,8 +290,8 @@ const MixerComponent = () => {
               tracks={tracks}
               onUpdateTrack={updateTrack}
               onRemovePlugin={removePluginFromTrack}
-              stripWidth={stripWidth}
-              stripHeight={stripHeight}
+              stripWidth={effectiveStripWidth}
+              stripHeight={effectiveStripHeight}
               position={{ x: 400, y: 150 }}
               onDock={() => setDetachedOptionsTile(false)}
               isDetached={true}
@@ -362,8 +346,8 @@ const MixerComponent = () => {
                 }}
                 onUpdate={updateTrack}
                 levels={levels}
-                stripWidth={stripWidth}
-                stripHeight={stripHeight}
+                stripWidth={effectiveStripWidth}
+                stripHeight={effectiveStripHeight}
                 isDetached={true}
                 onDock={() => handleDockTile(track.id)}
               />

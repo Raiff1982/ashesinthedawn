@@ -12,6 +12,8 @@ import ModalsContainer from './components/ModalsContainer';
 function AppContent() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const [mixerHeight, setMixerHeight] = useState(288); // h-72 = 288px
+  const [isResizingMixer, setIsResizingMixer] = useState(false);
   const { uploadAudioFile, addTrack, selectTrack, tracks } = useDAW();
 
   // Debug: Verify MenuBar and AIPanel are imported
@@ -36,6 +38,21 @@ function AppContent() {
     if (e.currentTarget === e.target) {
       setIsDraggingGlobal(false);
     }
+  };
+
+  // Handle mixer resize
+  const handleMixerResizeStart = () => {
+    setIsResizingMixer(true);
+  };
+
+  const handleMixerResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isResizingMixer) return;
+    const newHeight = Math.max(200, Math.min(600, window.innerHeight - e.clientY));
+    setMixerHeight(newHeight);
+  };
+
+  const handleMixerResizeEnd = () => {
+    setIsResizingMixer(false);
   };
 
   const handleGlobalDrop = async (e: React.DragEvent<HTMLDivElement>) => {
@@ -78,6 +95,10 @@ function AppContent() {
       onDragOver={handleGlobalDragOver}
       onDragLeave={handleGlobalDragLeave}
       onDrop={handleGlobalDrop}
+      onMouseMove={handleMixerResize}
+      onMouseUp={handleMixerResizeEnd}
+      onMouseLeave={handleMixerResizeEnd}
+      style={{ cursor: isResizingMixer ? 'ns-resize' : 'default' }}
     >
       {/* Menu Bar */}
       <MenuBar />
@@ -104,8 +125,18 @@ function AppContent() {
       <TopBar />
 
       {/* SECTION 3: BOTTOM - Mixer View with Channel Strips */}
-      <div className="h-72 bg-gray-900 border-t border-gray-700 flex flex-col overflow-hidden">
-        <Mixer />
+      <div 
+        className="bg-gray-900 border-t border-gray-700 flex flex-col overflow-hidden group relative"
+        style={{ height: `${mixerHeight}px` }}
+      >
+        {/* Resize Handle */}
+        <div
+          className="h-1 bg-gray-700 hover:bg-blue-500 cursor-ns-resize hover:shadow-md transition-all"
+          onMouseDown={handleMixerResizeStart}
+        />
+        <div className="flex-1 overflow-hidden">
+          <Mixer />
+        </div>
       </div>
 
       {/* Global Drag Overlay */}
