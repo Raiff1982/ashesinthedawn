@@ -1,5 +1,5 @@
 import { useDAW } from '../contexts/DAWContext';
-import { Sliders } from 'lucide-react';
+import { Sliders, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState, useRef, useEffect, memo } from 'react';
 import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
@@ -36,6 +36,7 @@ const MixerComponent = () => {
   const [masterFader, setMasterFader] = useState(0.7); // Master fader state (0-1)
   const [scaledStripWidth, setScaledStripWidth] = useState(DEFAULT_STRIP_WIDTH);
   const [isHoveringMixer, setIsHoveringMixer] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
 
   const animationRef = useRef<number | null>(null);
   const faderDraggingRef = useRef(false);
@@ -166,10 +167,24 @@ const MixerComponent = () => {
               {detachedTiles.length > 0 && `• ${detachedTiles.length} floating`}
             </span>
           </div>
-          <span className="text-xs text-gray-500">Drag top edge to resize • Settings: Options menu</span>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-gray-500">Drag top edge to resize • Settings: Options menu</span>
+            <button
+              onClick={() => setIsMinimized(!isMinimized)}
+              className="p-1 hover:bg-gray-700 rounded transition-colors"
+              title={isMinimized ? "Expand mixer" : "Minimize mixer"}
+            >
+              {isMinimized ? (
+                <ChevronUp className="w-4 h-4 text-gray-400 hover:text-gray-200" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-gray-400 hover:text-gray-200" />
+              )}
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col">
+        {!isMinimized && (
+          <div className="flex-1 overflow-hidden flex flex-col">
           {/* Mixer Strips Container with Smart Scrollbar */}
           <div 
             className="flex-1 overflow-y-hidden bg-gray-950 group/scroller"
@@ -336,6 +351,7 @@ const MixerComponent = () => {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Detached Floating Tiles */}
