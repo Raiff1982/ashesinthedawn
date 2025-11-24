@@ -73,7 +73,7 @@ export function CodettePanel({ isVisible, onClose }: CodettePanelProps) {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-0 right-0 w-96 h-96 bg-gray-950 border-l border-t border-gray-700 rounded-tl-lg shadow-xl flex flex-col">
+    <div className="fixed bottom-0 right-0 w-full md:w-[500px] bg-gray-950 border-l border-t border-gray-700 rounded-tl-lg shadow-xl flex flex-col" style={{maxWidth: 'min(90vw, 500px)', height: 'min(90vh, 600px)'}}>
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-4 rounded-tl-lg flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -166,7 +166,7 @@ export function CodettePanel({ isVisible, onClose }: CodettePanelProps) {
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-xs px-3 py-2 rounded-lg text-sm ${
+                className={`max-w-sm px-3 py-2 rounded-lg text-sm break-words ${
                   msg.role === 'user'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-800 text-gray-200 border border-gray-700'
@@ -177,7 +177,7 @@ export function CodettePanel({ isVisible, onClose }: CodettePanelProps) {
                     ? `Codette (${msg.perspective || 'neuralnets'})`
                     : 'You'}
                 </p>
-                <p>{msg.content}</p>
+                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                 <p className="text-xs text-gray-500 mt-1 opacity-70">
                   {new Date(msg.timestamp).toLocaleTimeString([], {
                     hour: '2-digit',

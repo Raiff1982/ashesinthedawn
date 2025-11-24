@@ -46,6 +46,7 @@ export default function TopBar() {
     canRedo,
     addMarker,
     markers,
+    openAudioSettingsModal,
   } = useDAW();
 
   // Real-time transport from WebSocket
@@ -72,12 +73,8 @@ export default function TopBar() {
   };
 
   const handleSettings = () => {
-    // Open settings/preferences
-    const confirmed = confirm("Open Audio Settings?");
-    if (confirmed) {
-      console.log("Audio Settings dialog would open here");
-      // TODO: Implement settings modal
-    }
+    // Open Audio Settings modal
+    openAudioSettingsModal();
   };
 
   const formatTime = (seconds: number) => {
