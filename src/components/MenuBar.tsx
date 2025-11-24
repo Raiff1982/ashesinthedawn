@@ -107,7 +107,7 @@ export default function MenuBar() {
   const menuSections: MenuSection = {
     File: [
       { label: 'New Project', onClick: () => { openNewProjectModal(); setActiveMenu(null); }, shortcut: 'Ctrl+N' },
-      { label: 'Open Project', onClick: () => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.corelogic,.cls'; input.onchange = (e: any) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (ev: any) => { try { const project = JSON.parse(ev.target?.result); console.log('Opening project:', project); } catch (err) { console.error('Invalid project file'); } }; reader.readAsText(file); } }; input.click(); setActiveMenu(null); }, shortcut: 'Ctrl+O' },
+      { label: 'Open Project', onClick: () => { const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.corelogic,.cls'; input.onchange = (e: Event) => { const target = e.target as HTMLInputElement; const file = target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (ev: ProgressEvent<FileReader>) => { try { const result = ev.target?.result; const project = JSON.parse(result as string); console.log('Opening project:', project); } catch { console.error('Invalid project file'); } }; reader.readAsText(file); } }; input.click(); setActiveMenu(null); }, shortcut: 'Ctrl+O' },
       { label: 'Save', onClick: () => { saveProject(); setActiveMenu(null); }, shortcut: 'Ctrl+S' },
       { label: 'Save As...', onClick: () => { setActiveMenu(null); }, shortcut: 'Ctrl+Shift+S', disabled: true },
       { divider: true },

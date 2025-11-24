@@ -39,6 +39,13 @@ interface DAWContextType {
   markers: Marker[];
   loopRegion: LoopRegion;
   metronomeSettings: MetronomeSettings;
+  inputLevel: number;
+  latencyMs: number;
+  bufferUnderruns: number;
+  bufferOverruns: number;
+  isAudioIOActive: boolean;
+  audioIOError: string | null;
+  selectedInputDevice: { label: string } | null;
   setCurrentProject: (project: Project | null) => void;
   addTrack: (type: Track["type"]) => void;
   selectTrack: (trackId: string) => void;
@@ -129,14 +136,6 @@ interface DAWContextType {
   createMIDIRoute: (sourceDeviceId: string, targetTrackId: string) => void;
   deleteMIDIRoute: (routeId: string) => void;
   getMIDIRoutesForTrack: (trackId: string) => MidiRoute[];
-  // Audio I/O monitoring
-  inputLevel: number;
-  latencyMs: number;
-  bufferUnderruns: number;
-  bufferOverruns: number;
-  isAudioIOActive: boolean;
-  audioIOError: string | null;
-  selectedInputDevice: string | null;
   // Utility
   cpuUsageDetailed: Record<string, number>;
 }
@@ -190,14 +189,14 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   // MIDI State
   const [midiDevices] = useState<MidiDevice[]>([]);
   const [midiRoutes, setMidiRoutes] = useState<MidiRoute[]>([]);
-  // Audio I/O monitoring state
-  const [inputLevel] = useState(0);
-  const [latencyMs] = useState(5);
-  const [bufferUnderruns] = useState(0);
-  const [bufferOverruns] = useState(0);
-  const [isAudioIOActive] = useState(false);
-  const [audioIOError] = useState<string | null>(null);
-  const [selectedInputDevice] = useState<string | null>(null);
+  // Audio I/O State (placeholder for future real-time audio I/O features)
+  const inputLevel = 0;
+  const latencyMs = 5;
+  const bufferUnderruns = 0;
+  const bufferOverruns = 0;
+  const isAudioIOActive = false;
+  const audioIOError: string | null = null;
+  const selectedInputDevice: { label: string } | null = null;
   // CPU usage detailed
   const [cpuUsageDetailedState] = useState<Record<string, number>>({
     audio: 2,
@@ -274,11 +273,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   }, [tracks, isPlaying]);
 
   // Cleanup on unmount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    const engineRef = audioEngineRef.current;
     return () => {
-      const engineRef = audioEngineRef.current;
-      engineRef.dispose();
+      engineRef?.dispose();
     };
   }, []);
 
@@ -1218,7 +1216,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         createMIDIRoute,
         deleteMIDIRoute,
         getMIDIRoutesForTrack,
-        // Audio I/O monitoring
+        // Audio I/O
         inputLevel,
         latencyMs,
         bufferUnderruns,
