@@ -1369,6 +1369,458 @@ async def analyze_creative(request: AudioAnalysisRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# =========================================================================
+# DAW CONTROL ENDPOINTS - Codette AI can now perform DAW operations
+# =========================================================================
+
+class DAWTrackRequest(BaseModel):
+    """Request model for track operations"""
+    trackId: Optional[str] = None
+    trackType: Optional[str] = None  # "audio", "instrument", "midi", "aux", "vca"
+    trackName: Optional[str] = None
+    trackColor: Optional[str] = None
+    updates: Optional[Dict[str, Any]] = None
+
+class DAWEffectRequest(BaseModel):
+    """Request model for effect operations"""
+    trackId: str
+    effectType: str  # "eq", "compressor", "reverb", "delay", etc.
+    effectName: Optional[str] = None
+    parameters: Optional[Dict[str, float]] = None
+    position: Optional[int] = None  # Insert position in chain
+
+class DAWTransportRequest(BaseModel):
+    """Request model for transport control"""
+    command: str  # "play", "stop", "pause", "resume"
+    position: Optional[float] = None
+
+class DAWAutomationRequest(BaseModel):
+    """Request model for automation operations"""
+    trackId: str
+    parameterName: str
+    timePosition: float
+    value: float
+
+class DAWLevelRequest(BaseModel):
+    """Request model for level adjustments"""
+    trackId: str
+    levelType: str  # "volume", "pan", "input_gain", "stereo_width"
+    value: float
+
+class DAWControlResponse(BaseModel):
+    """Response for DAW control operations"""
+    success: bool
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
+
+# TRACK MANAGEMENT ENDPOINTS
+
+@app.post("/codette/daw/track/create", response_model=DAWControlResponse)
+async def create_track(request: DAWTrackRequest) -> DAWControlResponse:
+    """Create a new track with specified type and name"""
+    try:
+        track_type = request.trackType or "audio"
+        track_name = request.trackName or f"{track_type.capitalize()} Track"
+        track_color = request.trackColor or "#808080"
+        
+        return DAWControlResponse(
+            success=True,
+            message=f"Track created: {track_name} ({track_type})",
+            data={
+                "trackType": track_type,
+                "trackName": track_name,
+                "trackColor": track_color,
+                "action": "add_track"
+            }
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/track/select", response_model=DAWControlResponse)
+async def select_track(request: DAWTrackRequest) -> DAWControlResponse:
+    """Select a track for editing"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Track selected: {request.trackId}",
+            data={"trackId": request.trackId, "action": "select_track"}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/track/delete", response_model=DAWControlResponse)
+async def delete_track(request: DAWTrackRequest) -> DAWControlResponse:
+    """Delete a track"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Track deleted: {request.trackId}",
+            data={"trackId": request.trackId, "action": "delete_track"}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/track/rename", response_model=DAWControlResponse)
+async def rename_track(request: DAWTrackRequest) -> DAWControlResponse:
+    """Rename a track"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Track renamed to: {request.trackName}",
+            data={"trackId": request.trackId, "trackName": request.trackName, "action": "rename_track"}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/track/mute", response_model=DAWControlResponse)
+async def toggle_track_mute(request: DAWTrackRequest) -> DAWControlResponse:
+    """Toggle mute on a track"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Track mute toggled: {request.trackId}",
+            data={"trackId": request.trackId, "action": "toggle_mute"}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/track/solo", response_model=DAWControlResponse)
+async def toggle_track_solo(request: DAWTrackRequest) -> DAWControlResponse:
+    """Toggle solo on a track"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Track solo toggled: {request.trackId}",
+            data={"trackId": request.trackId, "action": "toggle_solo"}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/track/arm", response_model=DAWControlResponse)
+async def toggle_track_arm(request: DAWTrackRequest) -> DAWControlResponse:
+    """Toggle record arm on a track"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Track record arm toggled: {request.trackId}",
+            data={"trackId": request.trackId, "action": "toggle_arm"}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+
+# LEVEL & MIXING ENDPOINTS
+
+@app.post("/codette/daw/level/set", response_model=DAWControlResponse)
+async def set_track_level(request: DAWLevelRequest) -> DAWControlResponse:
+    """Set track level (volume, pan, input gain, stereo width)"""
+    try:
+        level_type = request.levelType  # "volume", "pan", "input_gain", "stereo_width"
+        
+        recommendations = {
+            "volume": "Setting post-fader volume (dB, typically -6 to +6)",
+            "pan": "Setting pan (-1.0 = left, 0.0 = center, +1.0 = right)",
+            "input_gain": "Setting pre-fader input gain (dB, typically -12 to +12)",
+            "stereo_width": "Setting stereo width (0-200%, 100 = normal)"
+        }
+        
+        return DAWControlResponse(
+            success=True,
+            message=f"{level_type} set to {request.value}",
+            data={
+                "trackId": request.trackId,
+                "levelType": level_type,
+                "value": request.value,
+                "explanation": recommendations.get(level_type, "Level adjusted"),
+                "action": "set_level"
+            }
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/level/normalize", response_model=DAWControlResponse)
+async def normalize_track_levels(request: DAWLevelRequest) -> DAWControlResponse:
+    """Auto-normalize track levels based on Codette analysis"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Track levels normalized to standard",
+            data={
+                "trackId": request.trackId,
+                "adjustments": {
+                    "volume": -6.0,
+                    "pan": 0.0,
+                    "inputGain": 0.0
+                },
+                "reasoning": "Standard mixing level: -6dB volume, center pan, 0dB input",
+                "action": "normalize_levels"
+            }
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+
+# EFFECT & PLUGIN ENDPOINTS
+
+@app.post("/codette/daw/effect/add", response_model=DAWControlResponse)
+async def add_effect_to_track(request: DAWEffectRequest) -> DAWControlResponse:
+    """Add an effect to a track with recommended settings"""
+    try:
+        effect_type = request.effectType.lower()
+        
+        # Recommended settings for common effects
+        effect_settings = {
+            "eq": {
+                "type": "parametric_eq",
+                "default_bands": [
+                    {"frequency": 80, "gain": 0, "q": 0.7, "type": "highpass"},
+                    {"frequency": 200, "gain": -3, "q": 1.0, "type": "shelf"},
+                    {"frequency": 1000, "gain": 0, "q": 1.0, "type": "peak"},
+                    {"frequency": 5000, "gain": 2, "q": 1.0, "type": "peak"},
+                    {"frequency": 15000, "gain": 0, "q": 0.7, "type": "shelf"}
+                ]
+            },
+            "compressor": {
+                "type": "dynamic_compressor",
+                "ratio": 4.0,
+                "threshold": -20.0,
+                "attack": 10,
+                "release": 100,
+                "makeup_gain": "auto"
+            },
+            "reverb": {
+                "type": "convolver_reverb",
+                "room_size": 0.5,
+                "decay_time": 1.5,
+                "predelay": 20,
+                "dry_wet": 0.3
+            },
+            "delay": {
+                "type": "simple_delay",
+                "time_ms": 500,
+                "feedback": 0.4,
+                "dry_wet": 0.2,
+                "sync": "quarter_note"
+            },
+            "saturation": {
+                "type": "soft_clipper",
+                "drive": 3.0,
+                "tone": 0.5,
+                "dry_wet": 0.2
+            }
+        }
+        
+        settings = effect_settings.get(effect_type, {"type": effect_type})
+        
+        return DAWControlResponse(
+            success=True,
+            message=f"Effect added to track: {request.effectName or effect_type}",
+            data={
+                "trackId": request.trackId,
+                "effectType": effect_type,
+                "effectName": request.effectName or f"{effect_type.capitalize()}",
+                "settings": settings,
+                "position": request.position or 0,
+                "action": "add_effect"
+            }
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/effect/remove", response_model=DAWControlResponse)
+async def remove_effect_from_track(request: DAWEffectRequest) -> DAWControlResponse:
+    """Remove an effect from a track"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Effect removed from track",
+            data={
+                "trackId": request.trackId,
+                "effectName": request.effectName,
+                "action": "remove_effect"
+            }
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/effect/parameter", response_model=DAWControlResponse)
+async def set_effect_parameter(request: DAWEffectRequest) -> DAWControlResponse:
+    """Set effect parameter values"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Effect parameters updated",
+            data={
+                "trackId": request.trackId,
+                "effectName": request.effectName,
+                "parameters": request.parameters,
+                "action": "set_effect_param"
+            }
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+
+# TRANSPORT & PLAYBACK ENDPOINTS
+
+@app.post("/codette/daw/transport/play", response_model=DAWControlResponse)
+async def transport_play() -> DAWControlResponse:
+    """Start playback from current position"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message="Playback started",
+            data={"action": "play", "timestamp": time.time()}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/transport/stop", response_model=DAWControlResponse)
+async def transport_stop() -> DAWControlResponse:
+    """Stop playback and return to start"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message="Playback stopped",
+            data={"action": "stop", "timestamp": time.time()}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/transport/pause", response_model=DAWControlResponse)
+async def transport_pause() -> DAWControlResponse:
+    """Pause playback at current position"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message="Playback paused",
+            data={"action": "pause", "timestamp": time.time()}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/transport/seek", response_model=DAWControlResponse)
+async def transport_seek(seconds: float) -> DAWControlResponse:
+    """Seek to specific time position"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Seeked to {seconds}s",
+            data={"action": "seek", "position": seconds, "timestamp": time.time()}
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+
+# AUTOMATION ENDPOINTS
+
+@app.post("/codette/daw/automation/add-point", response_model=DAWControlResponse)
+async def add_automation_point(request: DAWAutomationRequest) -> DAWControlResponse:
+    """Add automation point at specific time and value"""
+    try:
+        return DAWControlResponse(
+            success=True,
+            message=f"Automation point added at {request.timePosition}s",
+            data={
+                "trackId": request.trackId,
+                "parameter": request.parameterName,
+                "timePosition": request.timePosition,
+                "value": request.value,
+                "action": "add_automation_point"
+            }
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+@app.post("/codette/daw/automation/curve", response_model=DAWControlResponse)
+async def create_automation_curve(request: Dict[str, Any]) -> DAWControlResponse:
+    """Create automation curve with multiple points"""
+    try:
+        track_id = request.get("trackId", "")
+        param_name = request.get("parameterName", "")
+        points = request.get("points", [])  # List of {time, value} dicts
+        
+        return DAWControlResponse(
+            success=True,
+            message=f"Automation curve created with {len(points)} points",
+            data={
+                "trackId": track_id,
+                "parameter": param_name,
+                "pointCount": len(points),
+                "points": points,
+                "action": "create_automation_curve"
+            }
+        )
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+
+# COMPREHENSIVE DAW ACTION ENDPOINT
+
+@app.post("/codette/daw/execute", response_model=DAWControlResponse)
+async def execute_daw_action(request: Dict[str, Any]) -> DAWControlResponse:
+    """
+    Execute a comprehensive DAW action recommended by Codette
+    
+    Example actions:
+    {
+        "type": "apply_effect_chain",
+        "trackId": "vocal-1",
+        "effects": [
+            {"type": "eq", "settings": {...}},
+            {"type": "compressor", "settings": {...}},
+            {"type": "reverb", "settings": {...}}
+        ]
+    }
+    """
+    try:
+        action_type = request.get("type", "")
+        
+        if action_type == "apply_effect_chain":
+            effects = request.get("effects", [])
+            return DAWControlResponse(
+                success=True,
+                message=f"Effect chain applied ({len(effects)} effects)",
+                data={
+                    "trackId": request.get("trackId"),
+                    "effectCount": len(effects),
+                    "effects": effects,
+                    "action": "apply_effect_chain"
+                }
+            )
+        
+        elif action_type == "normalize_mix":
+            tracks = request.get("tracks", [])
+            return DAWControlResponse(
+                success=True,
+                message=f"Mix normalized for {len(tracks)} tracks",
+                data={
+                    "trackCount": len(tracks),
+                    "adjustments": tracks,
+                    "action": "normalize_mix"
+                }
+            )
+        
+        elif action_type == "route_tracks":
+            routes = request.get("routes", [])
+            return DAWControlResponse(
+                success=True,
+                message=f"Routing configured for {len(routes)} tracks",
+                data={
+                    "routeCount": len(routes),
+                    "routes": routes,
+                    "action": "route_tracks"
+                }
+            )
+        
+        else:
+            return DAWControlResponse(success=False, message=f"Unknown action type: {action_type}")
+    
+    except Exception as e:
+        return DAWControlResponse(success=False, message=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
 

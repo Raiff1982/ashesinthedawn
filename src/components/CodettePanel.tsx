@@ -37,10 +37,15 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     reconnect,
     getSuggestions,
     getMasteringAdvice,
+    // DAW Control Methods
+    addEffect,
+    setTrackLevel,
+    playAudio,
+    stopAudio,
   } = useCodette({ autoConnect: true });
 
   const [inputValue, setInputValue] = useState('');
-  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat'>('suggestions');
+  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions'>('suggestions');
   const [selectedContext, setSelectedContext] = useState('general');
   const [expanded, setExpanded] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -158,6 +163,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             >
               <MessageCircle className="w-3 h-3" />
               Chat
+            </button>
+            <button
+              onClick={() => setActiveTab('actions')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                activeTab === 'actions'
+                  ? 'border-b-2 border-blue-400 text-blue-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              <Zap className="w-3 h-3" />
+              Actions
             </button>
           </div>
 
@@ -312,6 +328,94 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   </div>
                 )}
                 <div ref={messagesEndRef} />
+              </div>
+            )}
+
+            {/* Actions Tab */}
+            {activeTab === 'actions' && (
+              <div className="space-y-2">
+                <div className="text-xs text-gray-400 mb-3">
+                  Execute Codette-recommended DAW operations
+                </div>
+
+                {/* Quick Actions */}
+                <div className="space-y-1.5">
+                  <button
+                    onClick={() => playAudio()}
+                    disabled={isLoading || !isConnected}
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-700 text-white text-xs py-1.5 px-2 rounded transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <span>▶</span> Play
+                  </button>
+
+                  <button
+                    onClick={() => stopAudio()}
+                    disabled={isLoading || !isConnected}
+                    className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-700 text-white text-xs py-1.5 px-2 rounded transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <span>⏹</span> Stop
+                  </button>
+                </div>
+
+                {/* Effect Recommendations */}
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <h4 className="text-xs font-semibold text-blue-400 mb-1.5">Quick Effects</h4>
+                  <div className="space-y-1 text-xs">
+                    <button
+                      onClick={() => addEffect('selected-track', 'eq', 'EQ')}
+                      disabled={isLoading || !isConnected}
+                      className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
+                    >
+                      + Add EQ to Track
+                    </button>
+                    <button
+                      onClick={() => addEffect('selected-track', 'compressor', 'Compressor')}
+                      disabled={isLoading || !isConnected}
+                      className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
+                    >
+                      + Add Compressor
+                    </button>
+                    <button
+                      onClick={() => addEffect('selected-track', 'reverb', 'Reverb')}
+                      disabled={isLoading || !isConnected}
+                      className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
+                    >
+                      + Add Reverb
+                    </button>
+                  </div>
+                </div>
+
+                {/* Level Adjustments */}
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <h4 className="text-xs font-semibold text-blue-400 mb-1.5">Quick Levels</h4>
+                  <div className="space-y-1 text-xs">
+                    <button
+                      onClick={() => setTrackLevel('selected-track', 'volume', -6)}
+                      disabled={isLoading || !isConnected}
+                      className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
+                    >
+                      Set Volume to -6dB
+                    </button>
+                    <button
+                      onClick={() => setTrackLevel('selected-track', 'pan', 0)}
+                      disabled={isLoading || !isConnected}
+                      className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
+                    >
+                      Center Pan
+                    </button>
+                  </div>
+                </div>
+
+                {!isConnected && (
+                  <div className="mt-3 pt-3 border-t border-gray-700 text-center">
+                    <button
+                      onClick={() => reconnect()}
+                      className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      Reconnect to Backend
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
