@@ -354,7 +354,7 @@ export default function CodetteAdvancedTools({
           <button
             onClick={handleAnalyzeGenre}
             disabled={isLoading}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white font-semibold py-2 rounded-md transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <>
@@ -428,7 +428,7 @@ export default function CodetteAdvancedTools({
             <button
               onClick={handleLoadEarTraining}
               disabled={isLoading}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white font-semibold py-2 rounded-md transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
@@ -487,7 +487,7 @@ export default function CodetteAdvancedTools({
             <button
               onClick={handleLoadProductionChecklist}
               disabled={isLoading}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white font-semibold py-2 rounded-md transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
@@ -575,7 +575,7 @@ export default function CodetteAdvancedTools({
             <button
               onClick={handleLoadInstrumentInfo}
               disabled={isLoading}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white font-semibold py-2 rounded-md transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
