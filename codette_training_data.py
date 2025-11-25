@@ -1715,6 +1715,851 @@ class CodetteTrainingData:
 
 
 
+# ==================== CORELOGIC STUDIO DAWS FUNCTIONS ====================
+
+DAW_FUNCTIONS = {
+    # TRANSPORT CONTROLS
+    "transport": {
+        "play": {
+            "name": "play()",
+            "description": "Start playback from current position",
+            "category": "transport",
+            "parameters": [],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": True,
+            "hotkey": "Space",
+            "implementation": "togglePlay() in DAWContext.tsx",
+            "python_equivalent": "engine.play_audio(track_ids)",
+            "use_case": "Begin playback of session or resume from pause",
+            "tips": [
+                "Use Space bar for quick playback toggle",
+                "Playing locks you from editing - pause to make changes",
+                "Playback uses Web Audio API with native looping"
+            ]
+        },
+        "stop": {
+            "name": "stop()",
+            "description": "Stop playback and return to start position (0)",
+            "category": "transport",
+            "parameters": [],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": True,
+            "hotkey": "Shift+Space",
+            "implementation": "togglePlay() in DAWContext.tsx with reset",
+            "python_equivalent": "engine.stop_audio()",
+            "use_case": "Full stop with reset to beginning of timeline",
+            "tips": [
+                "Stop vs Pause: Stop resets position, Pause keeps position",
+                "Good before making major session changes",
+                "Frees up CPU resources from playback"
+            ]
+        },
+        "pause": {
+            "name": "pause()",
+            "description": "Pause playback at current position",
+            "category": "transport",
+            "parameters": [],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Ctrl+Space",
+            "implementation": "togglePlay() logic in DAWContext",
+            "python_equivalent": "engine.pause_audio()",
+            "use_case": "Temporary stop while keeping playback position",
+            "tips": [
+                "Pause keeps your place - good for iterating",
+                "Resume continues from where you paused",
+                "Lighter on CPU than full Stop+Play cycle"
+            ]
+        },
+        "seek": {
+            "name": "seek(timeSeconds: number)",
+            "description": "Jump to specific time position in timeline",
+            "category": "transport",
+            "parameters": ["timeSeconds (float)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Click timeline",
+            "implementation": "seek() in DAWContext.tsx",
+            "python_equivalent": "engine.seek(seconds)",
+            "use_case": "Navigate to any position in the session",
+            "tips": [
+                "Click waveform to seek instantly",
+                "Seeking restarts playback from new position if playing",
+                "Great for quickly jumping between sections"
+            ]
+        },
+        "set_tempo": {
+            "name": "set_tempo(bpm: float)",
+            "description": "Set project playback tempo in BPM (1-300)",
+            "category": "transport",
+            "parameters": ["bpm (1.0 to 300.0)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Click BPM display",
+            "implementation": "transport_manager.set_tempo() in server",
+            "python_equivalent": "engine.set_tempo(bpm)",
+            "use_case": "Change project tempo for different styles",
+            "tips": [
+                "Range: 1 BPM (very slow) to 300 BPM (very fast)",
+                "Common BPMs: 120 (pop), 90 (hip-hop), 140 (house)",
+                "Affects delay/reverb note sync calculations"
+            ]
+        },
+        "set_loop": {
+            "name": "set_loop(enabled: bool, start: float, end: float)",
+            "description": "Enable/disable loop region with start and end points",
+            "category": "transport",
+            "parameters": ["enabled (bool)", "start_seconds (float)", "end_seconds (float)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Ctrl+L",
+            "implementation": "transport_manager.set_loop() in server",
+            "python_equivalent": "engine.set_loop(start, end)",
+            "use_case": "Loop specific section for practice or editing",
+            "tips": [
+                "Loop region shown as highlight in timeline",
+                "Great for repeating chorus or problem sections",
+                "Playback will jump back to start when reaching end"
+            ]
+        },
+        "set_metronome": {
+            "name": "set_metronome(enabled: bool, volume: float)",
+            "description": "Toggle metronome click track and set volume",
+            "category": "transport",
+            "parameters": ["enabled (bool)", "volume (0.0-1.0)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "M",
+            "implementation": "toggleMetronome() in TopBar.tsx",
+            "python_equivalent": "metronome.enable(volume)",
+            "use_case": "Keep time reference during recording and playback",
+            "tips": [
+                "Essential for tempo-locked recording",
+                "Adjust volume so it's audible but not distracting",
+                "Click pattern changes based on beat (accent on 1)"
+            ]
+        }
+    },
+    
+    # TRACK MANAGEMENT
+    "tracks": {
+        "add_track": {
+            "name": "addTrack(trackType: 'audio'|'instrument'|'midi'|'aux'|'vca')",
+            "description": "Create new track of specified type",
+            "category": "tracks",
+            "parameters": ["trackType (enum)"],
+            "returns": "Track object",
+            "affects_audio": False,
+            "affects_cpu": False,
+            "hotkey": "Ctrl+T",
+            "implementation": "addTrack() in DAWContext.tsx",
+            "python_equivalent": "session.create_track(track_type)",
+            "use_case": "Create new tracks for recording or arrangement",
+            "tips": [
+                "Audio: Record external audio or load files",
+                "Instrument: Host virtual instruments with MIDI",
+                "MIDI: MIDI data only (no sound until routed to instrument)",
+                "Aux: Effect return tracks (routing destination)",
+                "VCA: Master fader for track groups"
+            ]
+        },
+        "delete_track": {
+            "name": "deleteTrack(trackId: string)",
+            "description": "Remove track from session",
+            "category": "tracks",
+            "parameters": ["trackId (string)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Ctrl+D (on selected)",
+            "implementation": "removeTrack() in DAWContext.tsx",
+            "python_equivalent": "session.delete_track(track_id)",
+            "use_case": "Clean up unwanted or test tracks",
+            "tips": [
+                "Freeing up tracks reduces CPU usage",
+                "Deleting master track returns project to default output",
+                "Archive session before major track deletion"
+            ]
+        },
+        "select_track": {
+            "name": "selectTrack(trackId: string)",
+            "description": "Select track for editing (shows in mixer panel)",
+            "category": "tracks",
+            "parameters": ["trackId (string)"],
+            "returns": "void",
+            "affects_audio": False,
+            "affects_cpu": False,
+            "hotkey": "Click track in list",
+            "implementation": "selectTrack() in DAWContext.tsx",
+            "python_equivalent": "session.select_track(track_id)",
+            "use_case": "Focus on editing one track at a time",
+            "tips": [
+                "Only one track selected at a time (single-select model)",
+                "Selected track shown in mixer below",
+                "All volume/pan changes apply to selected track"
+            ]
+        },
+        "toggle_mute": {
+            "name": "toggleMute(trackId: string)",
+            "description": "Mute/unmute track audio output",
+            "category": "tracks",
+            "parameters": ["trackId (string)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Ctrl+M",
+            "implementation": "updateTrack() with {muted: !track.muted}",
+            "python_equivalent": "track.mute()",
+            "use_case": "Silence track without deleting or affecting settings",
+            "tips": [
+                "Muted tracks still process effects (use bypass for efficiency)",
+                "Use mute to A/B compare with/without track",
+                "Mute button shows 'M' indicator in track list"
+            ]
+        },
+        "toggle_solo": {
+            "name": "toggleSolo(trackId: string)",
+            "description": "Solo track - mute all others",
+            "category": "tracks",
+            "parameters": ["trackId (string)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Ctrl+S",
+            "implementation": "updateTrack() with solo logic",
+            "python_equivalent": "mixer.solo(track_id)",
+            "use_case": "Isolate track to hear it alone",
+            "tips": [
+                "Useful for checking track balance without other context",
+                "Multiple solos possible - all other tracks muted",
+                "Solo indicator shows 'S' in track header"
+            ]
+        },
+        "toggle_arm": {
+            "name": "toggleArm(trackId: string)",
+            "description": "Arm/disarm track for recording",
+            "category": "tracks",
+            "parameters": ["trackId (string)"],
+            "returns": "void",
+            "affects_audio": False,
+            "affects_cpu": False,
+            "hotkey": "Ctrl+R",
+            "implementation": "updateTrack() with {armed: !track.armed}",
+            "python_equivalent": "track.arm_recording()",
+            "use_case": "Prepare track to receive audio input during recording",
+            "tips": [
+                "Only armed tracks record when hitting record button",
+                "Armed indicator shows 'R' (red) in track header",
+                "Multiple tracks can be armed simultaneously"
+            ]
+        }
+    },
+    
+    # MIXER & LEVELS
+    "mixer": {
+        "set_volume": {
+            "name": "setTrackVolume(trackId: string, volumeDb: number)",
+            "description": "Set track output volume in decibels",
+            "category": "mixer",
+            "parameters": ["trackId (string)", "volumeDb (-60 to +6 dB)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Drag volume slider",
+            "implementation": "setTrackVolume() in audioEngine.ts",
+            "python_equivalent": "track.set_volume(db)",
+            "use_case": "Adjust track loudness in mix (fader)",
+            "tips": [
+                "dB scale: -6dB = half volume, +6dB = double volume",
+                "Typical range: -60 to 0dB (unity)",
+                "Standard mixing level: -6dB headroom on tracks"
+            ]
+        },
+        "set_pan": {
+            "name": "setTrackPan(trackId: string, pan: number)",
+            "description": "Set track stereo position (-1 = left, 0 = center, +1 = right)",
+            "category": "mixer",
+            "parameters": ["trackId (string)", "pan (-1.0 to +1.0)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Drag pan slider",
+            "implementation": "updateTrack() with pan value",
+            "python_equivalent": "track.set_pan(value)",
+            "use_case": "Position track in stereo field",
+            "tips": [
+                "0.0 = center (mono), -1.0 = full left, +1.0 = full right",
+                "Use for stereo imaging: drums center, guitars L/R",
+                "Subtle panning creates width without losing coherence"
+            ]
+        },
+        "set_input_gain": {
+            "name": "setTrackInputGain(trackId: string, gainDb: number)",
+            "description": "Set pre-fader input gain (before volume fader)",
+            "category": "mixer",
+            "parameters": ["trackId (string)", "gainDb (-12 to +12 dB)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Drag input slider",
+            "implementation": "setTrackInputGain() in DAWContext.tsx",
+            "python_equivalent": "track.set_input_gain(db)",
+            "use_case": "Gain-stage audio input before fader",
+            "tips": [
+                "Input gain stage comes before volume fader",
+                "Use for gain staging to -6dB on meters",
+                "Affects internal headroom before compression/effects"
+            ]
+        },
+        "update_track": {
+            "name": "updateTrack(trackId: string, updates: Partial<Track>)",
+            "description": "Update any track properties (volume, pan, mute, solo, color, name)",
+            "category": "mixer",
+            "parameters": ["trackId (string)", "updates (object with Track properties)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Various (UI driven)",
+            "implementation": "updateTrack() in DAWContext.tsx",
+            "python_equivalent": "track.update(**kwargs)",
+            "use_case": "Batch update track settings",
+            "tips": [
+                "Flexible: can update volume, pan, color, name in one call",
+                "Used internally by setVolume, setPan, etc.",
+                "Trigger re-render of mixer and track list"
+            ]
+        }
+    },
+    
+    # EFFECTS & PLUGINS
+    "effects": {
+        "add_effect": {
+            "name": "addPluginToTrack(trackId: string, effectType: string)",
+            "description": "Add audio effect plugin to track insert chain",
+            "category": "effects",
+            "parameters": ["trackId (string)", "effectType (eq|compressor|reverb|delay|saturation)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": True,
+            "hotkey": "Right-click track → Add Effect",
+            "implementation": "addPluginToTrack() in DAWContext.tsx",
+            "python_equivalent": "track.add_effect(effect_type, settings)",
+            "use_case": "Insert effect into track processing chain",
+            "tips": [
+                "Effects available: EQ, Compressor, Reverb, Delay, Saturation",
+                "Effects are inserts (inline processing)",
+                "Order matters: EQ → Compression → Saturation → Delays",
+                "Each effect increases CPU usage"
+            ]
+        },
+        "remove_effect": {
+            "name": "removePluginFromTrack(trackId: string, pluginId: string)",
+            "description": "Remove effect plugin from track",
+            "category": "effects",
+            "parameters": ["trackId (string)", "pluginId (string)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": True,
+            "hotkey": "Right-click effect → Remove",
+            "implementation": "removePluginFromTrack() in DAWContext.tsx",
+            "python_equivalent": "track.remove_effect(plugin_id)",
+            "use_case": "Delete unwanted effect from chain",
+            "tips": [
+                "Frees up CPU from removed effect",
+                "Plugin settings are lost (no undo yet)",
+                "Great for A/B testing"
+            ]
+        },
+        "set_effect_parameter": {
+            "name": "setPluginParameter(trackId: string, pluginId: string, paramName: string, value: number)",
+            "description": "Adjust effect parameter (cutoff, ratio, time, etc.)",
+            "category": "effects",
+            "parameters": ["trackId (string)", "pluginId (string)", "parameterName (string)", "value (float)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Drag effect slider",
+            "implementation": "setPluginParameter() in audioEngine.ts",
+            "python_equivalent": "plugin.set_parameter(name, value)",
+            "use_case": "Fine-tune effect behavior",
+            "tips": [
+                "Parameter ranges vary by effect type",
+                "Real-time updates during playback",
+                "Use bypass to compare with/without setting"
+            ]
+        },
+        "bypass_effect": {
+            "name": "bypassPlugin(trackId: string, pluginId: string)",
+            "description": "Bypass effect without removing (saves settings)",
+            "category": "effects",
+            "parameters": ["trackId (string)", "pluginId (string)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": True,
+            "hotkey": "Click bypass button",
+            "implementation": "updateTrack() plugin bypass state",
+            "python_equivalent": "plugin.bypass()",
+            "use_case": "Temporarily disable effect for A/B comparison",
+            "tips": [
+                "Settings preserved when bypassed (unlike delete)",
+                "Saves CPU when effect is bypassed",
+                "Good for quick before/after listening"
+            ]
+        }
+    },
+    
+    # WAVEFORM & TIMELINE
+    "waveform": {
+        "get_waveform_data": {
+            "name": "getWaveformData(trackId: string)",
+            "description": "Get waveform peak data for timeline visualization",
+            "category": "waveform",
+            "parameters": ["trackId (string)"],
+            "returns": "Float32Array (peak values)",
+            "affects_audio": False,
+            "affects_cpu": False,
+            "hotkey": "N/A (automatic)",
+            "implementation": "getWaveformData() in audioEngine.ts",
+            "python_equivalent": "audio_buffer.get_peaks(resolution=8192)",
+            "use_case": "Display audio waveform in timeline",
+            "tips": [
+                "Automatically computed on audio file load",
+                "Cached in audioEngine.waveformCache Map",
+                "Pre-computed for performance (not real-time)"
+            ]
+        },
+        "get_duration": {
+            "name": "getAudioDuration(trackId: string)",
+            "description": "Get total duration of track audio in seconds",
+            "category": "waveform",
+            "parameters": ["trackId (string)"],
+            "returns": "number (seconds)",
+            "affects_audio": False,
+            "affects_cpu": False,
+            "hotkey": "N/A",
+            "implementation": "getAudioDuration() in audioEngine.ts",
+            "python_equivalent": "track.get_duration()",
+            "use_case": "Get track length for UI display",
+            "tips": [
+                "Returns 0 if no audio loaded",
+                "Used for timeline scaling",
+                "Determines session length"
+            ]
+        },
+        "zoom_waveform": {
+            "name": "zoom(direction: 'in'|'out', factor: float)",
+            "description": "Zoom timeline waveform display in/out",
+            "category": "waveform",
+            "parameters": ["direction (in|out)", "factor (1.2 default)"],
+            "returns": "void",
+            "affects_audio": False,
+            "affects_cpu": False,
+            "hotkey": "Ctrl+Scroll or +/- keys",
+            "implementation": "zoom() in WaveformAdjuster.tsx",
+            "python_equivalent": "N/A (UI only)",
+            "use_case": "Get detailed or overview view of timeline",
+            "tips": [
+                "Zoom in to edit details",
+                "Zoom out to see whole arrangement",
+                "Adjust resolution slider for performance"
+            ]
+        },
+        "scale_waveform": {
+            "name": "scale(direction: 'up'|'down')",
+            "description": "Scale waveform height (amplitude visualization)",
+            "category": "waveform",
+            "parameters": ["direction (up|down)"],
+            "returns": "void",
+            "affects_audio": False,
+            "affects_cpu": False,
+            "hotkey": "Shift+Scroll",
+            "implementation": "scale() in WaveformAdjuster.tsx",
+            "python_equivalent": "N/A (UI only)",
+            "use_case": "See quiet parts of waveform more clearly",
+            "tips": [
+                "Scale up shows quieter details",
+                "Scale down shows overall envelope",
+                "Doesn't affect actual audio levels"
+            ]
+        }
+    },
+    
+    # AUTOMATION
+    "automation": {
+        "record_automation": {
+            "name": "recordAutomation(trackId: string, parameterName: string)",
+            "description": "Record parameter automation for track control",
+            "category": "automation",
+            "parameters": ["trackId (string)", "parameterName (string)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Click record on automation lane",
+            "implementation": "recordAutomation() in DAWContext.tsx",
+            "python_equivalent": "automation.start_recording(parameter)",
+            "use_case": "Automate volume, pan, effect parameters over time",
+            "tips": [
+                "Creates control points during playback",
+                "Capture dynamic mix changes",
+                "Automate: volume, pan, effect parameters"
+            ]
+        },
+        "add_automation_point": {
+            "name": "addAutomationPoint(trackId: string, timeSeconds: float, value: float)",
+            "description": "Manually add automation point on curve",
+            "category": "automation",
+            "parameters": ["trackId (string)", "timeSeconds (float)", "value (0.0-1.0)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Click automation curve",
+            "implementation": "addAutomationPoint() in AutomationLane.tsx",
+            "python_equivalent": "automation.add_point(time, value)",
+            "use_case": "Add control points to automation curve",
+            "tips": [
+                "Click curve to add points",
+                "Drag points to adjust automation shape",
+                "Interpolation between points creates smooth changes"
+            ]
+        },
+        "clear_automation": {
+            "name": "clearAutomation(trackId: string, parameterName: string)",
+            "description": "Delete all automation points for parameter",
+            "category": "automation",
+            "parameters": ["trackId (string)", "parameterName (string)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": False,
+            "hotkey": "Right-click automation → Clear",
+            "implementation": "clearAutomation() in DAWContext.tsx",
+            "python_equivalent": "automation.clear(parameter)",
+            "use_case": "Reset automation to default static value",
+            "tips": [
+                "Removes all recorded automation data",
+                "Useful for starting over on parameter",
+                "Can't undo (be careful!)"
+            ]
+        }
+    },
+    
+    # FILE & PROJECT
+    "project": {
+        "upload_audio_file": {
+            "name": "uploadAudioFile(file: File, trackId: string)",
+            "description": "Load audio file into track",
+            "category": "project",
+            "parameters": ["file (File object)", "trackId (string)"],
+            "returns": "void",
+            "affects_audio": True,
+            "affects_cpu": True,
+            "hotkey": "Drag file to track",
+            "implementation": "uploadAudioFile() in DAWContext.tsx",
+            "python_equivalent": "track.load_audio_file(path)",
+            "use_case": "Import audio file into session",
+            "tips": [
+                "Supported: WAV, MP3, FLAC, OGG, AAC",
+                "Max 100MB per file",
+                "Waveform pre-generates on load",
+                "Validates MIME type and file size"
+            ]
+        },
+        "create_project": {
+            "name": "createProject(name: string, sampleRate: number, bpm: number)",
+            "description": "Create new DAW session/project",
+            "category": "project",
+            "parameters": ["name (string)", "sampleRate (44100|48000)", "bpm (30-300)"],
+            "returns": "void",
+            "affects_audio": False,
+            "affects_cpu": False,
+            "hotkey": "File → New",
+            "implementation": "createProject() in DAWContext.tsx",
+            "python_equivalent": "session.create_project(name, sample_rate)",
+            "use_case": "Start new music production",
+            "tips": [
+                "Choose 44.1kHz for music, 48kHz for video",
+                "Set initial BPM (can change anytime)",
+                "Creates empty master track and default buses"
+            ]
+        }
+    }
+}
+
+# ==================== UI COMPONENTS KNOWLEDGE ====================
+
+UI_COMPONENTS = {
+    "TopBar": {
+        "description": "Main transport and control toolbar at top of interface",
+        "location": "src/components/TopBar.tsx",
+        "size": "Full width, ~60px height",
+        "functions": [
+            "play", "stop", "record", "loop", "undo", "redo", "metronome", "add_marker"
+        ],
+        "sections": {
+            "Transport": [
+                {"button": "Play", "hotkey": "Space", "function": "togglePlay"},
+                {"button": "Stop", "hotkey": "Shift+Space", "function": "stop"},
+                {"button": "Record", "hotkey": "Ctrl+R", "function": "toggleRecord"},
+                {"button": "Loop", "hotkey": "Ctrl+L", "function": "toggleLoop"},
+            ],
+            "Editing": [
+                {"button": "Undo", "hotkey": "Ctrl+Z", "function": "undo"},
+                {"button": "Redo", "hotkey": "Ctrl+Shift+Z", "function": "redo"},
+            ],
+            "Tools": [
+                {"button": "Metronome", "hotkey": "M", "function": "toggleMetronome"},
+                {"button": "Add Marker", "hotkey": "Ctrl+Alt+M", "function": "addMarker"},
+            ]
+        },
+        "teaching_tips": [
+            "Start here: Play button is most fundamental control",
+            "Space bar is fastest way to toggle playback",
+            "Stop vs Pause: Stop returns to 0:00, Pause stays at current position"
+        ]
+    },
+    "Mixer": {
+        "description": "Track mixing controls including faders and effects",
+        "location": "src/components/Mixer.tsx",
+        "size": "Bottom panel, ~200px height",
+        "functions": [
+            "set_volume", "set_pan", "set_input_gain", "toggle_mute", "toggle_solo", "toggle_arm"
+        ],
+        "sections": {
+            "Track Controls": [
+                {"slider": "Volume Fader", "range": "-60 to +6dB", "function": "setTrackVolume"},
+                {"slider": "Pan Control", "range": "-1.0 to +1.0", "function": "setTrackPan"},
+                {"slider": "Input Gain", "range": "-12 to +12dB", "function": "setTrackInputGain"},
+            ],
+            "Track Status": [
+                {"button": "Mute", "function": "toggleMute"},
+                {"button": "Solo", "function": "toggleSolo"},
+                {"button": "Arm", "function": "toggleArm"},
+            ],
+            "Meters": [
+                "Level Meter (input/output)",
+                "Peak Indicator"
+            ]
+        },
+        "teaching_tips": [
+            "Volume fader: Adjust gain (post-fader) for mixing",
+            "Input Gain: Pre-fader gain for proper level staging",
+            "Pan: Create stereo width, use -/+ for L/R imaging"
+        ]
+    },
+    "WaveformAdjuster": {
+        "description": "Timeline and waveform visualization with zoom controls",
+        "location": "src/components/WaveformAdjuster.tsx",
+        "size": "Center panel, flexible height",
+        "functions": [
+            "get_waveform_data", "zoom_waveform", "scale_waveform", "seek"
+        ],
+        "sections": {
+            "Timeline": [
+                "Waveform display (colored peaks)",
+                "Time ruler (seconds/bars)",
+                "Playhead (moving indicator)"
+            ],
+            "Controls": [
+                {"button": "Zoom In", "hotkey": "Ctrl++", "function": "zoom"},
+                {"button": "Zoom Out", "hotkey": "Ctrl+-", "function": "zoom"},
+                {"button": "Scale Up", "hotkey": "Shift++", "function": "scale"},
+                {"button": "Scale Down", "hotkey": "Shift+-", "function": "scale"},
+            ]
+        },
+        "teaching_tips": [
+            "Click waveform to seek (jump) to position",
+            "Zoom in for detailed editing, zoom out for overview",
+            "Color-coded waveforms help identify different tracks",
+            "Resolution slider affects performance - lower = faster"
+        ]
+    },
+    "PluginRack": {
+        "description": "Audio effects chain management and parameter editing",
+        "location": "src/components/PluginRack.tsx",
+        "size": "Right panel, flexible height",
+        "functions": [
+            "add_effect", "remove_effect", "set_effect_parameter", "bypass_effect"
+        ],
+        "sections": {
+            "Effects List": [
+                "Each effect shows name and bypass status",
+                "Drag to reorder chain"
+            ],
+            "Parameter Controls": [
+                "Sliders for numeric parameters",
+                "Buttons for modes/presets"
+            ],
+            "Actions": [
+                {"button": "Add Effect", "function": "addPluginToTrack"},
+                {"button": "Remove Effect", "function": "removePluginFromTrack"},
+                {"button": "Bypass", "function": "bypassPlugin"},
+            ]
+        },
+        "teaching_tips": [
+            "Order matters: EQ → Compression → Saturation → Delays",
+            "Bypass to A/B compare with/without effect",
+            "Use for inserts (track-specific processing)"
+        ]
+    },
+    "AutomationLane": {
+        "description": "Parameter automation curve drawing and recording",
+        "location": "src/components/AutomationLane.tsx",
+        "size": "Expandable lane below track",
+        "functions": [
+            "record_automation", "add_automation_point", "clear_automation"
+        ],
+        "sections": {
+            "Automation Display": [
+                "Curve showing automation shape",
+                "Control points draggable",
+                "Time grid reference"
+            ],
+            "Controls": [
+                {"button": "Record Automation", "function": "recordAutomation"},
+                {"button": "Add Point", "function": "addAutomationPoint"},
+                {"button": "Clear", "function": "clearAutomation"},
+            ]
+        },
+        "teaching_tips": [
+            "Record: Capture live parameter changes during playback",
+            "Manual: Click curve to add control points",
+            "Automate volume, pan, effect parameters"
+        ]
+    },
+    "TrackList": {
+        "description": "Left panel showing all tracks with visibility/arm controls",
+        "location": "src/components/TrackList.tsx",
+        "size": "Left sidebar, ~250px width",
+        "functions": [
+            "add_track", "delete_track", "select_track", "toggle_mute", "toggle_solo", "toggle_arm"
+        ],
+        "sections": {
+            "Track Display": [
+                "Each track shows name and number",
+                "Color-coded by type",
+                "Sequential numbering per type"
+            ],
+            "Quick Controls": [
+                "M button: Mute",
+                "S button: Solo",
+                "R button: Arm record"
+            ]
+        },
+        "teaching_tips": [
+            "Click track to select (shows in mixer)",
+            "Add buttons for each track type (Audio, Instrument, MIDI, Aux, VCA)",
+            "Track types: Audio (record), Instrument (virtual synth), Aux (effects), VCA (master)"
+        ]
+    }
+}
+
+# ==================== CODETTE AI TEACHING ABILITIES ====================
+
+CODETTE_ABILITIES = {
+    "explain_daw_functions": {
+        "ability": "Explain any DAW function with parameters and use cases",
+        "description": "Codette can provide detailed explanations of any function in CoreLogic Studio",
+        "example_prompt": "Explain what the seek() function does and how to use it",
+        "example_response": "The seek(timeSeconds) function jumps the playhead to any position in your session. For example, seek(45.5) moves to 45.5 seconds. This is useful for navigating to different sections quickly during playback or editing.",
+        "training_data": "DAW_FUNCTIONS dictionary above",
+        "when_to_use": "User wants to understand a function's purpose, parameters, or behavior",
+        "skill_level": "Beginner+"
+    },
+    "teach_mixing_techniques": {
+        "ability": "Provide mixing advice based on session context",
+        "description": "Codette can suggest mixing chains, parameter settings, and best practices",
+        "example_prompt": "What's a good mixing chain for a vocal track?",
+        "example_response": "For vocals, I recommend: EQ (remove 100-200Hz mud) → Compressor (4:1 ratio, -20dB threshold) → Reverb (plate type, 20% wet). This chain balances clarity, control, and depth.",
+        "training_data": "PLUGIN_CATEGORIES, MIXING_STANDARDS",
+        "when_to_use": "User asks for mixing advice or effect suggestions",
+        "skill_level": "Intermediate+"
+    },
+    "analyze_session_health": {
+        "ability": "Assess overall session quality and suggest improvements",
+        "description": "Codette can identify issues like clipping, poor routing, CPU usage",
+        "example_prompt": "Analyze my session and tell me what could be better",
+        "example_response": "Your session looks good overall. I notice your master is at -4dB (good headroom). Suggestion: Consider grouping your drum tracks into a bus for easier control. Your current track count (12) is efficient.",
+        "training_data": "ANALYSIS_CONTEXTS, GAIN_STAGING_DECISIONS",
+        "when_to_use": "User wants diagnostic information about their session",
+        "skill_level": "Intermediate+"
+    },
+    "teach_production_workflow": {
+        "ability": "Guide users through production stages with checklists",
+        "description": "Codette knows the production workflow: pre-prod → recording → mixing → mastering",
+        "example_prompt": "What should I do before I start mixing?",
+        "example_response": "Before mixing, ensure: 1) All tracks recorded and organized, 2) Tracks color-coded by instrument family, 3) Buses created (drums, vocals, instruments), 4) Rough levels set at -6dB headroom.",
+        "training_data": "production_checklist in training_data.py",
+        "when_to_use": "User asks about workflow or process",
+        "skill_level": "Beginner+",
+        "related_abilities": ["teach_mixing_techniques", "explain_daw_functions"]
+    },
+    "suggest_parameter_values": {
+        "ability": "Recommend effect parameter settings for common scenarios",
+        "description": "Codette knows good starting points for compression, EQ, reverb, etc.",
+        "example_prompt": "What settings should I use for a compressor on a drum bus?",
+        "example_response": "For drums: Ratio 3:1, Threshold -10dB, Attack 2ms, Release 50ms, Makeup Gain auto. These settings glue drums together while preserving dynamics.",
+        "training_data": "PLUGIN_CATEGORIES, MIXING_STANDARDS",
+        "when_to_use": "User asks for specific effect parameter recommendations",
+        "skill_level": "Intermediate+",
+        "related_abilities": ["teach_mixing_techniques"]
+    },
+    "explain_ui_components": {
+        "ability": "Describe any UI component's purpose and controls",
+        "description": "Codette can explain TopBar, Mixer, Timeline, PluginRack, etc.",
+        "example_prompt": "What does the Mixer panel do?",
+        "example_response": "The Mixer shows controls for the currently selected track. It has three sliders: Input Gain (pre-fader), Volume Fader (post-fader), and Pan (stereo position). These let you adjust the track's level and placement in the stereo field.",
+        "training_data": "UI_COMPONENTS dictionary above",
+        "when_to_use": "User asks about UI elements or navigation",
+        "skill_level": "Beginner+",
+        "related_abilities": ["explain_daw_functions"]
+    },
+    "provide_learning_paths": {
+        "ability": "Suggest learning sequences from beginner to advanced",
+        "description": "Codette knows prerequisites and natural learning progression",
+        "example_prompt": "What should I learn first about mixing?",
+        "example_response": "Start with gain staging (understanding levels), then basic panning for stereo width. Next, learn EQ to balance frequencies. After that, compression to control dynamics. Finally, add reverb and delay for depth.",
+        "training_data": "Skill progressions and prerequisites",
+        "when_to_use": "User asks about learning order or progression",
+        "skill_level": "All levels",
+        "related_abilities": ["teach_production_workflow", "teach_mixing_techniques"]
+    },
+    "explain_audio_theory": {
+        "ability": "Teach audio theory: dB, frequency, dynamics, phase, etc.",
+        "description": "Codette understands the 'why' behind audio engineering",
+        "example_prompt": "How does compression work?",
+        "example_response": "Compression reduces loud parts of audio. If you set ratio 4:1 with -20dB threshold, any audio above -20dB is reduced 4x. For example, -10dB input becomes -22.5dB output. This creates a 'glued' sound.",
+        "training_data": "Audio theory sections of training_data.py",
+        "when_to_use": "User asks conceptual/theoretical questions",
+        "skill_level": "Intermediate+",
+        "related_abilities": ["explain_daw_functions"]
+    },
+    "detect_issues": {
+        "ability": "Identify common problems and suggest fixes",
+        "description": "Codette can spot clipping, imbalance, CPU spikes, phase issues",
+        "example_prompt": "Why does my mix sound muddy?",
+        "example_response": "Muddy mixes usually have too much low-mid energy (100-500Hz). Try: 1) EQ: Cut -3dB at 250Hz on non-bass tracks, 2) Check mix balance in mono (use correlation meter), 3) Use high-pass filter on vocals and guitars above 80Hz.",
+        "training_data": "FREQUENCY_BALANCE_DECISIONS, problem/solution pairs",
+        "when_to_use": "User reports a mixing problem",
+        "skill_level": "Intermediate+",
+        "related_abilities": ["teach_mixing_techniques", "explain_audio_theory"]
+    },
+    "suggest_enhancements": {
+        "ability": "Recommend creative improvements to mixes and arrangements",
+        "description": "Codette can suggest adding effects, automation, instrumentation",
+        "example_prompt": "How can I make this drop more impactful?",
+        "example_response": "Try these techniques: 1) Sidechain drums to bass for pump, 2) Automate filter sweep into drop (close to open), 3) Add reverb sends for space. These create dramatic contrast.",
+        "training_data": "CREATIVE_IMPROVEMENTS, effect combinations",
+        "when_to_use": "User asks for creative ideas",
+        "skill_level": "Intermediate+"
+    }
+}
+
 # ==================== EXPORT ====================
 
 # Create global instance
@@ -1738,4 +2583,8 @@ def get_training_context() -> Dict[str, Any]:
         "ear_training_visual": training_data.visual_ear_training,
         "production_checklist": training_data.production_checklist,
         "instruments": training_data.instruments_database,
+        # NEW: DAW and UI training
+        "daw_functions": DAW_FUNCTIONS,
+        "ui_components": UI_COMPONENTS,
+        "codette_abilities": CODETTE_ABILITIES,
     }

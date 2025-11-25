@@ -27,6 +27,7 @@ import { useTransportClock } from "../hooks/useTransportClock";
 import { useState } from "react";
 import CodetteStatus from "./CodetteStatus";
 import CodetteAdvancedTools from "./CodetteAdvancedTools";
+import { Tooltip, TOOLTIP_LIBRARY } from "./TooltipProvider";
 
 export default function TopBar() {
   const {
@@ -135,39 +136,45 @@ export default function TopBar() {
         {/* Transport Controls */}
         <div className="flex items-center gap-1 bg-gray-900 rounded-md px-2 py-1 border border-gray-700">
           {/* Stop Button (red square) */}
-          <button
-            onClick={stop}
-            className="p-1.5 rounded hover:bg-red-700/30 text-red-400 transition"
-            title="Stop (Space)"
-          >
-            <Square className="w-4 h-4 fill-current" />
-          </button>
+          <Tooltip content={TOOLTIP_LIBRARY['stop']}>
+            <button
+              onClick={stop}
+              className="p-1.5 rounded hover:bg-red-700/30 text-red-400 transition"
+              title="Stop (Space)"
+            >
+              <Square className="w-4 h-4 fill-current" />
+            </button>
+          </Tooltip>
 
           {/* Play Button (green circle) - currently active */}
-          <button
-            onClick={togglePlay}
-            className={`p-1.5 rounded transition ${
-              isPlaying
-                ? "bg-green-600 text-white shadow-lg"
-                : "hover:bg-gray-800 text-green-400"
-            }`}
-            title="Play (Space)"
-          >
-            <Play className="w-4 h-4 fill-current" />
-          </button>
+          <Tooltip content={TOOLTIP_LIBRARY['play']}>
+            <button
+              onClick={togglePlay}
+              className={`p-1.5 rounded transition ${
+                isPlaying
+                  ? "bg-green-600 text-white shadow-lg"
+                  : "hover:bg-gray-800 text-green-400"
+              }`}
+              title="Play (Space)"
+            >
+              <Play className="w-4 h-4 fill-current" />
+            </button>
+          </Tooltip>
 
           {/* Record Button */}
-          <button
-            onClick={toggleRecord}
-            className={`p-1.5 rounded transition ${
-              isRecording
-                ? "bg-red-600 text-white shadow-lg animate-pulse"
-                : "hover:bg-gray-800 text-gray-300"
-            }`}
-            title="Record (Ctrl+R)"
-          >
-            <Circle className="w-4 h-4 fill-current" />
-          </button>
+          <Tooltip content={TOOLTIP_LIBRARY['record']}>
+            <button
+              onClick={toggleRecord}
+              className={`p-1.5 rounded transition ${
+                isRecording
+                  ? "bg-red-600 text-white shadow-lg animate-pulse"
+                  : "hover:bg-gray-800 text-gray-300"
+              }`}
+              title="Record (Ctrl+R)"
+            >
+              <Circle className="w-4 h-4 fill-current" />
+            </button>
+          </Tooltip>
 
           {/* Pause Button */}
           <button
@@ -187,65 +194,75 @@ export default function TopBar() {
         <div className="w-px h-6 bg-gray-700 mx-1" />
 
         {/* Loop Control */}
-        <button
-          onClick={toggleLoop}
-          className={`p-1.5 rounded transition ${
-            loopRegion.enabled
-              ? "bg-blue-600 text-white shadow-lg"
-              : "hover:bg-gray-800 text-gray-300"
-          }`}
-          title={`Loop ${loopRegion.enabled ? "On" : "Off"} (Ctrl+L)`}
-        >
-          <Repeat className="w-4 h-4" />
-        </button>
+        <Tooltip content={TOOLTIP_LIBRARY['loop']}>
+          <button
+            onClick={toggleLoop}
+            className={`p-1.5 rounded transition ${
+              loopRegion.enabled
+                ? "bg-blue-600 text-white shadow-lg"
+                : "hover:bg-gray-800 text-gray-300"
+            }`}
+            title={`Loop ${loopRegion.enabled ? "On" : "Off"} (Ctrl+L)`}
+          >
+            <Repeat className="w-4 h-4" />
+          </button>
+        </Tooltip>
 
         {/* Undo/Redo */}
-        <button
-          onClick={undo}
-          disabled={!canUndo}
-          className={`p-1.5 rounded transition ${
-            canUndo
-              ? "hover:bg-gray-800 text-gray-300"
-              : "text-gray-600 cursor-not-allowed"
-          }`}
-          title="Undo (Ctrl+Z)"
-        >
-          <Undo2 className="w-4 h-4" />
-        </button>
-        <button
-          onClick={redo}
-          disabled={!canRedo}
-          className={`p-1.5 rounded transition ${
-            canRedo
-              ? "hover:bg-gray-800 text-gray-300"
-              : "text-gray-600 cursor-not-allowed"
-          }`}
-          title="Redo (Ctrl+Shift+Z)"
-        >
-          <Redo2 className="w-4 h-4" />
-        </button>
+        <Tooltip content={TOOLTIP_LIBRARY['undo']}>
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            className={`p-1.5 rounded transition ${
+              canUndo
+                ? "hover:bg-gray-800 text-gray-300"
+                : "text-gray-600 cursor-not-allowed"
+            }`}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+        </Tooltip>
+        <Tooltip content={TOOLTIP_LIBRARY['redo']}>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            className={`p-1.5 rounded transition ${
+              canRedo
+                ? "hover:bg-gray-800 text-gray-300"
+                : "text-gray-600 cursor-not-allowed"
+            }`}
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+        </Tooltip>
 
         {/* Metronome Toggle */}
-        <button
-          onClick={toggleMetronome}
-          className={`p-1.5 rounded transition ${
-            metronomeSettings.enabled
-              ? "bg-yellow-600 text-white shadow-lg"
-              : "hover:bg-gray-800 text-gray-300"
-          }`}
-          title="Metronome"
-        >
-          <Music className="w-4 h-4" />
-        </button>
+        <Tooltip content={TOOLTIP_LIBRARY['metronome']}>
+          <button
+            onClick={toggleMetronome}
+            className={`p-1.5 rounded transition ${
+              metronomeSettings.enabled
+                ? "bg-yellow-600 text-white shadow-lg"
+                : "hover:bg-gray-800 text-gray-300"
+            }`}
+            title="Metronome"
+          >
+            <Music className="w-4 h-4" />
+          </button>
+        </Tooltip>
 
         {/* Add Marker */}
-        <button
-          onClick={() => addMarker(currentTime, `Marker ${markers.length + 1}`)}
-          className="p-1.5 rounded hover:bg-gray-800 text-purple-400 transition"
-          title="Add Marker (M)"
-        >
-          <Flag className="w-4 h-4" />
-        </button>
+        <Tooltip content={TOOLTIP_LIBRARY['addMarker']}>
+          <button
+            onClick={() => addMarker(currentTime, `Marker ${markers.length + 1}`)}
+            className="p-1.5 rounded hover:bg-gray-800 text-purple-400 transition"
+            title="Add Marker (M)"
+          >
+            <Flag className="w-4 h-4" />
+          </button>
+        </Tooltip>
       </div>
 
       {/* CENTER SECTION: Time display and Status */}
