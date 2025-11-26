@@ -10,6 +10,7 @@ import SmartMixerContainer from './components/SmartMixerContainer';
 import EnhancedSidebar from './components/EnhancedSidebar';
 import WelcomeModal from './components/WelcomeModal';
 import ModalsContainer from './components/ModalsContainer';
+import FunctionExecutionLog from './components/FunctionExecutionLog';
 
 function AppContent() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -121,6 +122,9 @@ function AppContent() {
           </div>
         </div>
       )}
+
+      {/* Real-time Function Execution Log */}
+      <FunctionExecutionLog />
 
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
       <ModalsContainer />

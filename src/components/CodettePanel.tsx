@@ -5,6 +5,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useCodette } from '../hooks/useCodette';
+import { useDAW } from '../contexts/DAWContext';
+import { Plugin } from '../types';
 import {
   MessageCircle,
   Send,
@@ -37,12 +39,16 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     reconnect,
     getSuggestions,
     getMasteringAdvice,
-    // DAW Control Methods
-    addEffect,
-    setTrackLevel,
-    playAudio,
-    stopAudio,
   } = useCodette({ autoConnect: true });
+
+  // DAW Context for actual state updates
+  const {
+    addTrack,
+    selectedTrack,
+    togglePlay,
+    updateTrack,
+    isPlaying,
+  } = useDAW();
 
   const [inputValue, setInputValue] = useState('');
   const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions'>('suggestions');
@@ -62,6 +68,26 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, selectedContext]);
+
+  // Poll for suggestion updates every 3 seconds when in suggestions tab
+  useEffect(() => {
+    if (!isConnected || activeTab !== 'suggestions') return;
+
+    const pollInterval = setInterval(() => {
+      handleLoadSuggestions(selectedContext);
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, activeTab, selectedContext]);
+
+  // Refresh suggestions when DAW state changes (playing, track selection, etc.)
+  useEffect(() => {
+    if (isConnected && activeTab === 'suggestions' && (isPlaying || selectedTrack)) {
+      handleLoadSuggestions(selectedContext);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, selectedTrack?.id, isConnected, activeTab]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,8 +238,15 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
 
                 {/* Suggestions List */}
                 {suggestions.length > 0 ? (
-                  suggestions.map((suggestion, idx) => (
-                    <div key={idx} className="p-2 bg-gray-800 border border-gray-700 rounded">
+                  <>
+                    {isLoading && (
+                      <div className="flex items-center justify-center py-1 text-xs text-gray-400">
+                        <Loader className="w-3 h-3 animate-spin mr-1" />
+                        Refreshing suggestions...
+                      </div>
+                    )}
+                    {suggestions.map((suggestion, idx) => (
+                      <div key={idx} className={`p-2 bg-gray-800 border border-gray-700 rounded transition ${isLoading ? 'opacity-60' : 'opacity-100'}`}>
                       <div className="flex items-start justify-between mb-1">
                         <h4 className="font-medium text-xs text-blue-400">
                           {suggestion.title}
@@ -231,7 +264,8 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         </div>
                       )}
                     </div>
-                  ))
+                    ))}
+                  </>
                 ) : (
                   <div className="text-center py-6 text-gray-500 text-xs">
                     {isLoading ? 'Loading suggestions...' : 'No suggestions yet. Click a category!'}
@@ -341,16 +375,16 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                 {/* Quick Actions */}
                 <div className="space-y-1.5">
                   <button
-                    onClick={() => playAudio()}
-                    disabled={isLoading || !isConnected}
+                    onClick={() => togglePlay()}
+                    disabled={isLoading}
                     className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-700 text-white text-xs py-1.5 px-2 rounded transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    <span>▶</span> Play
+                    <span>{isPlaying ? '⏸' : '▶'}</span> {isPlaying ? 'Pause' : 'Play'}
                   </button>
 
                   <button
-                    onClick={() => stopAudio()}
-                    disabled={isLoading || !isConnected}
+                    onClick={() => isPlaying && togglePlay()}
+                    disabled={isLoading || !isPlaying}
                     className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-700 text-white text-xs py-1.5 px-2 rounded transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <span>⏹</span> Stop
@@ -362,22 +396,67 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   <h4 className="text-xs font-semibold text-blue-400 mb-1.5">Quick Effects</h4>
                   <div className="space-y-1 text-xs">
                     <button
-                      onClick={() => addEffect('selected-track', 'eq', 'EQ')}
-                      disabled={isLoading || !isConnected}
+                      onClick={() => {
+                        if (selectedTrack) {
+                          const eqPlugin: Plugin = {
+                            id: `eq-${Date.now()}`,
+                            name: 'EQ',
+                            type: 'eq',
+                            enabled: true,
+                            parameters: {},
+                          };
+                          updateTrack(selectedTrack.id, {
+                            inserts: [...(selectedTrack.inserts || []), eqPlugin]
+                          });
+                        } else {
+                          addTrack('audio');
+                        }
+                      }}
+                      disabled={isLoading}
                       className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
                     >
                       + Add EQ to Track
                     </button>
                     <button
-                      onClick={() => addEffect('selected-track', 'compressor', 'Compressor')}
-                      disabled={isLoading || !isConnected}
+                      onClick={() => {
+                        if (selectedTrack) {
+                          const compPlugin: Plugin = {
+                            id: `comp-${Date.now()}`,
+                            name: 'Compressor',
+                            type: 'compressor',
+                            enabled: true,
+                            parameters: {},
+                          };
+                          updateTrack(selectedTrack.id, {
+                            inserts: [...(selectedTrack.inserts || []), compPlugin]
+                          });
+                        } else {
+                          addTrack('audio');
+                        }
+                      }}
+                      disabled={isLoading}
                       className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
                     >
                       + Add Compressor
                     </button>
                     <button
-                      onClick={() => addEffect('selected-track', 'reverb', 'Reverb')}
-                      disabled={isLoading || !isConnected}
+                      onClick={() => {
+                        if (selectedTrack) {
+                          const reverbPlugin: Plugin = {
+                            id: `reverb-${Date.now()}`,
+                            name: 'Reverb',
+                            type: 'reverb',
+                            enabled: true,
+                            parameters: {},
+                          };
+                          updateTrack(selectedTrack.id, {
+                            inserts: [...(selectedTrack.inserts || []), reverbPlugin]
+                          });
+                        } else {
+                          addTrack('audio');
+                        }
+                      }}
+                      disabled={isLoading}
                       className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
                     >
                       + Add Reverb
@@ -390,15 +469,23 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   <h4 className="text-xs font-semibold text-blue-400 mb-1.5">Quick Levels</h4>
                   <div className="space-y-1 text-xs">
                     <button
-                      onClick={() => setTrackLevel('selected-track', 'volume', -6)}
-                      disabled={isLoading || !isConnected}
+                      onClick={() => {
+                        if (selectedTrack) {
+                          updateTrack(selectedTrack.id, { volume: -6 });
+                        }
+                      }}
+                      disabled={isLoading || !selectedTrack}
                       className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
                     >
                       Set Volume to -6dB
                     </button>
                     <button
-                      onClick={() => setTrackLevel('selected-track', 'pan', 0)}
-                      disabled={isLoading || !isConnected}
+                      onClick={() => {
+                        if (selectedTrack) {
+                          updateTrack(selectedTrack.id, { pan: 0 });
+                        }
+                      }}
+                      disabled={isLoading || !selectedTrack}
                       className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors"
                     >
                       Center Pan
@@ -406,16 +493,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   </div>
                 </div>
 
-                {!isConnected && (
-                  <div className="mt-3 pt-3 border-t border-gray-700 text-center">
-                    <button
-                      onClick={() => reconnect()}
-                      className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      Reconnect to Backend
-                    </button>
-                  </div>
-                )}
+                {/* Track Context Info */}
+                <div className="mt-3 pt-3 border-t border-gray-700 text-xs text-gray-400">
+                  {selectedTrack ? (
+                    <div>
+                      <span className="text-gray-300">Selected:</span> {selectedTrack.name}
+                      <div className="mt-1 text-xs text-gray-500">Type: {selectedTrack.type}</div>
+                    </div>
+                  ) : (
+                    <div className="text-yellow-600">No track selected - actions will create new track</div>
+                  )}
+                </div>
               </div>
             )}
           </div>

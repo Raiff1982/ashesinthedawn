@@ -112,7 +112,7 @@ export default function TopBar() {
   };
 
   return (
-    <div className="h-12 bg-gradient-to-r from-gray-800 via-gray-750 to-gray-800 border-b border-gray-600 flex items-center px-2 gap-2 text-xs shadow-md overflow-x-auto overflow-y-hidden scrollbar-hide" style={{ scrollBehavior: 'smooth' }}>
+    <div className="h-12 bg-gradient-to-r from-gray-800 via-gray-750 to-gray-800 border-b border-gray-600 flex items-center px-2 gap-2 text-xs shadow-md overflow-x-auto scrollbar-hide" style={{ scrollBehavior: 'smooth', zIndex: 1 }}>
       {/* LEFT SECTION: Previous/Next Track, Stop, Play, Record, Pause */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {/* Previous/Next Track Buttons */}
