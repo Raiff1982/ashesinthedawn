@@ -189,10 +189,10 @@ const MixerComponent = () => {
         </div>
 
         {!isMinimized && (
-          <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {/* Mixer Strips Container with Smart Scrollbar */}
           <div 
-            className="flex-1 overflow-y-hidden bg-gray-950 group/scroller"
+            className="h-64 overflow-y-hidden bg-gray-950 group/scroller flex-shrink-0"
             style={{
               overflowX: 'auto',
               scrollBehavior: 'smooth',
@@ -356,7 +356,7 @@ const MixerComponent = () => {
 
           {/* Plugin Rack for Selected Track */}
           {selectedTrack && selectedTrack.type !== 'master' && !detachedPluginRacks[selectedTrack.id] && (
-            <div className="h-32 border-t border-gray-700 bg-gray-800 p-4 overflow-y-auto">
+            <div className="h-32 border-t border-gray-700 bg-gray-800 p-4 overflow-y-auto flex-shrink-0">
               <DetachablePluginRack
                 plugins={selectedTrack.inserts}
                 onAddPlugin={(plugin) => addPluginToTrack(selectedTrack.id, plugin)}
@@ -371,9 +371,9 @@ const MixerComponent = () => {
           )}
 
           {/* Codette AI Panels */}
-          <div className="border-t border-gray-700 bg-gray-800">
+          <div className="border-t border-gray-700 bg-gray-800 flex flex-col flex-1 min-h-0">
             {/* Tab Headers */}
-            <div className="flex items-center gap-2 p-2 border-b border-gray-700">
+            <div className="flex items-center gap-2 p-2 border-b border-gray-700 flex-shrink-0">
               <button
                 onClick={() => setCodetteTab('suggestions')}
                 className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
@@ -406,22 +406,28 @@ const MixerComponent = () => {
               </button>
             </div>
 
-            {/* Tab Content */}
-            <div className="p-4 max-h-64 overflow-y-auto">
+            {/* Tab Content - Dynamic height with scroll */}
+            <div className="flex-1 overflow-y-auto p-4 bg-gray-800 min-h-0">
               {codetteTab === 'suggestions' && (
-                <CodetteSuggestionsPanel
-                  trackId={selectedTrack?.id}
-                  context="mixer"
-                />
+                <div className="w-full h-full">
+                  <CodetteSuggestionsPanel
+                    trackId={selectedTrack?.id}
+                    context="mixer"
+                  />
+                </div>
               )}
               {codetteTab === 'analysis' && (
-                <CodetteAnalysisPanel
-                  trackId={selectedTrack?.id}
-                  autoAnalyze={false}
-                />
+                <div className="w-full h-full">
+                  <CodetteAnalysisPanel
+                    trackId={selectedTrack?.id}
+                    autoAnalyze={false}
+                  />
+                </div>
               )}
               {codetteTab === 'control' && (
-                <CodetteControlPanel />
+                <div className="w-full h-full">
+                  <CodetteControlPanel />
+                </div>
               )}
             </div>
           </div>

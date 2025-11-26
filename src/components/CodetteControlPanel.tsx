@@ -172,11 +172,11 @@ export default function CodetteControlPanel() {
   };
 
   return (
-    <div className="bg-gray-950 border border-gray-700 rounded-lg p-4 space-y-4 max-h-[600px] overflow-y-auto">
+    <div className="bg-gray-900 border border-gray-700 rounded-lg space-y-4 w-full h-full overflow-y-auto flex flex-col">
       {/* Connection Status */}
-      <div className="bg-gray-900 rounded p-3 space-y-2">
+      <div className="bg-gray-800 rounded p-3 space-y-2 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-300">Connection Status</h3>
+          <h3 className="text-sm font-semibold text-gray-200">Connection Status</h3>
           <div className="flex gap-2">
             <div className={`w-2 h-2 rounded-full ${codetteConnected ? "bg-green-500" : "bg-red-500"}`} />
             <span className="text-xs text-gray-400">{codetteConnected ? "Connected" : "Offline"}</span>
@@ -187,7 +187,7 @@ export default function CodetteControlPanel() {
             REST: {bridgeStatus.connected ? "✓" : "✗"}
           </div>
           <div className="text-gray-400">
-            WebSocket: {wsStatus.connected ? "✓" : "✗"}
+            WS: {wsStatus.connected ? "✓" : "✗"}
           </div>
           <div className="text-gray-400">
             Reconnects: {wsStatus.reconnectAttempts}
@@ -199,10 +199,10 @@ export default function CodetteControlPanel() {
       </div>
 
       {/* Production Checklist */}
-      <div className="bg-gray-900 rounded overflow-hidden">
+      <div className="bg-gray-800 rounded overflow-hidden flex-shrink-0">
         <button
           onClick={() => setExpandedSection(expandedSection === "checklist" ? null : "checklist")}
-          className="w-full flex items-center justify-between p-3 hover:bg-gray-800 transition"
+          className="w-full flex items-center justify-between p-3 hover:bg-gray-700 transition"
         >
           <div className="flex items-center gap-2">
             <CheckCircle size={16} className="text-blue-400" />
@@ -215,7 +215,7 @@ export default function CodetteControlPanel() {
         </button>
 
         {expandedSection === "checklist" && (
-          <div className="border-t border-gray-700 p-3 space-y-2 bg-gray-950">
+          <div className="border-t border-gray-700 p-3 space-y-2 bg-gray-900 max-h-48 overflow-y-auto">
             {/* Progress bar */}
             <div className="w-full bg-gray-800 rounded h-2 overflow-hidden">
               <div
@@ -225,7 +225,7 @@ export default function CodetteControlPanel() {
             </div>
 
             {/* Tasks */}
-            <div className="space-y-2 max-h-[200px] overflow-y-auto">
+            <div className="space-y-2">
               {productionTasks.map((task) => (
                 <div
                   key={task.id}
@@ -256,10 +256,10 @@ export default function CodetteControlPanel() {
       </div>
 
       {/* Perspectives */}
-      <div className="bg-gray-900 rounded overflow-hidden">
+      <div className="bg-gray-800 rounded overflow-hidden flex-shrink-0">
         <button
           onClick={() => setExpandedSection(expandedSection === "perspectives" ? null : "perspectives")}
-          className="w-full flex items-center justify-between p-3 hover:bg-gray-800 transition"
+          className="w-full flex items-center justify-between p-3 hover:bg-gray-700 transition"
         >
           <div className="flex items-center gap-2">
             <Settings size={16} className="text-purple-400" />
@@ -269,7 +269,7 @@ export default function CodetteControlPanel() {
         </button>
 
         {expandedSection === "perspectives" && (
-          <div className="border-t border-gray-700 p-3 space-y-2 bg-gray-950">
+          <div className="border-t border-gray-700 p-3 space-y-2 bg-gray-900">
             {perspectives.map((perspective) => (
               <button
                 key={perspective.id}
@@ -289,10 +289,10 @@ export default function CodetteControlPanel() {
       </div>
 
       {/* Conversation History */}
-      <div className="bg-gray-900 rounded overflow-hidden">
+      <div className="bg-gray-800 rounded overflow-hidden flex-1 min-h-0 flex flex-col">
         <button
           onClick={() => setExpandedSection(expandedSection === "conversation" ? null : "conversation")}
-          className="w-full flex items-center justify-between p-3 hover:bg-gray-800 transition"
+          className="w-full flex items-center justify-between p-3 hover:bg-gray-700 transition flex-shrink-0"
         >
           <div className="flex items-center gap-2">
             <MessageSquare size={16} className="text-green-400" />
@@ -302,9 +302,9 @@ export default function CodetteControlPanel() {
         </button>
 
         {expandedSection === "conversation" && (
-          <div className="border-t border-gray-700 bg-gray-950">
+          <div className="border-t border-gray-700 bg-gray-900 flex-1 min-h-0 flex flex-col">
             {/* Messages */}
-            <div className="p-3 space-y-2 max-h-[200px] overflow-y-auto border-b border-gray-700">
+            <div className="flex-1 p-3 space-y-2 overflow-y-auto border-b border-gray-700">
               {conversationHistory.map((msg) => (
                 <div
                   key={msg.id}
@@ -314,7 +314,7 @@ export default function CodetteControlPanel() {
                     className={`max-w-xs px-3 py-2 rounded text-xs ${
                       msg.role === "user"
                         ? "bg-blue-600 text-white"
-                        : "bg-gray-800 text-gray-300"
+                        : "bg-gray-700 text-gray-300"
                     }`}
                   >
                     <p>{msg.content}</p>
@@ -329,14 +329,14 @@ export default function CodetteControlPanel() {
             </div>
 
             {/* Input */}
-            <div className="p-3 border-t border-gray-700 flex gap-2">
+            <div className="p-3 border-t border-gray-700 flex gap-2 flex-shrink-0">
               <input
                 type="text"
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && sendMessage()}
                 placeholder="Ask Codette..."
-                className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-blue-500"
               />
               <button
                 onClick={sendMessage}
