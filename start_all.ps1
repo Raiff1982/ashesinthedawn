@@ -1,11 +1,11 @@
-# CoreLogic Studio Complete Startup Manager
+﻿# CoreLogic Studio Complete Startup Manager
 
 $ErrorActionPreference = "Continue"
 
 Write-Host ""
-Write-Host "╔════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║   CoreLogic Studio - Startup Manager   ║" -ForegroundColor Green
-Write-Host "╚════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "" -ForegroundColor Green
+Write-Host "   CoreLogic Studio - Startup Manager   " -ForegroundColor Green
+Write-Host "" -ForegroundColor Green
 Write-Host ""
 
 # Step 1: Cleanup
