@@ -50,7 +50,10 @@ export default function MixerStrip({
       </div>
 
       {/* Fader */}
+      <label htmlFor={`mixer-fader-${name}`} className="sr-only">Fader for {name}</label>
       <input
+        id={`mixer-fader-${name}`}
+        name={`fader-${name}`}
         type="range"
         min="0"
         max="1"

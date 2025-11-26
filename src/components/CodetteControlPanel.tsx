@@ -331,11 +331,14 @@ export default function CodetteControlPanel() {
             {/* Input */}
             <div className="p-3 border-t border-gray-700 flex gap-2 flex-shrink-0">
               <input
+                id="codette-user-input"
+                name="codette-message"
                 type="text"
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && sendMessage()}
                 placeholder="Ask Codette..."
+                autoComplete="off"
                 className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-blue-500"
               />
               <button
