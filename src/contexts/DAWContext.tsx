@@ -151,6 +151,16 @@ interface DAWContextType {
   ) => Promise<boolean>;
   analyzeTrackWithCodette: (trackId: string) => Promise<any>;
   syncDAWStateToCodette: () => Promise<boolean>;
+  // Codette Transport Control (Phase 3)
+  codetteTransportPlay: () => Promise<any>;
+  codetteTransportStop: () => Promise<any>;
+  codetteTransportSeek: (timeSeconds: number) => Promise<any>;
+  codetteSetTempo: (bpm: number) => Promise<any>;
+  codetteSetLoop: (
+    enabled: boolean,
+    startTime?: number,
+    endTime?: number
+  ) => Promise<any>;
   // Utility
   cpuUsageDetailed: Record<string, number>;
 }
@@ -330,6 +340,66 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, [tracks, isPlaying]);
+
+  // Sync transport state to Codette (Phase 3)
+  useEffect(() => {
+    if (!codetteConnected) return;
+
+    const syncTransportInterval = setInterval(async () => {
+      const bridge = codetteRef.current;
+
+      try {
+        // Get current Codette transport state
+        const transportState = await bridge.getTransportState();
+
+        // If Codette's playback state differs from ours, sync it
+        if (transportState.is_playing !== isPlaying) {
+          if (transportState.is_playing && !isPlaying) {
+            // Codette playing, React not - start playback
+            console.debug(
+              "[DAWContext] Transport sync: Starting playback from Codette"
+            );
+            // Call internal play logic
+            const audioEngine = audioEngineRef.current;
+            tracks.forEach((track) => {
+              if (!track.muted && track.type !== "master") {
+                audioEngine.playAudio(
+                  track.id,
+                  currentTime,
+                  track.volume,
+                  track.pan
+                );
+              }
+            });
+            setIsPlaying(true);
+          } else if (!transportState.is_playing && isPlaying) {
+            // React playing, Codette not - stop playback
+            console.debug(
+              "[DAWContext] Transport sync: Stopping playback from Codette"
+            );
+            audioEngineRef.current.stopAllAudio();
+            setIsPlaying(false);
+          }
+        }
+
+        // Sync seek position if they differ significantly (>0.5 seconds)
+        if (
+          Math.abs(transportState.current_time - currentTime) > 0.5 &&
+          transportState.current_time !== currentTime
+        ) {
+          console.debug(
+            "[DAWContext] Transport sync: Seeking to",
+            transportState.current_time
+          );
+          seek(transportState.current_time);
+        }
+      } catch (error) {
+        console.debug("[DAWContext] Transport sync failed:", error);
+      }
+    }, 1000); // Check transport state every 1 second
+
+    return () => clearInterval(syncTransportInterval);
+  }, [codetteConnected, isPlaying, currentTime]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -791,6 +861,86 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       });
     }
     // If not playing, just update currentTime - playback will start from this position when play is pressed
+  };
+
+  // Codette transport control methods (Phase 3)
+  const codetteTransportPlay = async () => {
+    try {
+      const bridge = codetteRef.current;
+      const state = await bridge.transportPlay();
+      if (state.is_playing && !isPlaying) {
+        togglePlay();
+      }
+      return state;
+    } catch (error) {
+      console.error("[DAWContext] Codette transport play failed:", error);
+      throw error;
+    }
+  };
+
+  const codetteTransportStop = async () => {
+    try {
+      const bridge = codetteRef.current;
+      const state = await bridge.transportStop();
+      if (!state.is_playing && isPlaying) {
+        stop();
+      }
+      return state;
+    } catch (error) {
+      console.error("[DAWContext] Codette transport stop failed:", error);
+      throw error;
+    }
+  };
+
+  const codetteTransportSeek = async (timeSeconds: number) => {
+    try {
+      const bridge = codetteRef.current;
+      const state = await bridge.transportSeek(timeSeconds);
+      seek(timeSeconds);
+      return state;
+    } catch (error) {
+      console.error("[DAWContext] Codette transport seek failed:", error);
+      throw error;
+    }
+  };
+
+  const codetteSetTempo = async (bpm: number) => {
+    try {
+      const bridge = codetteRef.current;
+      const state = await bridge.setTempo(bpm);
+      // Store BPM in current project if available
+      if (currentProject) {
+        setCurrentProject({
+          ...currentProject,
+          bpm: bpm,
+        });
+      }
+      return state;
+    } catch (error) {
+      console.error("[DAWContext] Codette set tempo failed:", error);
+      throw error;
+    }
+  };
+
+  const codetteSetLoop = async (
+    enabled: boolean,
+    startTime: number = 0,
+    endTime: number = 10
+  ) => {
+    try {
+      const bridge = codetteRef.current;
+      const state = await bridge.setLoop(enabled, startTime, endTime);
+      // Update local loop region
+      setLoopRegion({
+        enabled: enabled,
+        startTime: startTime,
+        endTime: endTime,
+      });
+      return state;
+    } catch (error) {
+      console.error("[DAWContext] Codette set loop failed:", error);
+      throw error;
+    }
   };
 
   const getWaveformData = (trackId: string): number[] => {
@@ -1410,6 +1560,11 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         applyCodetteSuggestion,
         analyzeTrackWithCodette,
         syncDAWStateToCodette,
+        codetteTransportPlay,
+        codetteTransportStop,
+        codetteTransportSeek,
+        codetteSetTempo,
+        codetteSetLoop,
       }}
     >
       {children}
