@@ -7,6 +7,7 @@ import MixerOptionsTile from './MixerOptionsTile';
 import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
 import CodetteSuggestionsPanel from './CodetteSuggestionsPanel';
 import CodetteAnalysisPanel from './CodetteAnalysisPanel';
+import CodetteControlPanel from './CodetteControlPanel';
 
 interface DetachedTileState {
   trackId: string;
@@ -40,7 +41,7 @@ const MixerComponent = () => {
   const [scaledStripWidth, setScaledStripWidth] = useState(DEFAULT_STRIP_WIDTH);
   const [isHoveringMixer, setIsHoveringMixer] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [codetteTab, setCodetteTab] = useState<'suggestions' | 'analysis'>('suggestions');
+  const [codetteTab, setCodetteTab] = useState<'suggestions' | 'analysis' | 'control'>('suggestions');
 
   const animationRef = useRef<number | null>(null);
   const faderDraggingRef = useRef(false);
@@ -393,6 +394,16 @@ const MixerComponent = () => {
               >
                 📊 Analysis
               </button>
+              <button
+                onClick={() => setCodetteTab('control')}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  codetteTab === 'control'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                ⚙️ Control
+              </button>
             </div>
 
             {/* Tab Content */}
@@ -408,6 +419,9 @@ const MixerComponent = () => {
                   trackId={selectedTrack?.id}
                   autoAnalyze={false}
                 />
+              )}
+              {codetteTab === 'control' && (
+                <CodetteControlPanel />
               )}
             </div>
           </div>
