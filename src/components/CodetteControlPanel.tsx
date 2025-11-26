@@ -109,7 +109,7 @@ export default function CodetteControlPanel() {
     };
 
     updateStatus();
-    const interval = setInterval(updateStatus, 5000);
+    const interval = setInterval(updateStatus, 15000);
     return () => clearInterval(interval);
   }, [codetteConnected, getWebSocketStatus, getCodetteBridgeStatus]);
 

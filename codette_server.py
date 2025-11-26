@@ -1100,6 +1100,107 @@ async def analyze_session(request: Dict[str, Any]) -> AnalysisResponse:
 # TRANSPORT CLOCK ENDPOINTS (WebSocket + REST API)
 # ============================================================================
 
+@app.websocket("/ws")
+async def websocket_general(websocket: WebSocket):
+    """General WebSocket endpoint - routes to transport clock"""
+    try:
+        await websocket.accept()
+    except Exception as e:
+        print(f"Failed to accept WebSocket on /ws: {e}")
+        return
+    
+    transport_manager.connected_clients.add(websocket)
+    print(f"WebSocket client connected to /ws. Total clients: {len(transport_manager.connected_clients)}")
+    
+    try:
+        import asyncio
+        import time as time_module
+        
+        last_send = time_module.time()
+        send_interval = 1.0 / 60.0  # 60 FPS update rate
+        
+        # Send initial state
+        try:
+            state = transport_manager.get_state()
+            await websocket.send_json({
+                "type": "state",
+                "data": state.dict()
+            })
+        except Exception as e:
+            print(f"Failed to send initial state on /ws: {e}")
+            return
+        
+        while True:
+            try:
+                # Non-blocking receive with very short timeout
+                try:
+                    data = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=0.001
+                    )
+                    try:
+                        message = json.loads(data)
+                        
+                        # Handle incoming commands
+                        if message.get("type") == "play":
+                            transport_manager.play()
+                        elif message.get("type") == "stop":
+                            transport_manager.stop()
+                        elif message.get("type") == "pause":
+                            transport_manager.pause()
+                        elif message.get("type") == "resume":
+                            transport_manager.resume()
+                        elif message.get("type") == "seek":
+                            transport_manager.seek(message.get("time_seconds", 0))
+                        elif message.get("type") == "tempo":
+                            transport_manager.set_tempo(message.get("bpm", 120))
+                        elif message.get("type") == "loop":
+                            transport_manager.set_loop(
+                                message.get("enabled", False),
+                                message.get("start_seconds", 0),
+                                message.get("end_seconds", 10)
+                            )
+                    except json.JSONDecodeError:
+                        pass  # Ignore invalid JSON
+                    
+                except asyncio.TimeoutError:
+                    pass  # No message received, continue to send updates
+                
+                # Send state at regular interval
+                current_time = time_module.time()
+                if current_time - last_send >= send_interval:
+                    try:
+                        state = transport_manager.get_state()
+                        await websocket.send_json({
+                            "type": "state",
+                            "data": state.dict()
+                        })
+                        last_send = current_time
+                    except RuntimeError as e:
+                        # Connection closed
+                        print(f"Connection closed on /ws: {e}")
+                        break
+                    except Exception as e:
+                        print(f"Unexpected error in /ws loop: {e}")
+                        break
+                
+                # Small sleep to prevent CPU spinning
+                await asyncio.sleep(0.001)
+                
+            except WebSocketDisconnect:
+                print("WebSocket /ws disconnected")
+                break
+            except Exception as e:
+                print(f"Unexpected error in /ws loop: {e}")
+                break
+    
+    finally:
+        try:
+            transport_manager.connected_clients.discard(websocket)
+            print(f"WebSocket cleanup on /ws. Remaining clients: {len(transport_manager.connected_clients)}")
+        except Exception as e:
+            print(f"Error during /ws cleanup: {e}")
+
 @app.websocket("/ws/transport/clock")
 async def websocket_transport_clock(websocket: WebSocket):
     """WebSocket endpoint for DAW transport clock synchronization"""
