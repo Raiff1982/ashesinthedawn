@@ -5,7 +5,7 @@ import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
 import MixerOptionsTile from './MixerOptionsTile';
 import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
-import { CodetteSuggestionsPanelLazy } from './CodetteSuggestionsPanelLazy';
+import { CodetteSuggestionsPanel } from './CodetteSuggestionsPanel';
 import CodetteAnalysisPanel from './CodetteAnalysisPanel';
 import CodetteControlPanel from './CodetteControlPanel';
 
@@ -441,7 +441,7 @@ const MixerComponent = () => {
             <div className="flex-1 overflow-hidden bg-gray-800 min-h-0">
               {codetteTab === 'suggestions' && (
                 <div className="w-full h-full">
-                  <CodetteSuggestionsPanelLazy
+                  <CodetteSuggestionsPanel
                     trackId={selectedTrack?.id}
                     context="mixer"
                   />
