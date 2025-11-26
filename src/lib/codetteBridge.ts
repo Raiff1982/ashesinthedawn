@@ -132,11 +132,16 @@ class CodetteBridge {
   private listeners: Map<string, Set<Function>> = new Map();
 
   constructor() {
-    this.initHealthCheck();
-    // Initialize WebSocket connection asynchronously
-    this.initializeWebSocket().catch((err) => {
-      console.debug("[CodetteBridge] WebSocket initialization failed:", err);
-    });
+    try {
+      this.initHealthCheck();
+      // Initialize WebSocket connection asynchronously
+      this.initializeWebSocket().catch((err) => {
+        console.debug("[CodetteBridge] WebSocket initialization failed:", err);
+      });
+    } catch (err) {
+      console.error("[CodetteBridge] Constructor error:", err);
+      // Continue with degraded functionality
+    }
   }
 
   /**

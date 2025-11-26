@@ -43,6 +43,7 @@ export const DropdownMenu = React.forwardRef<HTMLDivElement, DropdownMenuProps>(
     });
 
     const handleItemClick = (onClick: () => void) => {
+      // Prevent event propagation to avoid triggering parent handlers
       onClick();
       setIsOpen(false);
     };

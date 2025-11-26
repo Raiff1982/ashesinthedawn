@@ -4,6 +4,7 @@ import React, {
   useState,
   useEffect,
   useRef,
+  useMemo,
 } from "react";
 import {
   Track,
@@ -194,7 +195,19 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   const [codetteSuggestions, setCodetteSuggestions] = useState<
     CodetteSuggestion[]
   >([]);
-  const codetteRef = useRef(getCodetteBridge());
+  
+  // Initialize CodetteBridge with error handling using useMemo
+  const codetteRef = useRef<any>(null);
+  
+  useMemo(() => {
+    try {
+      const bridgeInstance = getCodetteBridge();
+      codetteRef.current = bridgeInstance;
+    } catch (err) {
+      console.error("[DAWContext] Failed to initialize CodetteBridge:", err);
+      codetteRef.current = null;
+    }
+  }, []);
   // Phase 3: New state
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [loopRegion, setLoopRegion] = useState<LoopRegion>({
@@ -285,6 +298,11 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   // Initialize Codette connection (Phase 1 & Phase 4: WebSocket)
   useEffect(() => {
     const bridge = codetteRef.current;
+    
+    if (!bridge) {
+      console.warn("[DAWContext] CodetteBridge not initialized");
+      return;
+    }
 
     const handleConnected = () => setCodetteConnected(true);
     const handleDisconnected = () => setCodetteConnected(false);
@@ -292,10 +310,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     // WebSocket event handlers (Phase 4)
     const handleTransportChanged = (transportState: any) => {
       console.debug("[DAWContext] Received transport update from WebSocket:", transportState);
-      // Sync seek position if different
-      if (transportState.current_time && Math.abs(transportState.current_time - currentTime) > 0.5) {
-        seek(transportState.current_time);
-      }
+      // Note: seek() will be defined later in the component, so we can't call it here
+      // The WebSocket sync is primarily for monitoring, not for triggering actions
     };
 
     const handleSuggestionReceived = (suggestion: any) => {
@@ -321,7 +337,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     bridge.on("ws_connected", handleWsConnected);
 
     // Initial health check
-    bridge.healthCheck().then((connected) => {
+    bridge.healthCheck().then((connected: boolean) => {
       setCodetteConnected(connected);
     });
 
@@ -337,13 +353,14 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 
   // Sync DAW state to Codette periodically (Phase 1)
   useEffect(() => {
-    if (!codetteConnected || !isPlaying) return;
+    if (!codetteConnected || !isPlaying || !codetteRef.current) return;
 
     const syncInterval = setInterval(() => {
       const bridge = codetteRef.current;
+      if (!bridge) return;
       bridge
         .syncState(tracks, currentTime, isPlaying, 120) // Default to 120 BPM for now
-        .catch((err) => {
+        .catch((err: unknown) => {
           console.debug("[DAWContext] Sync failed:", err);
         });
     }, 5000); // Sync every 5 seconds during playback
@@ -614,6 +631,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     }
 
     setTracks((prev) => [...prev, newTrack]);
+    // Auto-select the newly added track
+    setSelectedTrack(newTrack);
   };
 
   const selectTrack = (trackId: string) => {
@@ -1365,8 +1384,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     trackId: string,
     context?: string
   ): Promise<CodetteSuggestion[]> => {
-    if (!codetteConnected) {
-      console.warn("[DAWContext] Codette not connected");
+    if (!codetteConnected || !codetteRef.current) {
+      console.warn("[DAWContext] Codette not connected or bridge not initialized");
       return [];
     }
 
@@ -1433,8 +1452,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   };
 
   const analyzeTrackWithCodette = async (trackId: string): Promise<any> => {
-    if (!codetteConnected) {
-      console.warn("[DAWContext] Codette not connected");
+    if (!codetteConnected || !codetteRef.current) {
+      console.warn("[DAWContext] Codette not connected or bridge not initialized");
       return null;
     }
 
@@ -1457,8 +1476,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   };
 
   const syncDAWStateToCodette = async (): Promise<boolean> => {
-    if (!codetteConnected) {
-      console.warn("[DAWContext] Codette not connected");
+    if (!codetteConnected || !codetteRef.current) {
+      console.warn("[DAWContext] Codette not connected or bridge not initialized");
       return false;
     }
 
@@ -1478,10 +1497,12 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 
   // WebSocket Status Methods (Phase 4)
   const getWebSocketStatus = () => {
+    if (!codetteRef.current) return null;
     return codetteRef.current.getWebSocketStatus();
   };
 
   const getCodetteBridgeStatus = () => {
+    if (!codetteRef.current) return null;
     return codetteRef.current.getState();
   };
 

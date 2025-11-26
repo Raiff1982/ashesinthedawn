@@ -24,18 +24,42 @@ export function CodetteSuggestionsPanel({
   context = "general",
   onApply,
 }: CodetteSuggestionsPanelProps) {
+  const contextData = useDAW();
+  
+  // Initialize state hooks first (before any early returns)
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [applying, setApplying] = useState<string | null>(null);
+  const [confirmApply, setConfirmApply] = useState<string | null>(null);
+  
+  // Guard against undefined context
+  if (!contextData) {
+    return (
+      <div className="p-4 bg-red-900/30 border border-red-700 rounded">
+        <p className="text-sm text-red-300">Context not available</p>
+      </div>
+    );
+  }
+  
   const {
     selectedTrack,
     getSuggestionsForTrack,
     applyCodetteSuggestion,
     codetteConnected,
-    codetteSuggestions,
-  } = useDAW();
+    codetteSuggestions: rawSuggestions,
+  } = contextData;
+  
+  // Guard against undefined methods
+  if (!getSuggestionsForTrack || !applyCodetteSuggestion) {
+    return (
+      <div className="p-4 bg-red-900/30 border border-red-700 rounded">
+        <p className="text-sm text-red-300">Codette methods not initialized</p>
+      </div>
+    );
+  }
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [applying, setApplying] = useState<string | null>(null);
-  const [confirmApply, setConfirmApply] = useState<string | null>(null);
+  // Ensure codetteSuggestions is an array
+  const codetteSuggestions = Array.isArray(rawSuggestions) ? rawSuggestions : [];
 
   const currentTrackId = trackId || selectedTrack?.id;
 
