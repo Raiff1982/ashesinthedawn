@@ -3,7 +3,7 @@
  * Displays audio analysis results from Codette AI
  */
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useDAW } from "../contexts/DAWContext";
 
 interface CodetteAnalysisPanelProps {

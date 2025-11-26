@@ -40,6 +40,7 @@ const MixerComponent = () => {
   const [scaledStripWidth, setScaledStripWidth] = useState(DEFAULT_STRIP_WIDTH);
   const [isHoveringMixer, setIsHoveringMixer] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [codetteTab, setCodetteTab] = useState<'suggestions' | 'analysis'>('suggestions');
 
   const animationRef = useRef<number | null>(null);
   const faderDraggingRef = useRef(false);
@@ -367,6 +368,49 @@ const MixerComponent = () => {
               />
             </div>
           )}
+
+          {/* Codette AI Panels */}
+          <div className="border-t border-gray-700 bg-gray-800">
+            {/* Tab Headers */}
+            <div className="flex items-center gap-2 p-2 border-b border-gray-700">
+              <button
+                onClick={() => setCodetteTab('suggestions')}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  codetteTab === 'suggestions'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                💡 Suggestions
+              </button>
+              <button
+                onClick={() => setCodetteTab('analysis')}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  codetteTab === 'analysis'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                📊 Analysis
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="p-4 max-h-64 overflow-y-auto">
+              {codetteTab === 'suggestions' && (
+                <CodetteSuggestionsPanel
+                  trackId={selectedTrack?.id}
+                  context="mixer"
+                />
+              )}
+              {codetteTab === 'analysis' && (
+                <CodetteAnalysisPanel
+                  trackId={selectedTrack?.id}
+                  autoAnalyze={false}
+                />
+              )}
+            </div>
+          </div>
         </div>
         )}
       </div>
