@@ -5,8 +5,6 @@ import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
 import MixerOptionsTile from './MixerOptionsTile';
 import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
-import CodetteSuggestionsPanel from './CodetteSuggestionsPanel';
-import CodetteAnalysisPanel from './CodetteAnalysisPanel';
 
 interface DetachedTileState {
   trackId: string;
