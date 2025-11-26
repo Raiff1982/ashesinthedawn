@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useDAW } from "../contexts/DAWContext";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { Tooltip } from "./TooltipProvider";
 
 interface WaveformAdjusterProps {
   trackId: string;
@@ -241,45 +242,97 @@ export default function WaveformAdjuster({
             {/* Zoom */}
             <div className="flex items-center gap-1">
               <span className="text-xs text-gray-400 w-10">Zoom:</span>
-              <button
-                onClick={() => setZoom(Math.max(0.5, zoom - 0.2))}
-                className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
-                title="Zoom out"
+              <Tooltip 
+                content={{
+                  title: 'Zoom Out',
+                  description: 'Decrease zoom level to see more of the waveform',
+                  hotkey: 'Scroll Left',
+                  category: 'tools',
+                  relatedFunctions: ['Zoom In', 'Scale', 'Pan'],
+                  performanceTip: 'Zoom changes the visible time range without affecting playback',
+                  examples: ['Zoom out to see full song structure', 'Zoom in for precise editing'],
+                }}
+                position="top"
               >
-                −
-              </button>
+                <button
+                  onClick={() => setZoom(Math.max(0.5, zoom - 0.2))}
+                  className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
+                  title="Zoom out"
+                >
+                  −
+                </button>
+              </Tooltip>
               <span className="text-xs text-gray-400 w-7 text-center">
                 {zoom.toFixed(1)}x
               </span>
-              <button
-                onClick={() => setZoom(Math.min(4, zoom + 0.2))}
-                className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
-                title="Zoom in"
+              <Tooltip 
+                content={{
+                  title: 'Zoom In',
+                  description: 'Increase zoom level to see finer waveform detail',
+                  hotkey: 'Scroll Right',
+                  category: 'tools',
+                  relatedFunctions: ['Zoom Out', 'Scale', 'Pan'],
+                  performanceTip: 'Higher zoom levels show more detail; useful for precise editing',
+                  examples: ['Zoom to 4x for detailed waveform editing', 'See transient peaks clearly'],
+                }}
+                position="top"
               >
-                +
-              </button>
+                <button
+                  onClick={() => setZoom(Math.min(4, zoom + 0.2))}
+                  className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
+                  title="Zoom in"
+                >
+                  +
+                </button>
+              </Tooltip>
             </div>
 
             {/* Scale */}
             <div className="flex items-center gap-1">
               <span className="text-xs text-gray-400 w-10">Scale:</span>
-              <button
-                onClick={() => setScale(Math.max(0.5, scale - 0.2))}
-                className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
-                title="Decrease amplitude"
+              <Tooltip 
+                content={{
+                  title: 'Decrease Amplitude',
+                  description: 'Reduce the vertical scale of the waveform display',
+                  hotkey: 'Scroll Down',
+                  category: 'tools',
+                  relatedFunctions: ['Increase Amplitude', 'Zoom', 'Grid'],
+                  performanceTip: 'Scale affects display only; does not change actual audio levels',
+                  examples: ['Decrease scale to see full dynamic range', 'Increase scale to see quiet details'],
+                }}
+                position="top"
               >
-                ↓
-              </button>
+                <button
+                  onClick={() => setScale(Math.max(0.5, scale - 0.2))}
+                  className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
+                  title="Decrease amplitude"
+                >
+                  ↓
+                </button>
+              </Tooltip>
               <span className="text-xs text-gray-400 w-7 text-center">
                 {scale.toFixed(1)}x
               </span>
-              <button
-                onClick={() => setScale(Math.min(3, scale + 0.2))}
-                className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
-                title="Increase amplitude"
+              <Tooltip 
+                content={{
+                  title: 'Increase Amplitude',
+                  description: 'Increase the vertical scale of the waveform display',
+                  hotkey: 'Scroll Up',
+                  category: 'tools',
+                  relatedFunctions: ['Decrease Amplitude', 'Zoom', 'Grid'],
+                  performanceTip: 'Higher scale shows quiet details at the expense of dynamic range view',
+                  examples: ['Increase scale to see quiet vocals', 'See subtle peaks and valleys'],
+                }}
+                position="top"
               >
-                ↑
-              </button>
+                <button
+                  onClick={() => setScale(Math.min(3, scale + 0.2))}
+                  className="px-1.5 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
+                  title="Increase amplitude"
+                >
+                  ↑
+                </button>
+              </Tooltip>
             </div>
 
             {/* Color Picker */}

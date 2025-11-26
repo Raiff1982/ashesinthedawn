@@ -112,9 +112,9 @@ export default function TopBar() {
   };
 
   return (
-    <div className="h-12 bg-gradient-to-r from-gray-800 via-gray-750 to-gray-800 border-b border-gray-600 flex items-center justify-between px-4 gap-4 text-xs shadow-md">
+    <div className="h-12 bg-gradient-to-r from-gray-800 via-gray-750 to-gray-800 border-b border-gray-600 flex items-center px-2 gap-2 text-xs shadow-md overflow-x-auto overflow-y-hidden scrollbar-hide" style={{ scrollBehavior: 'smooth' }}>
       {/* LEFT SECTION: Previous/Next Track, Stop, Play, Record, Pause */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 flex-shrink-0">
         {/* Previous/Next Track Buttons */}
         <button
           onClick={prevTrack}
@@ -266,11 +266,11 @@ export default function TopBar() {
       </div>
 
       {/* CENTER SECTION: Time display and Status */}
-      <div className="flex-1 flex justify-center items-center gap-4">
+      <div className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
         {/* Connection Status */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 hidden sm:flex">
           <div
-            className={`w-2 h-2 rounded-full ${
+            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
               connected
                 ? "bg-green-500"
                 : error
@@ -279,51 +279,51 @@ export default function TopBar() {
             }`}
             title={connected ? "Synced" : error || "Connecting"}
           />
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 hidden md:inline">
             {connected ? "Sync" : "Offline"}
           </span>
         </div>
 
         {/* Current time - use WebSocket if connected, fallback to DAW */}
-        <div className="font-mono text-gray-200 bg-gray-900 px-3 py-1 rounded border border-gray-700 shadow-inner">
+        <div className="font-mono text-gray-200 bg-gray-900 px-2 py-0.5 rounded border border-gray-700 shadow-inner text-xs flex-shrink-0">
           {formatTime(connected ? transport.time_seconds : currentTime)}
         </div>
 
         {/* Status indicator */}
-        <div className="font-mono text-sm">
+        <div className="font-mono text-xs flex-shrink-0">
           {connected ? (
             transport.playing ? (
-              <span className="text-green-400 font-semibold">[Playing]</span>
+              <span className="text-green-400 font-semibold">[▶]</span>
             ) : (
-              <span className="text-gray-500">[Stopped]</span>
+              <span className="text-gray-500">[◼]</span>
             )
           ) : isPlaying ? (
-            <span className="text-green-400 font-semibold">[Playing]</span>
+            <span className="text-green-400 font-semibold">[▶]</span>
           ) : isRecording ? (
             <span className="text-red-400 font-semibold animate-pulse">
-              [Recording]
+              [⦿]
             </span>
           ) : (
-            <span className="text-gray-500">[Stopped]</span>
+            <span className="text-gray-500">[◼]</span>
           )}
         </div>
 
         {/* Tempo/BPM display */}
-        <div className="font-mono text-gray-400 text-xs">
-          {transport.bpm.toFixed(1)} BPM
+        <div className="font-mono text-gray-400 text-xs flex-shrink-0 hidden sm:block">
+          {transport.bpm.toFixed(0)}
         </div>
       </div>
 
       {/* RIGHT SECTION: Connection status, CPU, and controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
         {/* Sync indicator */}
         {!connected && (
-          <span className="text-xs text-yellow-500 font-semibold">
-            Local Mode
+          <span className="text-xs text-yellow-500 font-semibold hidden md:inline">
+            Local
           </span>
         )}
 
-        <div className="w-px h-6 bg-gray-700" />
+        <div className="w-px h-4 bg-gray-700 hidden sm:block flex-shrink-0" />
 
         {/* Metronome Volume Control */}
         {metronomeSettings.enabled && (
@@ -382,10 +382,9 @@ export default function TopBar() {
         <div className="w-px h-6 bg-gray-700" />
 
         {/* CPU Usage */}
-        <div className="flex items-center gap-1 text-gray-400">
-          <Zap className="w-3 h-3" />
-          <span>
-            CPU:{" "}
+        <div className="flex items-center gap-0.5 text-gray-400 flex-shrink-0">
+          <Zap className="w-3 h-3 flex-shrink-0" />
+          <span className="text-xs">
             <span className="text-gray-200 font-semibold">{cpuUsage}%</span>
           </span>
         </div>

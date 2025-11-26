@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, X, Volume2, Zap, ChevronDown } from 'lucide-react';
 import { Plugin } from '../types';
-import Tooltip from './Tooltip';
+import { Tooltip } from './TooltipProvider';
 
 interface PluginRackProps {
   plugins: Plugin[];
@@ -55,7 +55,18 @@ export default function PluginRack({
           Inserts ({plugins.length})
         </h3>
         <div className="relative">
-          <Tooltip content="Add plugin to insert chain" position="left">
+          <Tooltip 
+            content={{
+              title: 'Add Plugin',
+              description: 'Add an effect plugin to the insert chain',
+              hotkey: '+',
+              category: 'effects',
+              relatedFunctions: ['Remove Plugin', 'Bypass', 'Settings'],
+              performanceTip: 'Each plugin adds CPU load; plugins execute in order from top to bottom',
+              examples: ['Add EQ first to clean up, then Compressor for control', 'Popular chain: EQ → Compressor → Reverb'],
+            }}
+            position="left"
+          >
             <button
               onClick={() => setShowPluginMenu(!showPluginMenu)}
               className="p-1 rounded bg-blue-600 hover:bg-blue-700 text-white transition"
@@ -113,7 +124,18 @@ export default function PluginRack({
 
               {/* Options Dropdown */}
               <div className="relative">
-                <Tooltip content="Plugin options" position="left">
+                <Tooltip 
+                  content={{
+                    title: 'Plugin Options',
+                    description: 'Toggle plugin bypass or remove from chain',
+                    hotkey: 'Right-click',
+                    category: 'effects',
+                    relatedFunctions: ['Add Plugin', 'Settings'],
+                    performanceTip: 'Bypassing saves CPU; removing plugin frees memory',
+                    examples: ['Bypass to compare before/after', 'Delete to free up processing'],
+                  }}
+                  position="left"
+                >
                   <button
                     onClick={() => setOpenPluginMenu(openPluginMenu === plugin.id ? null : plugin.id)}
                     className="flex-shrink-0 p-0.5 rounded hover:bg-gray-600 text-gray-400 hover:text-gray-200 transition"
