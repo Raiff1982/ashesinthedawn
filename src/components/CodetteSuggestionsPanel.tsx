@@ -11,7 +11,16 @@
 
 import { useState, useEffect } from "react";
 import { useDAW } from "../contexts/DAWContext";
-import { CodetteSuggestion } from "../lib/codetteBridge";
+
+interface CodetteSuggestion {
+  id: string;
+  type: "effect" | "parameter" | "automation" | "routing" | "mixing";
+  title: string;
+  description: string;
+  parameters: Record<string, any>;
+  confidence: number;
+  category: string;
+}
 
 interface CodetteSuggestionsPanelProps {
   trackId?: string;
@@ -19,11 +28,10 @@ interface CodetteSuggestionsPanelProps {
   onApply?: (suggestion: CodetteSuggestion) => void;
 }
 
-export function CodetteSuggestionsPanel({
-  trackId,
-  context = "general",
-  onApply,
-}: CodetteSuggestionsPanelProps) {
+export function CodetteSuggestionsPanel(props: CodetteSuggestionsPanelProps) {
+  // Safely extract props with defaults
+  const { trackId, context = "general", onApply } = props || {};
+  
   const contextData = useDAW();
   
   // Initialize state hooks first (before any early returns)

@@ -328,8 +328,11 @@ export default function TopBar() {
         {/* Metronome Volume Control */}
         {metronomeSettings.enabled && (
           <div className="flex items-center gap-2">
+            <label htmlFor="metronome-volume" className="sr-only">Metronome Volume</label>
             <Volume2 className="w-3 h-3 text-yellow-500" />
             <input
+              id="metronome-volume"
+              name="metronome-volume"
               type="range"
               min="0"
               max="1"
@@ -413,8 +416,10 @@ export default function TopBar() {
             <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-600 rounded shadow-lg z-50 min-w-48">
               <div className="p-2 space-y-2">
                 {/* Waveform Toggle */}
-                <label className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
+                <label htmlFor="show-waveform" className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
                   <input
+                    id="show-waveform"
+                    name="show-waveform"
                     type="checkbox"
                     checked={viewOptions.showWaveform}
                     onChange={(e) =>
@@ -429,8 +434,10 @@ export default function TopBar() {
                 </label>
 
                 {/* Mixer Toggle */}
-                <label className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
+                <label htmlFor="show-mixer" className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
                   <input
+                    id="show-mixer"
+                    name="show-mixer"
                     type="checkbox"
                     checked={viewOptions.showMixer}
                     onChange={(e) =>
@@ -445,8 +452,10 @@ export default function TopBar() {
                 </label>
 
                 {/* Timeline Toggle */}
-                <label className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
+                <label htmlFor="show-timeline" className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
                   <input
+                    id="show-timeline"
+                    name="show-timeline"
                     type="checkbox"
                     checked={viewOptions.showTimeline}
                     onChange={(e) =>
@@ -461,8 +470,10 @@ export default function TopBar() {
                 </label>
 
                 {/* Transport Toggle */}
-                <label className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
+                <label htmlFor="show-transport" className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
                   <input
+                    id="show-transport"
+                    name="show-transport"
                     type="checkbox"
                     checked={viewOptions.showTransport}
                     onChange={(e) =>
@@ -479,8 +490,10 @@ export default function TopBar() {
                 <div className="h-px bg-gray-700 my-1" />
 
                 {/* Compact Mode */}
-                <label className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
+                <label htmlFor="compact-mode" className="flex items-center gap-2 px-2 py-1 hover:bg-gray-800 rounded cursor-pointer text-gray-300 text-xs">
                   <input
+                    id="compact-mode"
+                    name="compact-mode"
                     type="checkbox"
                     checked={viewOptions.compactMode}
                     onChange={(e) =>
