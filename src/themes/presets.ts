@@ -29,9 +29,9 @@ export const codette_dark: Theme = {
       selected: '#404040',
     },
     text: {
-      primary: '#cccccc',
-      secondary: '#999999',
-      tertiary: '#666666',
+      primary: '#f0f0f0',
+      secondary: '#d0d0d0',
+      tertiary: '#a0a0a0',
       accent: '#00ffaa',
     },
     border: {
@@ -169,10 +169,10 @@ export const codette_light: Theme = {
       selected: '#b8b8b8',
     },
     text: {
-      primary: '#222222',
-      secondary: '#555555',
-      tertiary: '#888888',
-      accent: '#0099cc',
+      primary: '#000000',
+      secondary: '#1a1a1a',
+      tertiary: '#444444',
+      accent: '#0066aa',
     },
     border: {
       primary: '#c0c0c0',
@@ -309,9 +309,9 @@ export const codette_graphite: Theme = {
       selected: '#565656',
     },
     text: {
-      primary: '#dddddd',
-      secondary: '#aaaaaa',
-      tertiary: '#777777',
+      primary: '#f5f5f5',
+      secondary: '#e0e0e0',
+      tertiary: '#b0b0b0',
       accent: '#ffaa00',
     },
     border: {
@@ -449,9 +449,9 @@ export const codette_neon: Theme = {
       selected: '#3a3a60',
     },
     text: {
-      primary: '#f0f0f0',
-      secondary: '#c0c0c0',
-      tertiary: '#888888',
+      primary: '#ffffff',
+      secondary: '#e0e0ff',
+      tertiary: '#a0a0ff',
       accent: '#ff00ff',
     },
     border: {

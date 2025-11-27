@@ -5,13 +5,13 @@
 /* Global Theme */
 @layer base {
   body {
-    @apply bg-gray-950 text-gray-300 font-sans;
+    @apply bg-gray-950 text-gray-100 font-sans;
     letter-spacing: 0.01em;
   }
 
   button {
     @apply bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5
-           text-gray-300 hover:bg-blue-600 hover:text-white
+           text-gray-100 hover:bg-blue-600 hover:text-white
            transition-colors duration-150 active:scale-95;
   }
 }
@@ -54,7 +54,7 @@ input[type="range"]::-moz-range-thumb {
 .channel-strip-label {
   font-size: 11px;
   font-weight: 600;
-  color: #f3f4f6;
+  color: #ffffff;
   letter-spacing: 0.05em;
 }
 
