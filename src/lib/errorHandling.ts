@@ -213,6 +213,53 @@ export const createAudioError = (message: string, context?: any): AppError => ({
   timestamp: Date.now(),
 });
 
+/**
+ * DSP Backend Errors
+ */
+export const createDSPConnectionError = (message: string, context?: any): AppError => ({
+  id: `dsp-connection-${Date.now()}`,
+  title: 'DSP Backend Unavailable',
+  message: `Cannot connect to audio processing backend: ${message}`,
+  severity: 'error',
+  context: { ...context, source: 'dsp-backend', retryable: true },
+  recoverable: true,
+  recovery: async () => {
+    console.log('[Recovery] Attempting to reconnect to DSP backend...');
+    // This will be called by dspBridge reconnection logic
+  },
+  timestamp: Date.now(),
+});
+
+export const createDSPProcessingError = (effectType: string, message: string, context?: any): AppError => ({
+  id: `dsp-processing-${Date.now()}`,
+  title: `Effect Processing Failed: ${effectType}`,
+  message: `Failed to process ${effectType}: ${message}`,
+  severity: 'error',
+  context: { ...context, source: 'dsp-effect', effectType },
+  recoverable: true,
+  timestamp: Date.now(),
+});
+
+export const createDSPAnalysisError = (analysisType: string, message: string, context?: any): AppError => ({
+  id: `dsp-analysis-${Date.now()}`,
+  title: `Audio Analysis Failed: ${analysisType}`,
+  message: `Failed to analyze audio (${analysisType}): ${message}`,
+  severity: 'warning',
+  context: { ...context, source: 'dsp-analysis', analysisType },
+  recoverable: true,
+  timestamp: Date.now(),
+});
+
+export const createCodetteAIError = (operation: string, message: string, context?: any): AppError => ({
+  id: `codette-ai-${Date.now()}`,
+  title: `Codette AI Error: ${operation}`,
+  message: `Codette AI failed during ${operation}: ${message}`,
+  severity: 'warning',
+  context: { ...context, source: 'codette-ai', operation },
+  recoverable: true,
+  timestamp: Date.now(),
+});
+
 export const createGenericError = (message: string, severity: ErrorSeverity = 'error', context?: any): AppError => ({
   id: `generic-${Date.now()}`,
   title: 'Error',
