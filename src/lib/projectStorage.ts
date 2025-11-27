@@ -5,6 +5,7 @@
  */
 
 import { Project } from '../types';
+import { errorManager, createStorageError } from './errorHandling';
 
 const STORAGE_KEY = 'corelogic_current_project';
 const AUTO_SAVE_INTERVAL = 5000; // Auto-save every 5 seconds
@@ -53,6 +54,15 @@ export function saveProjectToStorage(project: Project | null): boolean {
     // Handle QuotaExceededError
     if (error instanceof DOMException && error.code === 22) {
       console.warn('[ProjectStorage] Storage quota exceeded');
+      errorManager.registerError(createStorageError(
+        'Storage quota exceeded. Project may not be fully saved.',
+        { error: error.message, projectName: project?.name }
+      ));
+    } else {
+      errorManager.registerError(createStorageError(
+        'Failed to save project to browser storage',
+        { error: error instanceof Error ? error.message : String(error) }
+      ));
     }
     
     return false;

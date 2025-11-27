@@ -10,6 +10,7 @@ import Mixer from './components/Mixer';
 import EnhancedSidebar from './components/EnhancedSidebar';
 import WelcomeModal from './components/WelcomeModal';
 import ModalsContainer from './components/ModalsContainer';
+import ErrorNotifications from './components/ErrorNotifications';
 
 function AppContent() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -168,6 +169,7 @@ function AppContent() {
 
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
       <ModalsContainer />
+      <ErrorNotifications />
     </div>
   );
 }

@@ -4,6 +4,7 @@
  */
 
 import { Project } from '../types';
+import { errorManager, createImportError, createExportError } from './errorHandling';
 
 interface ExportOptions {
   includeMetadata?: boolean;
@@ -42,23 +43,30 @@ export function exportProjectToJSON(
  * Export project as downloadable file
  */
 export function downloadProjectFile(project: Project, filename?: string): void {
-  const name = filename || `${project.name || 'project'}-${Date.now()}.corelogic.json`;
-  const jsonString = exportProjectToJSON(project, { prettyPrint: true });
-  
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  
-  link.href = url;
-  link.download = name;
-  document.body.appendChild(link);
-  link.click();
-  
-  // Cleanup
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  
-  console.log(`[ProjectExport] Downloaded: ${name}`);
+  try {
+    const name = filename || `${project.name || 'project'}-${Date.now()}.corelogic.json`;
+    const jsonString = exportProjectToJSON(project, { prettyPrint: true });
+    
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    console.log(`[ProjectExport] Downloaded: ${name}`);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const finalError = `Failed to download project: ${errorMsg}`;
+    console.error('[ProjectExport]', finalError);
+    errorManager.registerError(createExportError(finalError));
+  }
 }
 
 /**
@@ -102,11 +110,13 @@ export function importProjectFromJSON(
     
     // Validate structure if requested
     if (validate && !validateProjectStructure(projectData)) {
-      return {
+      const error = {
         success: false,
         project: null,
         error: 'Invalid project structure: missing required fields',
       };
+      errorManager.registerError(createImportError(error.error));
+      return error;
     }
     
     console.log('[ProjectImport] Successfully parsed project:', projectData.name);
@@ -120,11 +130,15 @@ export function importProjectFromJSON(
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[ProjectImport] Failed to parse JSON:', errorMsg);
     
-    return {
+    const result = {
       success: false,
       project: null,
       error: `Failed to parse project file: ${errorMsg}`,
     };
+    
+    errorManager.registerError(createImportError(result.error));
+    
+    return result;
   }
 }
 
@@ -136,21 +150,26 @@ export function importProjectFromFile(
   options: ImportOptions = {}
 ): Promise<{ success: boolean; project: Project | null; error: string | null }> {
   return new Promise((resolve) => {
-    // Validate file
+    // Validate file type
     if (!file.name.endsWith('.json') && !file.name.endsWith('.corelogic.json')) {
+      const error = 'Invalid file type: must be JSON file';
+      errorManager.registerError(createImportError(error));
       resolve({
         success: false,
         project: null,
-        error: 'Invalid file type: must be JSON file',
+        error,
       });
       return;
     }
     
+    // Validate file size
     if (file.size > 50 * 1024 * 1024) { // 50MB limit
+      const error = 'File too large: maximum 50MB';
+      errorManager.registerError(createImportError(error));
       resolve({
         success: false,
         project: null,
-        error: 'File too large: maximum 50MB',
+        error,
       });
       return;
     }
@@ -163,19 +182,24 @@ export function importProjectFromFile(
         const result = importProjectFromJSON(content, options);
         resolve(result);
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        const finalError = `Failed to read file: ${errorMsg}`;
+        errorManager.registerError(createImportError(finalError));
         resolve({
           success: false,
           project: null,
-          error: 'Failed to read file',
+          error: finalError,
         });
       }
     };
     
     reader.onerror = () => {
+      const error = 'Failed to read file';
+      errorManager.registerError(createImportError(error));
       resolve({
         success: false,
         project: null,
-        error: 'Failed to read file',
+        error,
       });
     };
     

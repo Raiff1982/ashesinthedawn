@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AudioDeviceManager } from '../lib/audioDeviceManager';
+import { errorManager, createDeviceError } from '../lib/errorHandling';
 
 interface AudioDevice {
   deviceId: string;
@@ -49,6 +50,12 @@ export function useAudioDevices() {
         const message = err instanceof Error ? err.message : 'Failed to initialize audio devices';
         setError(message);
         console.error('[useAudioDevices] Error:', message);
+        
+        // Register error with error manager
+        errorManager.registerError(createDeviceError(
+          `Audio device initialization failed: ${message}`,
+          { context: 'useAudioDevices initialization', recoverable: true }
+        ));
       } finally {
         setIsLoading(false);
       }
@@ -65,12 +72,20 @@ export function useAudioDevices() {
   const selectInputDevice = (deviceId: string) => {
     if (inputDevices.some(d => d.deviceId === deviceId)) {
       setSelectedInputId(deviceId);
+    } else {
+      const error = `Input device not found: ${deviceId}`;
+      setError(error);
+      errorManager.registerError(createDeviceError(error, { context: 'selectInputDevice' }));
     }
   };
 
   const selectOutputDevice = (deviceId: string) => {
     if (outputDevices.some(d => d.deviceId === deviceId)) {
       setSelectedOutputId(deviceId);
+    } else {
+      const error = `Output device not found: ${deviceId}`;
+      setError(error);
+      errorManager.registerError(createDeviceError(error, { context: 'selectOutputDevice' }));
     }
   };
 
