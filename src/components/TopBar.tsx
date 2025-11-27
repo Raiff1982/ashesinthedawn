@@ -21,9 +21,11 @@ import {
   Lightbulb,
   RotateCcw,
   Wrench,
+  Loader,
 } from "lucide-react";
 import { useDAW } from "../contexts/DAWContext";
 import { useTransportClock } from "../hooks/useTransportClock";
+import { useCodette } from "../hooks/useCodette";
 import { useState } from "react";
 import CodetteStatus from "./CodetteStatus";
 import CodetteAdvancedTools from "./CodetteAdvancedTools";
@@ -56,6 +58,14 @@ export default function TopBar() {
     openAudioSettingsModal,
   } = useDAW();
 
+  // Codette AI suggestions
+  const {
+    isConnected,
+    isLoading: isLoadingSuggestions,
+    suggestions,
+    getSuggestions,
+  } = useCodette({ autoConnect: true });
+
   // Real-time transport from WebSocket
   const { state: transport, connected, error } = useTransportClock();
   // const api = useTransportAPI(); // Unused for now
@@ -63,6 +73,8 @@ export default function TopBar() {
   const [showViewMenu, setShowViewMenu] = useState(false);
   const [showMetronomeMenu, setShowMetronomeMenu] = useState(false);
   const [showCodetteMenu, setShowCodetteMenu] = useState(false);
+  const [showSuggestionsDropdown, setShowSuggestionsDropdown] = useState(false);
+  const [suggestionsContext, setSuggestionsContext] = useState('general');
   const [showAdvancedTools, setShowAdvancedTools] = useState(false);
   const [codetteFeature, setCodetteFeature] = useState<"suggestions" | "theory" | "composition">("suggestions");
   const [viewOptions, setViewOptions] = useState({
@@ -384,6 +396,100 @@ export default function TopBar() {
 
         <div className="w-px h-6 bg-gray-700" />
 
+        {/* Suggestions Button */}
+        <div className="relative">
+          <button
+            onClick={() => setShowSuggestionsDropdown(!showSuggestionsDropdown)}
+            disabled={!isConnected}
+            className={`p-1.5 rounded flex items-center gap-1 transition border border-blue-600/50 ${
+              isConnected
+                ? 'hover:bg-blue-800/30 text-blue-400'
+                : 'text-gray-600 cursor-not-allowed'
+            }`}
+            title="Codette AI Suggestions"
+          >
+            <Lightbulb className="w-4 h-4" />
+            {isLoadingSuggestions && <Loader className="w-3 h-3 animate-spin" />}
+            <ChevronDown className="w-3 h-3" />
+          </button>
+
+          {/* Suggestions Dropdown */}
+          {showSuggestionsDropdown && (
+            <div className="absolute right-0 top-full mt-1 bg-gradient-to-b from-gray-900 to-blue-900/20 border border-blue-600 rounded shadow-lg z-50 min-w-80 max-h-96 overflow-hidden">
+              <div className="p-3 space-y-3 overflow-y-auto max-h-96">
+                {/* Context Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {['general', 'gain-staging', 'mixing', 'mastering'].map((ctx) => (
+                    <button
+                      key={ctx}
+                      onClick={() => {
+                        setSuggestionsContext(ctx);
+                        getSuggestions(ctx);
+                      }}
+                      disabled={isLoadingSuggestions || !isConnected}
+                      className={`px-2 py-1 text-xs rounded transition-colors ${
+                        suggestionsContext === ctx
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {ctx === 'gain-staging'
+                        ? 'Gain'
+                        : ctx.charAt(0).toUpperCase() + ctx.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Suggestions List */}
+                {isLoadingSuggestions && (
+                  <div className="flex items-center justify-center py-4 text-xs text-gray-400">
+                    <Loader className="w-3 h-3 animate-spin mr-1" />
+                    Loading suggestions...
+                  </div>
+                )}
+
+                {!isLoadingSuggestions && suggestions.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {suggestions.map((suggestion, idx) => (
+                      <div key={idx} className="p-2 bg-blue-900/30 border border-blue-700/50 rounded hover:border-blue-600 transition cursor-pointer">
+                        <div className="flex items-start justify-between mb-1">
+                          <h4 className="font-medium text-xs text-blue-300">
+                            {suggestion.title}
+                          </h4>
+                          <span className="text-xs px-1.5 py-0.5 bg-blue-800/50 rounded text-blue-200">
+                            {Math.round(suggestion.confidence * 100)}%
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-300 line-clamp-2">
+                          {suggestion.description}
+                        </p>
+                        {suggestion.source && (
+                          <div className="mt-1 text-xs text-gray-500">
+                            {suggestion.source}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  !isLoadingSuggestions && (
+                    <div className="text-center py-6 text-gray-500 text-xs">
+                      {isConnected ? 'No suggestions yet. Select a category!' : 'Not connected to Codette'}
+                    </div>
+                  )
+                )}
+
+                {/* Status */}
+                <div className="text-xs text-gray-500 text-center pt-2 border-t border-blue-700/30">
+                  {isConnected ? '✓ Connected' : '✗ Disconnected'}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="w-px h-6 bg-gray-700" />
+
         {/* CPU Usage */}
         <div className="flex items-center gap-0.5 text-gray-400 flex-shrink-0">
           <Zap className="w-3 h-3 flex-shrink-0" />
@@ -562,11 +668,11 @@ export default function TopBar() {
                 {/* AI Suggestions */}
                 <button
                   onClick={() => {
-                    setCodetteFeature("suggestions");
+                    setShowSuggestionsDropdown(!showSuggestionsDropdown);
                     setShowCodetteMenu(false);
                   }}
                   className={`w-full px-3 py-2 rounded text-left text-xs flex items-center gap-2 transition ${
-                    codetteFeature === "suggestions"
+                    showSuggestionsDropdown
                       ? "bg-purple-600 text-white"
                       : "hover:bg-gray-800 text-gray-300"
                   }`}
@@ -574,6 +680,7 @@ export default function TopBar() {
                 >
                   <Sparkles className="w-3 h-3" />
                   <span>AI Suggestions</span>
+                  {isLoadingSuggestions && <Loader className="w-3 h-3 animate-spin ml-auto" />}
                 </button>
 
                 <div className="h-px bg-purple-700/50 my-1" />
