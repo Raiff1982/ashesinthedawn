@@ -1,9 +1,21 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useDAW } from '../../contexts/DAWContext';
+import { useAudioDevices } from '../../hooks/useAudioDevices';
 
 export default function AudioSettingsModal() {
   const { showAudioSettingsModal, closeAudioSettingsModal } = useDAW();
+  const { 
+    inputDevices, 
+    outputDevices, 
+    selectedInputId, 
+    selectedOutputId,
+    selectInputDevice,
+    selectOutputDevice,
+    isLoading,
+    error
+  } = useAudioDevices();
+  
   const [selectedBufferSize, setSelectedBufferSize] = useState('8192');
   const [sampleRate, setSampleRate] = useState('48000');
 
@@ -26,6 +38,63 @@ export default function AudioSettingsModal() {
 
         {/* Content */}
         <div className="p-6 space-y-6">
+          {/* Audio Device Selection */}
+          <div className="space-y-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-200">Audio Devices</h3>
+            
+            {error && (
+              <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded">
+                ⚠️ {error}
+              </div>
+            )}
+            
+            {isLoading ? (
+              <div className="text-xs text-gray-400">Loading devices...</div>
+            ) : (
+              <div className="space-y-3">
+                {/* Input Device */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-300">Input (Microphone)</label>
+                  <select
+                    value={selectedInputId || ''}
+                    onChange={(e) => selectInputDevice(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-xs text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select input device...</option>
+                    {inputDevices.map(device => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Input Device ${inputDevices.indexOf(device) + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                  {inputDevices.length === 0 && (
+                    <p className="text-xs text-yellow-400">No input devices found</p>
+                  )}
+                </div>
+                
+                {/* Output Device */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-300">Output (Speaker)</label>
+                  <select
+                    value={selectedOutputId || ''}
+                    onChange={(e) => selectOutputDevice(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-xs text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select output device...</option>
+                    {outputDevices.map(device => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Output Device ${outputDevices.indexOf(device) + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                  {outputDevices.length === 0 && (
+                    <p className="text-xs text-yellow-400">No output devices found</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Sample Rate Configuration */}
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-gray-200">Sample Rate</label>
