@@ -3,12 +3,14 @@ import { Settings, Music, Plus, Grid, Zap, Lightbulb } from 'lucide-react';
 import Sidebar from './Sidebar';
 import AudioMonitor from './AudioMonitor';
 import TrackDetailsPanel from './TrackDetailsPanel';
-import RoutingMatrix from './RoutingMatrix';
-import PluginBrowser from './PluginBrowser';
 import MIDISettings from './MIDISettings';
-import SpectrumVisualizerPanel from './SpectrumVisualizerPanel';
 import MarkerPanel from './MarkerPanel';
-import CodettePanel from './CodettePanel';
+import {
+  LazyRoutingMatrixWrapper,
+  LazyPluginBrowserWrapper,
+  LazySpectrumVisualizerPanelWrapper,
+  LazyCodettePanelWrapper,
+} from './LazyComponents';
 
 type SidebarTab = 'files' | 'track' | 'routing' | 'plugins' | 'midi' | 'spectrum' | 'markers' | 'monitor' | 'codette';
 
@@ -50,13 +52,13 @@ export default function EnhancedSidebar() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'codette' && <CodettePanel isVisible={true} />}
+        {activeTab === 'codette' && <LazyCodettePanelWrapper isVisible={true} />}
         {activeTab === 'track' && <TrackDetailsPanel />}
         {activeTab === 'files' && <Sidebar />}
-        {activeTab === 'routing' && <RoutingMatrix />}
-        {activeTab === 'plugins' && <PluginBrowser />}
+        {activeTab === 'routing' && <LazyRoutingMatrixWrapper />}
+        {activeTab === 'plugins' && <LazyPluginBrowserWrapper />}
         {activeTab === 'midi' && <MIDISettings />}
-        {activeTab === 'spectrum' && <SpectrumVisualizerPanel />}
+        {activeTab === 'spectrum' && <LazySpectrumVisualizerPanelWrapper />}
         {activeTab === 'markers' && <MarkerPanel />}
         {activeTab === 'monitor' && <AudioMonitor />}
       </div>

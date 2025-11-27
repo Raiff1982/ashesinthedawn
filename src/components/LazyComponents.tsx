@@ -12,6 +12,11 @@ const LazyRoutingMatrix = lazy(() => import('./RoutingMatrix'));
 const LazySpectrumVisualizerPanel = lazy(() => import('./SpectrumVisualizerPanel'));
 const LazyEffectChainPanel = lazy(() => import('./EffectChainPanel'));
 
+// Lazy load additional large components for bundle optimization
+const LazyCodettePanelComponent = lazy(() => import('./CodettePanel'));
+const LazyMixerComponent = lazy(() => import('./Mixer'));
+const LazyAIPanelComponent = lazy(() => import('./AIPanel'));
+
 // Loading fallback component
 const ComponentLoadingFallback = ({ name }: { name: string }) => (
   <div className="bg-gray-900 border border-gray-700 rounded p-4 flex items-center justify-center gap-2 text-xs text-gray-400">
@@ -42,5 +47,24 @@ export const LazySpectrumVisualizerPanelWrapper = (props: Record<string, unknown
 export const LazyEffectChainPanelWrapper = (props: Record<string, unknown>) => (
   <Suspense fallback={<ComponentLoadingFallback name="Effect Chain" />}>
     <LazyEffectChainPanel {...props} />
+  </Suspense>
+);
+
+// Additional lazy-loaded components for bundle optimization
+export const LazyCodettePanelWrapper = (props: Record<string, unknown>) => (
+  <Suspense fallback={<ComponentLoadingFallback name="Codette Panel" />}>
+    <LazyCodettePanelComponent {...props} />
+  </Suspense>
+);
+
+export const LazyMixerWrapper = (props: Record<string, unknown>) => (
+  <Suspense fallback={<ComponentLoadingFallback name="Mixer" />}>
+    <LazyMixerComponent {...props} />
+  </Suspense>
+);
+
+export const LazyAIPanelWrapper = (props: Record<string, unknown>) => (
+  <Suspense fallback={<ComponentLoadingFallback name="AI Panel" />}>
+    <LazyAIPanelComponent {...props} />
   </Suspense>
 );

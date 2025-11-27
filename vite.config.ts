@@ -7,4 +7,44 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separate vendor libraries into chunks
+          'vendor-ui': ['react', 'react-dom'],
+          'vendor-icons': ['lucide-react'],
+          
+          // Lazy-load heavy components
+          'chunk-codette': [
+            './src/components/CodettePanel.tsx',
+            './src/components/CodetteControlPanel.tsx',
+            './src/components/CodetteAdvancedTools.tsx',
+            './src/components/CodetteTeachingGuide.tsx',
+          ],
+          
+          'chunk-mixer': [
+            './src/components/Mixer.tsx',
+            './src/components/MixerTile.tsx',
+            './src/components/PluginParameterMapper.tsx',
+          ],
+          
+          'chunk-visualization': [
+            './src/components/SpectrumVisualizerPanel.tsx',
+            './src/components/Timeline.tsx',
+            './src/components/WaveformAdjuster.tsx',
+          ],
+          
+          'chunk-panels': [
+            './src/components/AIPanel.tsx',
+            './src/components/TeachingPanel.tsx',
+          ],
+        },
+      },
+    },
+    // Increase chunk size warning threshold as we have legitimate large components
+    chunkSizeWarningLimit: 600,
+    // Enable compression analysis
+    reportCompressedSize: true,
+  },
 });
