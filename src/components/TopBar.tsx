@@ -66,9 +66,9 @@ export default function TopBar() {
         {/* Play */}
         <button
           onClick={togglePlay}
-          className={`p-1.5 rounded transition ${
+          className={`p-1.5 rounded transition-all duration-200 ${
             isPlaying
-              ? "bg-green-600 text-white"
+              ? "bg-green-600 text-white shadow-lg shadow-green-500/50 animate-transport-pulse"
               : "hover:bg-gray-800 text-green-400"
           }`}
           title="Play"
@@ -79,9 +79,9 @@ export default function TopBar() {
         {/* Record */}
         <button
           onClick={toggleRecord}
-          className={`p-1.5 rounded transition ${
+          className={`p-1.5 rounded transition-all duration-200 ${
             isRecording
-              ? "bg-red-600 text-white animate-pulse"
+              ? "bg-red-600 text-white shadow-lg shadow-red-500/50 animate-pulse"
               : "hover:bg-gray-800 text-gray-300"
           }`}
           title="Record"
@@ -95,9 +95,9 @@ export default function TopBar() {
         {/* Loop */}
         <button
           onClick={toggleLoop}
-          className={`p-1.5 rounded transition ${
+          className={`p-1.5 rounded transition-all duration-200 ${
             loopRegion.enabled
-              ? "bg-blue-600 text-white"
+              ? "bg-blue-600 text-white shadow-lg shadow-blue-500/40 animate-control-highlight"
               : "hover:bg-gray-800 text-gray-300"
           }`}
           title="Loop"
@@ -109,9 +109,9 @@ export default function TopBar() {
         <button
           onClick={undo}
           disabled={!canUndo}
-          className={`p-1.5 rounded transition ${
+          className={`p-1.5 rounded transition-all duration-200 ${
             canUndo
-              ? "hover:bg-gray-800 text-gray-300"
+              ? "hover:bg-gray-800 text-gray-300 hover:shadow-md hover:shadow-blue-500/20"
               : "text-gray-600 cursor-not-allowed"
           }`}
           title="Undo"
@@ -123,9 +123,9 @@ export default function TopBar() {
         <button
           onClick={redo}
           disabled={!canRedo}
-          className={`p-1.5 rounded transition ${
+          className={`p-1.5 rounded transition-all duration-200 ${
             canRedo
-              ? "hover:bg-gray-800 text-gray-300"
+              ? "hover:bg-gray-800 text-gray-300 hover:shadow-md hover:shadow-blue-500/20"
               : "text-gray-600 cursor-not-allowed"
           }`}
           title="Redo"
@@ -136,9 +136,9 @@ export default function TopBar() {
         {/* Metronome */}
         <button
           onClick={toggleMetronome}
-          className={`p-1.5 rounded transition ${
+          className={`p-1.5 rounded transition-all duration-200 ${
             metronomeSettings.enabled
-              ? "bg-yellow-600 text-white"
+              ? "bg-yellow-600 text-white shadow-lg shadow-yellow-500/40"
               : "hover:bg-gray-800 text-gray-300"
           }`}
           title="Metronome"

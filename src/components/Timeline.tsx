@@ -219,7 +219,11 @@ export default function Timeline() {
     return (
       <div
         key={`waveform-${track.id}`}
-        className="absolute top-1 left-0 overflow-hidden rounded cursor-pointer hover:brightness-110 transition-all"
+        className={`absolute top-1 left-0 overflow-hidden rounded cursor-pointer transition-all duration-200 ${
+          selectedTrackForWaveform === track.id
+            ? "shadow-lg shadow-blue-500/40 brightness-125"
+            : "hover:brightness-110 hover:shadow-md hover:shadow-blue-500/20"
+        }`}
         data-track-waveform="true"
         style={{
           width: `${width}px`,
@@ -229,6 +233,7 @@ export default function Timeline() {
             ? "rgba(107, 114, 128, 0.2)"
             : `${regionColor}20`,
           borderLeft: `3px solid ${regionColor}`,
+          borderRadius: selectedTrackForWaveform === track.id ? "4px" : "0",
         }}
         onClick={(e) => {
           e.stopPropagation();
@@ -293,7 +298,7 @@ export default function Timeline() {
 
         {/* Track selection indicator */}
         {selectedTrackForWaveform === track.id && (
-          <div className="absolute inset-0 border-2 border-blue-400 rounded" />
+          <div className="absolute inset-0 border-2 border-blue-400 rounded animate-scale-in pointer-events-none" />
         )}
       </div>
     );
@@ -408,11 +413,12 @@ export default function Timeline() {
 
           {/* Playhead */}
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none"
+            className={`absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none transition-all duration-75 ease-linear ${
+              isPlaying ? "animate-playhead-pulse" : ""
+            }`}
             style={{
               left: `${currentTime * pixelsPerSecond}px`,
               zIndex: 20,
-              boxShadow: isPlaying ? "0 0 10px rgba(239, 68, 68, 0.8)" : "none",
             }}
           />
         </div>

@@ -29,16 +29,16 @@ interface CodetteSuggestionsPanelProps {
 }
 
 export function CodetteSuggestionsPanel(props: CodetteSuggestionsPanelProps) {
-  // Safely extract props with defaults
-  const { trackId, context = "general", onApply } = props || {};
-  
-  const contextData = useDAW();
-  
   // Initialize state hooks first (before any early returns)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState<string | null>(null);
   const [confirmApply, setConfirmApply] = useState<string | null>(null);
+
+  // Safely extract props with defaults
+  const { trackId, context = "general", onApply } = props || {};
+  
+  const contextData = useDAW();
   
   // Guard against undefined context
   if (!contextData) {
@@ -66,8 +66,18 @@ export function CodetteSuggestionsPanel(props: CodetteSuggestionsPanelProps) {
     );
   }
 
-  // Ensure codetteSuggestions is an array
-  const codetteSuggestions = Array.isArray(rawSuggestions) ? rawSuggestions : [];
+  // Ensure codetteSuggestions is an array with safe objects
+  const codetteSuggestions = Array.isArray(rawSuggestions) 
+    ? rawSuggestions.map(s => ({
+        id: s?.id || `suggestion-${Math.random()}`,
+        type: s?.type || 'effect',
+        title: s?.title || 'Suggestion',
+        description: s?.description || '',
+        parameters: s?.parameters || {},
+        confidence: s?.confidence || 0,
+        category: s?.category || 'general',
+      }))
+    : [];
 
   const currentTrackId = trackId || selectedTrack?.id;
 
@@ -215,11 +225,11 @@ export function CodetteSuggestionsPanel(props: CodetteSuggestionsPanelProps) {
               </div>
 
               {/* Parameters Preview */}
-              {Object.keys(suggestion.parameters).length > 0 && (
+              {suggestion.parameters && Object.keys(suggestion.parameters).length > 0 && (
                 <div className="p-2 bg-gray-900/50 rounded text-xs border border-gray-700">
                   <p className="text-gray-400 mb-2 font-medium">Parameters:</p>
                   <div className="space-y-1">
-                    {Object.entries(suggestion.parameters).map(([key, value]) => (
+                    {Object.entries(suggestion.parameters || {}).map(([key, value]) => (
                       <div
                         key={key}
                         className="flex justify-between text-gray-400"

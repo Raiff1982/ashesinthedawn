@@ -45,6 +45,11 @@ const MixerComponent = () => {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showPluginRack, setShowPluginRack] = useState(false); // Show/hide plugin rack panel
 
+  // Debug: Log when tabs change
+  useEffect(() => {
+    console.log('[Mixer] Codette tab changed to:', codetteTab);
+  }, [codetteTab]);
+
   const animationRef = useRef<number | null>(null);
   const faderDraggingRef = useRef(false);
   const faderContainerRef = useRef<HTMLDivElement>(null);
@@ -409,32 +414,50 @@ const MixerComponent = () => {
               {/* Tab Headers */}
               <div className="flex items-center gap-2 p-2 border-b border-gray-700 flex-shrink-0 overflow-x-auto">
                 <button
-                  onClick={() => setCodetteTab('suggestions')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex-shrink-0 ${
+                  onClick={(e) => {
+                    e.preventDefault();
+                    console.log('[Tab Button] Clicking Suggestions tab');
+                    setCodetteTab('suggestions');
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
                     codetteTab === 'suggestions'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
+                  type="button"
+                  title="Suggestions"
                 >
                   💡 Suggestions
                 </button>
                 <button
-                  onClick={() => setCodetteTab('analysis')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex-shrink-0 ${
+                  onClick={(e) => {
+                    e.preventDefault();
+                    console.log('[Tab Button] Clicking Analysis tab');
+                    setCodetteTab('analysis');
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
                     codetteTab === 'analysis'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
+                  type="button"
+                  title="Analysis"
                 >
                   📊 Analysis
                 </button>
                 <button
-                  onClick={() => setCodetteTab('control')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-colors flex-shrink-0 ${
+                  onClick={(e) => {
+                    e.preventDefault();
+                    console.log('[Tab Button] Clicking Control tab');
+                    setCodetteTab('control');
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
                     codetteTab === 'control'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
+                  type="button"
+                  title="Control"
                 >
                   ⚙️ Control
                 </button>
@@ -443,7 +466,7 @@ const MixerComponent = () => {
               {/* Tab Content - Dynamic height with scroll */}
               <div className="flex-1 overflow-auto bg-gray-800 min-h-0">
                 {codetteTab === 'suggestions' && (
-                  <div className="w-full h-full">
+                  <div key="suggestions-tab" className="w-full h-full">
                     <CodetteSuggestionsPanel
                       trackId={selectedTrack?.id}
                       context="mixer"
@@ -451,7 +474,7 @@ const MixerComponent = () => {
                   </div>
                 )}
                 {codetteTab === 'analysis' && (
-                  <div className="w-full h-full">
+                  <div key="analysis-tab" className="w-full h-full">
                     <CodetteAnalysisPanel
                       trackId={selectedTrack?.id}
                       autoAnalyze={false}
@@ -459,7 +482,7 @@ const MixerComponent = () => {
                   </div>
                 )}
                 {codetteTab === 'control' && (
-                  <div className="w-full h-full">
+                  <div key="control-tab" className="w-full h-full">
                     <CodetteControlPanel />
                   </div>
                 )}
