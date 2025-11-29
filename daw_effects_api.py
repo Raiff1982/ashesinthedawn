@@ -13,12 +13,15 @@ logger = logging.getLogger(__name__)
 
 # Try to import DSP effects
 try:
-    from daw_core.fx.eq_and_dynamics import EQ3Band, HighLowPass, Compressor, Limiter, Expander, Gate
-    from daw_core.fx.saturation_distortion import Saturation, HardClip, Distortion, WaveShaper
-    from daw_core.fx.delay_effects import SimpleDelay, PingPongDelay, MultiTap, StereoDelay
-    from daw_core.fx.reverb_algorithms import Freeverb, HallReverb, PlateReverb, RoomReverb
-    from daw_core.fx.modulation_and_utility import Chorus, Flanger, Tremolo, Gain, WidthControl, DynamicEQ
-    from daw_core.automation import AutomationCurve, LFO, Envelope, AutomatedParameter
+    # Main effects from __init__
+    from daw_core.fx import (
+        EQ3Band, HighLowPass, Compressor, Limiter, Expander, Gate, NoiseGate,
+        Saturation, HardClip, Distortion, WaveShaper,
+        SimpleDelay, PingPongDelay, MultiTapDelay, StereoDelay,
+        Reverb, HallReverb, PlateReverb, RoomReverb
+    )
+    # Utility effects from modulation_and_utility module
+    from daw_core.fx.modulation_and_utility import Chorus, Gain
     DSP_AVAILABLE = True
     logger.info("✅ DAW Core DSP effects imported successfully")
 except ImportError as e:

@@ -49,7 +49,6 @@ export function CodetteSystem({ defaultTab = 'chat', compactMode = false }: Code
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string>('pop');
   const [availableGenres, setAvailableGenres] = useState<any[]>([]);
-  const [wsData, setWsData] = useState<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -140,8 +139,7 @@ export function CodetteSystem({ defaultTab = 'chat', compactMode = false }: Code
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'analysis_update') {
-            setWsData(data.payload);
-            // Also update analysis state with streamed data
+            // Update analysis state with streamed data
             setAnalysis((prev: any) => ({
               ...prev,
               ...data.payload,
