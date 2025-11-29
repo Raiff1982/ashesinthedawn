@@ -2390,7 +2390,7 @@ async def execute_daw_action(request: Dict[str, Any]) -> DAWControlResponse:
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("CODETTE_PORT", "8000"))
+    port = int(os.getenv("CODETTE_PORT", "8001"))
     host = os.getenv("CODETTE_HOST", "127.0.0.1")
 
     print("\n" + "="*70)

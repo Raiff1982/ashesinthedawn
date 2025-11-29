@@ -158,56 +158,106 @@ Write-Info "Starting Codette AI Server on http://localhost:8001"
 Write-Info "Press Ctrl+C to stop all servers"
 Write-Host "`n"
 
-# Start DAW Core API with uvicorn
-$jawCommand = "$pythonCmd -m uvicorn daw_core.api:app --host 0.0.0.0 --port $Port --log-level info"
+# ============================================================================
+# START BOTH SERVERS CONCURRENTLY
+# ============================================================================
+
+# DAW Core API command
+$dawCommand = "$pythonCmd -m uvicorn daw_core.api:app --host 0.0.0.0 --port $Port --log-level info"
+
+# Codette AI Server command
+$codetteCommand = "$pythonCmd codette_server.py"
+
+# Codette can also be started with uvicorn explicitly
+# $codetteCommand = "$pythonCmd -m uvicorn codette_server:app --host 127.0.0.1 --port 8001 --log-level info"
 
 if ($VerboseOutput) {
-    Write-Info "Running: $jawCommand"
+    Write-Info "DAW API Command: $dawCommand"
+    Write-Info "Codette Command: $codetteCommand"
 }
 
-$restartCount = 0
-$maxRestarts = 5
+Write-Info "Launching servers..."
 
-while ($true) {
-    try {
-        Write-Info "Attempting to start DAW Core API (attempt $($restartCount + 1))..."
-        
-        # Run the server
-        Invoke-Expression $jawCommand
-        
-        $exitCode = $LASTEXITCODE
-        
-        if ($exitCode -eq 0) {
-            Write-Success "DAW Core API exited cleanly"
-            break
-        } else {
-            Write-Warning-Custom "DAW Core API exited with code $exitCode"
-        }
-        
-        if (-not $NoRestart) {
-            $restartCount++
-            if ($restartCount -lt $maxRestarts) {
-                Write-Info "Restarting in 3 seconds... (attempt $($restartCount + 1)/$maxRestarts)"
+# Start DAW Core API in background
+Write-Info "Starting DAW Core API (port $Port)..."
+$dawProcess = Start-Process -FilePath $pythonCmd `
+    -ArgumentList "-m", "uvicorn", "daw_core.api:app", "--host", "0.0.0.0", "--port", $Port, "--log-level", "info" `
+    -PassThru `
+    -NoNewWindow
+
+$dawProcessId = $dawProcess.Id
+Write-Success "DAW Core API started (PID: $dawProcessId)"
+
+# Wait a moment for DAW to start
+Start-Sleep -Seconds 2
+
+# Start Codette AI Server in background
+Write-Info "Starting Codette AI Server (port 8001)..."
+$codetteProcess = Start-Process -FilePath $pythonCmd `
+    -ArgumentList "codette_server.py" `
+    -PassThru `
+    -NoNewWindow
+
+$codetteProcessId = $codetteProcess.Id
+Write-Success "Codette AI Server started (PID: $codetteProcessId)"
+
+Write-Host "`n" + ("="*70) -ForegroundColor $SuccessColor
+Write-Success "All servers running!"
+Write-Host "DAW Core API    : http://localhost:$Port"
+Write-Host "Codette AI      : http://localhost:8001"
+Write-Host "API Docs        : http://localhost:$Port/docs"
+Write-Host ("="*70) -ForegroundColor $SuccessColor + "`n"
+
+# Monitor both processes
+Write-Info "Monitoring servers (Press Ctrl+C to stop all)..."
+
+try {
+    while ($true) {
+        # Check if either process has exited
+        if ($dawProcess.HasExited) {
+            Write-Error-Custom "DAW Core API process exited (exit code: $($dawProcess.ExitCode))"
+            
+            # Kill Codette if DAW dies
+            if (-not $codetteProcess.HasExited) {
+                Write-Info "Stopping Codette AI Server..."
+                Stop-Process -Id $codetteProcessId -Force -ErrorAction SilentlyContinue
+            }
+            
+            if (-not $NoRestart) {
+                Write-Info "Attempting to restart servers..."
                 Start-Sleep -Seconds 3
             } else {
-                Write-Error-Custom "Max restart attempts reached ($maxRestarts)"
                 exit 1
             }
-        } else {
-            exit $exitCode
         }
         
-    } catch {
-        Write-Error-Custom "Error starting server: $_"
-        if ($NoRestart) {
+        if ($codetteProcess.HasExited) {
+            Write-Error-Custom "Codette AI Server process exited (exit code: $($codetteProcess.ExitCode))"
+            
+            # Kill DAW if Codette dies
+            if (-not $dawProcess.HasExited) {
+                Write-Info "Stopping DAW Core API..."
+                Stop-Process -Id $dawProcessId -Force -ErrorAction SilentlyContinue
+            }
+            
             exit 1
         }
-        $restartCount++
-        if ($restartCount -lt $maxRestarts) {
-            Write-Info "Restarting in 3 seconds..."
-            Start-Sleep -Seconds 3
-        } else {
-            exit 1
-        }
+        
+        Start-Sleep -Seconds 5
     }
+} finally {
+    # Cleanup on exit
+    Write-Info "`nShutting down servers..."
+    
+    if (-not $dawProcess.HasExited) {
+        Stop-Process -Id $dawProcessId -Force -ErrorAction SilentlyContinue
+        Write-Success "DAW Core API stopped"
+    }
+    
+    if (-not $codetteProcess.HasExited) {
+        Stop-Process -Id $codetteProcessId -Force -ErrorAction SilentlyContinue
+        Write-Success "Codette AI Server stopped"
+    }
+    
+    Write-Info "All servers stopped"
 }
