@@ -3,8 +3,7 @@
  * Handles HTTP communication between React frontend and Codette Python backend
  * 
  * Backend endpoints:
- * - http://localhost:5000/ (Flask web interface)
- * - http://localhost:8001/ (FastAPI default)
+ * - http://localhost:8000/ (FastAPI unified server)
  */
 
 export interface CodetteBridgeConfig {
@@ -42,7 +41,7 @@ class CodetteBridgeService {
 
   constructor(config?: Partial<CodetteBridgeConfig>) {
     this.config = {
-      backendUrl: import.meta.env.VITE_CODETTE_BACKEND || 'http://localhost:8001',
+      backendUrl: import.meta.env.VITE_CODETTE_API || 'http://localhost:8000',
       timeout: parseInt(import.meta.env.VITE_CODETTE_TIMEOUT || '10000'),
       retryAttempts: parseInt(import.meta.env.VITE_CODETTE_RETRIES || '3'),
       ...config,

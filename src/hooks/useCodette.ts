@@ -82,7 +82,7 @@ export interface UseCodetteReturn {
   executeDawAction: (action: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
 }
 
-const CODETTE_API_URL = import.meta.env.VITE_CODETTE_API_URL || 'http://localhost:8001';
+const CODETTE_API_URL = import.meta.env.VITE_CODETTE_API || 'http://localhost:8000';
 
 export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
   const { 

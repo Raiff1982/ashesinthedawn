@@ -3,7 +3,7 @@
  * Handles audio effect processing, automation, metering, and AI recommendations
  */
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
+const BACKEND_URL = import.meta.env.VITE_CODETTE_API || "http://localhost:8000";
 
 // ============================================================================
 // TYPES
