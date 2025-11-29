@@ -31,6 +31,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============================================================================
+# REAL CODETTE AI ENGINE
+# ============================================================================
+
+try:
+    from codette_real_engine import get_real_codette_engine
+    codette_engine = get_real_codette_engine()
+    logger.info("✅ Real Codette AI Engine initialized successfully")
+    USE_REAL_ENGINE = True
+except Exception as e:
+    logger.warning(f"⚠️ Failed to load real Codette engine: {e}")
+    logger.warning("Falling back to mock engine")
+    codette_engine = None
+    USE_REAL_ENGINE = False
+
+# ============================================================================
 # FASTAPI MODELS
 # ============================================================================
 
@@ -244,8 +259,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Codette engine
-codette_engine = CodetteMockEngine()
+# Initialize Codette engine - REAL first, then mock fallback
+if USE_REAL_ENGINE and codette_engine:
+    logger.info("🧠 Using REAL Codette AI Engine with multi-perspective reasoning")
+    real_engine = codette_engine
+else:
+    logger.info("🤖 Using mock Codette engine (real engine not available)")
+    real_engine = CodetteMockEngine()
 
 # ============================================================================
 # HEALTH & STATUS ENDPOINTS
@@ -273,7 +293,7 @@ async def health():
 @app.get("/status")
 async def status():
     """Detailed status endpoint"""
-    return {
+    status_info = {
         "service": "Codette AI Server",
         "status": "running",
         "port": 8001,
@@ -281,6 +301,19 @@ async def status():
         "frontend_url": "http://localhost:5173",
         "timestamp": datetime.now().isoformat()
     }
+    
+    # Add real engine info if available
+    if USE_REAL_ENGINE and hasattr(real_engine, 'get_status'):
+        try:
+            engine_status = real_engine.get_status()
+            status_info["ai_engine"] = engine_status
+            status_info["ai_mode"] = "REAL - Multi-perspective Reasoning"
+        except:
+            status_info["ai_mode"] = "FALLBACK - Mock Engine"
+    else:
+        status_info["ai_mode"] = "FALLBACK - Mock Engine"
+    
+    return status_info
 
 # ============================================================================
 # CHAT ENDPOINTS
@@ -290,10 +323,17 @@ async def status():
 async def chat(request: ChatRequest):
     """Chat with Codette AI"""
     try:
-        result = codette_engine.process_chat(
-            request.message,
-            request.conversation_id or "default"
-        )
+        # Use real engine if available, otherwise mock
+        if USE_REAL_ENGINE and hasattr(real_engine, 'process_chat_real'):
+            result = real_engine.process_chat_real(
+                request.message,
+                request.conversation_id or "default"
+            )
+        else:
+            result = real_engine.process_chat(
+                request.message,
+                request.conversation_id or "default"
+            )
         return ChatResponse(**result)
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -320,7 +360,11 @@ async def respond(request: ChatRequest):
 async def get_suggestions(request: SuggestionRequest):
     """Get AI suggestions for audio context"""
     try:
-        suggestions = codette_engine.generate_suggestions(request.context.dict())
+        # Use real engine if available
+        if USE_REAL_ENGINE and hasattr(real_engine, 'generate_suggestions_real'):
+            suggestions = real_engine.generate_suggestions_real(request.context.dict())
+        else:
+            suggestions = real_engine.generate_suggestions(request.context.dict())
         return SuggestionResponse(
             suggestions=[AudioSuggestion(**s) for s in suggestions],
             context=request.context.type,
@@ -337,7 +381,11 @@ async def analyze_audio(request: AnalysisRequest):
         audio_dict = request.audio_data.dict() if request.audio_data else {}
         audio_dict["analysis_type"] = request.analysis_type
         
-        analysis = codette_engine.analyze_audio(audio_dict)
+        # Use real engine if available
+        if USE_REAL_ENGINE and hasattr(real_engine, 'analyze_audio_real'):
+            analysis = real_engine.analyze_audio_real(audio_dict)
+        else:
+            analysis = real_engine.analyze_audio(audio_dict)
         return AnalysisResponse(**analysis)
     except Exception as e:
         logger.error(f"Analysis error: {e}")
@@ -351,7 +399,11 @@ async def analyze_audio(request: AnalysisRequest):
 async def sync_state(request: SyncRequest):
     """Sync DAW state with AI engine"""
     try:
-        result = codette_engine.sync_daw_state(request.dict())
+        # Use real engine if available
+        if USE_REAL_ENGINE and hasattr(real_engine, 'sync_daw_state_real'):
+            result = real_engine.sync_daw_state_real(request.dict())
+        else:
+            result = real_engine.sync_daw_state(request.dict())
         return SyncResponse(**result)
     except Exception as e:
         logger.error(f"Sync error: {e}")
