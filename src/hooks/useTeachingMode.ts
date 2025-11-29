@@ -177,7 +177,8 @@ export function useCodetteTeaching() {
       setError(null);
       try {
         // Call to Codette backend (via FastAPI)
-        const response = await fetch('http://localhost:8001/codette/teach', {
+        const apiUrl = import.meta.env.VITE_CODETTE_API || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/codette/teach`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt, context }),

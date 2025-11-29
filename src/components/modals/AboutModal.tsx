@@ -18,7 +18,8 @@ export default function AboutModal() {
   useEffect(() => {
     const checkCodette = async () => {
       try {
-        const response = await fetch('http://localhost:8001/health', {
+        const apiUrl = import.meta.env.VITE_CODETTE_API || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/health`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });

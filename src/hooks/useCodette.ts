@@ -1,7 +1,7 @@
 /**
  * useCodette Hook
  * React hook for real-time Codette AI integration with FastAPI backend
- * Connects to http://localhost:8001 for real-time analysis and suggestions
+ * Connects to http://localhost:8000 for real-time analysis and suggestions
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
