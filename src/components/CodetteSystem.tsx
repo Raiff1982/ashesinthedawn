@@ -271,8 +271,34 @@ export function CodetteSystem({ defaultTab = 'chat', compactMode = false }: Code
       case 'suggestions':
         return (
           <div className="space-y-2 h-96 overflow-y-auto">
+            {/* Genre selector */}
+            <div className="bg-gray-800 border border-gray-700 rounded p-2 mb-2">
+              <label className="text-xs text-gray-400 block mb-1">Genre:</label>
+              <select
+                value={selectedGenre}
+                onChange={(e) => {
+                  setSelectedGenre(e.target.value);
+                  // Reload suggestions with new genre
+                  getSuggestionsForCurrentState().then((result) => {
+                    setSuggestions(Array.isArray(result) ? result : []);
+                  });
+                }}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Select Genre...</option>
+                {availableGenres.map((genre) => (
+                  <option key={genre.id} value={genre.id}>
+                    {genre.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Suggestions list */}
             {suggestions.length === 0 ? (
-              <div className="text-gray-400 text-xs text-center py-8">No suggestions available</div>
+              <div className="text-gray-400 text-xs text-center py-8">
+                {selectedGenre ? `No suggestions for ${selectedGenre}` : 'No suggestions available'}
+              </div>
             ) : (
               suggestions.map((suggestion, idx) => (
                 <div

@@ -729,7 +729,7 @@ async def process_request(request: ProcessRequest):
 
 @app.websocket("/ws")
 async def websocket_general(websocket: WebSocket):
-    """General WebSocket endpoint"""
+    """General WebSocket endpoint with analysis streaming support"""
     try:
         await websocket.accept()
     except Exception as e:
@@ -738,6 +738,12 @@ async def websocket_general(websocket: WebSocket):
     
     transport_manager.connected_clients.add(websocket)
     logger.info(f"WebSocket connected to /ws. Clients: {len(transport_manager.connected_clients)}")
+    
+    # Track streaming state
+    streaming_analysis = False
+    analysis_type = "spectrum"
+    stream_interval = 0.1  # 100ms default
+    last_analysis_send = time.time()
     
     try:
         last_send = time.time()
@@ -784,6 +790,15 @@ async def websocket_general(websocket: WebSocket):
                                 message.get("start_seconds", 0),
                                 message.get("end_seconds", 10)
                             )
+                        # NEW: Handle analysis streaming
+                        elif message.get("type") == "analyze_stream":
+                            streaming_analysis = True
+                            analysis_type = message.get("analysis_type", "spectrum")
+                            stream_interval = message.get("interval_ms", 100) / 1000.0
+                            logger.info(f"Started analysis streaming: {analysis_type} (interval: {stream_interval}s)")
+                        elif message.get("type") == "stop_stream":
+                            streaming_analysis = False
+                            logger.info("Stopped analysis streaming")
                     except json.JSONDecodeError:
                         pass
                     
@@ -806,6 +821,30 @@ async def websocket_general(websocket: WebSocket):
                     except Exception as e:
                         logger.error(f"Unexpected error in /ws loop: {e}")
                         break
+                
+                # Send streaming analysis data if enabled
+                if streaming_analysis and (current_time - last_analysis_send >= stream_interval):
+                    try:
+                        # Generate mock analysis data
+                        analysis_data = {
+                            "type": "analysis_update",
+                            "analysis_type": analysis_type,
+                            "timestamp": datetime.now().isoformat(),
+                            "payload": {
+                                "peak_level": np.random.uniform(-20, -3) if NUMPY_AVAILABLE else -10,
+                                "rms_level": np.random.uniform(-30, -15) if NUMPY_AVAILABLE else -20,
+                                "frequency_balance": {
+                                    "low": np.random.uniform(-12, 6) if NUMPY_AVAILABLE else 0,
+                                    "mid": np.random.uniform(-12, 6) if NUMPY_AVAILABLE else 0,
+                                    "high": np.random.uniform(-12, 6) if NUMPY_AVAILABLE else 0,
+                                },
+                                "quality_score": np.random.uniform(0.6, 1.0) if NUMPY_AVAILABLE else 0.8,
+                            }
+                        }
+                        await websocket.send_json(analysis_data)
+                        last_analysis_send = current_time
+                    except Exception as e:
+                        logger.error(f"Error sending analysis data: {e}")
                 
                 # Small sleep
                 await asyncio.sleep(0.001)
