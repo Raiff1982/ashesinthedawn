@@ -1109,6 +1109,131 @@ async def get_status():
     }
 
 # ============================================================================
+# DSP EFFECTS ENDPOINTS
+# ============================================================================
+
+# Try to import DSP effects
+try:
+    from daw_core.fx.eq_and_dynamics import EQ3Band, HighLowPass, Compressor, Limiter, Expander, Gate
+    from daw_core.fx.saturation_distortion import Saturation, HardClip, Distortion, WaveShaper
+    from daw_core.fx.delay_effects import SimpleDelay, PingPongDelay, MultiTap, StereoDelay
+    from daw_core.fx.reverb_algorithms import Freeverb, HallReverb, PlateReverb, RoomReverb
+    from daw_core.fx.modulation_and_utility import Chorus, Flanger, Tremolo, Gain, WidthControl, DynamicEQ
+    DSP_EFFECTS_AVAILABLE = True
+except ImportError as e:
+    DSP_EFFECTS_AVAILABLE = False
+    logger.warning(f"[WARNING] DSP effects not available: {e}")
+
+
+EFFECTS_REGISTRY = {
+    "eq_3band": {"class": EQ3Band, "name": "3-Band EQ", "category": "eq"},
+    "compressor": {"class": Compressor, "name": "Compressor", "category": "dynamics"},
+    "reverb_plate": {"class": PlateReverb, "name": "Plate Reverb", "category": "reverb"},
+    "chorus": {"class": Chorus, "name": "Chorus", "category": "modulation"},
+    "delay": {"class": SimpleDelay, "name": "Simple Delay", "category": "delay"},
+    "gain": {"class": Gain, "name": "Gain", "category": "utility"},
+}
+
+
+@app.get("/daw/effects/list")
+async def list_effects():
+    """Get list of all available DSP effects"""
+    try:
+        if not DSP_EFFECTS_AVAILABLE:
+            return {"effects": [], "status": "dsp_unavailable"}
+
+        effects_list = []
+        for effect_id, effect_config in EFFECTS_REGISTRY.items():
+            effects_list.append({
+                "id": effect_id,
+                "name": effect_config["name"],
+                "category": effect_config["category"],
+                "parameters": {}
+            })
+        
+        logger.info(f"[DSP Effects] Listed {len(effects_list)} effects")
+        return {"effects": effects_list, "count": len(effects_list), "status": "success"}
+    except Exception as e:
+        logger.error(f"[DSP Effects] Error listing effects: {e}", exc_info=True)
+        return {"effects": [], "status": "error", "error": str(e)}
+
+
+@app.get("/daw/effects/{effect_id}")
+async def get_effect_info(effect_id: str):
+    """Get detailed information about a specific effect"""
+    try:
+        if effect_id not in EFFECTS_REGISTRY:
+            return {"status": "not_found", "error": f"Effect '{effect_id}' not found"}
+
+        effect_config = EFFECTS_REGISTRY[effect_id]
+        return {
+            "id": effect_id,
+            "name": effect_config["name"],
+            "category": effect_config["category"],
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"[DSP Effects] Error getting effect info: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/daw/effects/process")
+async def process_audio(request_data: dict):
+    """Process audio through a specific effect"""
+    try:
+        if not DSP_EFFECTS_AVAILABLE:
+            return {"success": False, "error": "DSP effects not available", "audioData": request_data.get("audioData", [])}
+
+        effect_type = request_data.get("effectType", "")
+        if effect_type not in EFFECTS_REGISTRY:
+            return {"success": False, "error": f"Effect '{effect_type}' not found", "audioData": request_data.get("audioData", [])}
+
+        audio_data = request_data.get("audioData", [])
+        parameters = request_data.get("parameters", {})
+
+        # Convert to numpy array
+        audio_array = np.array(audio_data, dtype=np.float32)
+        
+        # Get effect class and instantiate
+        effect_class = EFFECTS_REGISTRY[effect_type]["class"]
+        effect = effect_class(effect_type)
+
+        # Apply parameters if they have setter methods
+        for param_id, param_value in parameters.items():
+            method_name = f"set_{param_id}"
+            if hasattr(effect, method_name):
+                try:
+                    getattr(effect, method_name)(param_value)
+                except Exception as e:
+                    logger.warning(f"[DSP Effects] Failed to set parameter {param_id}: {e}")
+
+        # Process audio
+        import time
+        start_time = time.time()
+        processed = effect.process(audio_array)
+        processing_time = (time.time() - start_time) * 1000
+
+        # Convert back to list
+        processed_list = processed.tolist() if hasattr(processed, 'tolist') else list(processed)
+
+        logger.info(f"[DSP Effects] Processed {len(audio_data)} samples through {effect_type} in {processing_time:.2f}ms")
+        
+        return {
+            "audioData": processed_list,
+            "success": True,
+            "processingTime": processing_time
+        }
+    except Exception as e:
+        logger.error(f"[DSP Effects] Error processing audio: {e}", exc_info=True)
+        return {
+            "audioData": request_data.get("audioData", []),
+            "success": False,
+            "error": str(e),
+            "processingTime": 0
+        }
+
+
+# ============================================================================
 # GENRE TEMPLATES ENDPOINTS
 # ============================================================================
 
