@@ -427,13 +427,37 @@ export function registerViewActions() {
 }
 
 /**
+ * Import extended action modules
+ */
+import registerTransportActionsExtended from './transportActionsExtended';
+import registerTrackActionsExtended from './trackActionsExtended';
+import registerItemEditActionsExtended from './itemEditActionsExtended';
+import registerMixerActionsExtended from './mixerActionsExtended';
+import registerMIDIActionsExtended from './midiActionsExtended';
+
+/**
  * Main initialization function
  * Called once on app startup
+ * Registers all REAPER-compatible actions across all categories
  */
 export function initializeActions() {
+  // Register all action categories
   registerTransportActions();
   registerTrackActions();
   registerEditActions();
   registerViewActions();
-  console.log(`✅ Registered ${actionRegistry.getAllActions().length} actions`);
+  
+  // Register extended action sets
+  registerTransportActionsExtended();
+  registerTrackActionsExtended();
+  registerItemEditActionsExtended();
+  registerMixerActionsExtended();
+  registerMIDIActionsExtended();
+  
+  const totalActions = actionRegistry.getAllActions().length;
+  console.log(`✅ Registered ${totalActions} REAPER-compatible actions`);
+  
+  // Log action summary
+  const categories = new Set(actionRegistry.getAllActions().map(a => a.category));
+  console.log(`📊 Categories: ${Array.from(categories).join(', ')}`);
 }
