@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Settings, Music, Plus, Grid, Zap, Lightbulb } from 'lucide-react';
+import { Settings, Music, Plus, Grid, Zap, Lightbulb, Music2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import AudioMonitor from './AudioMonitor';
 import TrackDetailsPanel from './TrackDetailsPanel';
 import MIDISettings from './MIDISettings';
+import MIDIEditor from './MIDIEditor';
 import MarkerPanel from './MarkerPanel';
 import {
   LazyRoutingMatrixWrapper,
@@ -12,7 +13,7 @@ import {
   LazyCodetteSystemWrapper,
 } from './LazyComponents';
 
-type SidebarTab = 'files' | 'track' | 'routing' | 'plugins' | 'midi' | 'spectrum' | 'markers' | 'monitor' | 'codette';
+type SidebarTab = 'files' | 'track' | 'routing' | 'plugins' | 'midi' | 'midi-editor' | 'spectrum' | 'markers' | 'monitor' | 'codette';
 
 export default function EnhancedSidebar() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('codette');
@@ -24,6 +25,7 @@ export default function EnhancedSidebar() {
     { id: 'routing', label: 'Routing', icon: <Grid className="w-4 h-4" /> },
     { id: 'plugins', label: 'Plugins', icon: <Zap className="w-4 h-4" /> },
     { id: 'midi', label: 'MIDI', icon: <Music className="w-4 h-4" /> },
+    { id: 'midi-editor', label: 'Editor', icon: <Music2 className="w-4 h-4" /> },
     { id: 'spectrum', label: 'Analysis', icon: <Grid className="w-4 h-4" /> },
     { id: 'markers', label: 'Markers', icon: <Plus className="w-4 h-4" /> },
     { id: 'monitor', label: 'Monitor', icon: <Settings className="w-4 h-4" /> },
@@ -58,6 +60,7 @@ export default function EnhancedSidebar() {
         {activeTab === 'routing' && <LazyRoutingMatrixWrapper />}
         {activeTab === 'plugins' && <LazyPluginBrowserWrapper />}
         {activeTab === 'midi' && <MIDISettings />}
+        {activeTab === 'midi-editor' && <MIDIEditor isVisible={true} />}
         {activeTab === 'spectrum' && <LazySpectrumVisualizerPanelWrapper />}
         {activeTab === 'markers' && <MarkerPanel />}
         {activeTab === 'monitor' && <AudioMonitor />}

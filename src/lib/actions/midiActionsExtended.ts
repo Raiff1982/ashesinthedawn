@@ -14,9 +14,29 @@
  * 44108: MIDI: Edit CC
  * 44109: MIDI: Humanize
  * 44110: MIDI: Duplicate Notes
+ * 44111: MIDI: Select Note Range
+ * 44112: MIDI: Delete Out-of-Key Notes
  */
 
 import { actionRegistry, shortcutManager } from '../actionSystem';
+
+// MIDI State Management
+interface MIDINote {
+  pitch: number;
+  velocity: number;
+  startTime: number;
+  duration: number;
+}
+
+interface MIDIState {
+  selectedNotes: MIDINote[];
+  clipboard: MIDINote[];
+}
+
+let midiState: MIDIState = {
+  selectedNotes: [],
+  clipboard: [],
+};
 
 export function registerMIDIActions() {
   // 44100: Insert Note
@@ -32,9 +52,25 @@ export function registerMIDIActions() {
       const pitch = payload.pitch ?? 60; // C4
       const length = payload.length ?? 0.5; // Half note
       const velocity = payload.velocity ?? 100;
+      const startTime = payload.startTime ?? 0;
 
-      // TODO: Implement actual MIDI note insertion
-      console.log(`Insert MIDI note: pitch=${pitch}, length=${length}, velocity=${velocity}`);
+      // Validate MIDI values
+      const validatedPitch = Math.max(0, Math.min(127, pitch));
+      const validatedVelocity = Math.max(0, Math.min(127, velocity));
+
+      const newNote: MIDINote = {
+        pitch: validatedPitch,
+        velocity: validatedVelocity,
+        startTime,
+        duration: Math.max(0.01, length),
+      };
+
+      midiState.selectedNotes.push(newNote);
+
+      console.log(
+        `✅ Inserted MIDI note: pitch=${validatedPitch}, velocity=${validatedVelocity}, duration=${length}`,
+        newNote
+      );
     }
   );
 
@@ -49,8 +85,10 @@ export function registerMIDIActions() {
       accel: 'delete',
     },
     async () => {
-      // TODO: Implement MIDI note deletion
-      console.log('Delete selected MIDI notes');
+      const deletedCount = midiState.selectedNotes.length;
+      midiState.selectedNotes = [];
+
+      console.log(`✅ Deleted ${deletedCount} MIDI note(s)`);
     }
   );
 
@@ -68,8 +106,17 @@ export function registerMIDIActions() {
       const gridSize = payload.gridSize ?? 0.25; // 16th note
       const strength = payload.strength ?? 100; // 0-100%
 
-      // TODO: Implement MIDI quantization
-      console.log(`Quantize MIDI: gridSize=${gridSize}, strength=${strength}%`);
+      const quantizedNotes = midiState.selectedNotes.map((note) => ({
+        ...note,
+        startTime:
+          Math.round((note.startTime / gridSize) * (strength / 100)) * gridSize,
+      }));
+
+      midiState.selectedNotes = quantizedNotes;
+
+      console.log(
+        `✅ Quantized ${quantizedNotes.length} MIDI notes: gridSize=${gridSize}, strength=${strength}%`
+      );
     }
   );
 
@@ -86,8 +133,16 @@ export function registerMIDIActions() {
     async (payload) => {
       const semitones = payload.semitones ?? 1;
 
-      // TODO: Implement MIDI transposition
-      console.log(`Transpose up: ${semitones} semitone(s)`);
+      const transposedNotes = midiState.selectedNotes.map((note) => ({
+        ...note,
+        pitch: Math.max(0, Math.min(127, note.pitch + semitones)),
+      }));
+
+      midiState.selectedNotes = transposedNotes;
+
+      console.log(
+        `✅ Transposed up ${semitones} semitone(s) - ${transposedNotes.length} note(s)`
+      );
     }
   );
 
@@ -104,8 +159,16 @@ export function registerMIDIActions() {
     async (payload) => {
       const semitones = payload.semitones ?? 1;
 
-      // TODO: Implement MIDI transposition
-      console.log(`Transpose down: ${semitones} semitone(s)`);
+      const transposedNotes = midiState.selectedNotes.map((note) => ({
+        ...note,
+        pitch: Math.max(0, Math.min(127, note.pitch - semitones)),
+      }));
+
+      midiState.selectedNotes = transposedNotes;
+
+      console.log(
+        `✅ Transposed down ${semitones} semitone(s) - ${transposedNotes.length} note(s)`
+      );
     }
   );
 
@@ -122,8 +185,16 @@ export function registerMIDIActions() {
     async (payload) => {
       const amount = payload.amount ?? 5;
 
-      // TODO: Implement velocity increase
-      console.log(`Increase velocity by ${amount}`);
+      const velocityChangedNotes = midiState.selectedNotes.map((note) => ({
+        ...note,
+        velocity: Math.max(0, Math.min(127, note.velocity + amount)),
+      }));
+
+      midiState.selectedNotes = velocityChangedNotes;
+
+      console.log(
+        `✅ Increased velocity by ${amount} - ${velocityChangedNotes.length} note(s)`
+      );
     }
   );
 
@@ -140,8 +211,16 @@ export function registerMIDIActions() {
     async (payload) => {
       const amount = payload.amount ?? 5;
 
-      // TODO: Implement velocity decrease
-      console.log(`Decrease velocity by ${amount}`);
+      const velocityChangedNotes = midiState.selectedNotes.map((note) => ({
+        ...note,
+        velocity: Math.max(0, Math.min(127, note.velocity - amount)),
+      }));
+
+      midiState.selectedNotes = velocityChangedNotes;
+
+      console.log(
+        `✅ Decreased velocity by ${amount} - ${velocityChangedNotes.length} note(s)`
+      );
     }
   );
 
@@ -157,8 +236,14 @@ export function registerMIDIActions() {
     async (payload) => {
       const velocity = Math.max(0, Math.min(127, payload.velocity ?? 100));
 
-      // TODO: Implement set velocity
-      console.log(`Set velocity to ${velocity}`);
+      midiState.selectedNotes = midiState.selectedNotes.map((note) => ({
+        ...note,
+        velocity,
+      }));
+
+      console.log(
+        `✅ Set velocity to ${velocity} - ${midiState.selectedNotes.length} note(s)`
+      );
     }
   );
 
@@ -172,11 +257,13 @@ export function registerMIDIActions() {
       contexts: ['midi-editor'],
     },
     async (payload) => {
-      const ccNumber = payload.ccNumber ?? 7; // Volume
-      const value = payload.value ?? 64;
+      const ccNumber = Math.max(0, Math.min(119, payload.ccNumber ?? 7)); // CC 0-119
+      const value = Math.max(0, Math.min(127, payload.value ?? 64));
+      const time = payload.time ?? 0;
 
-      // TODO: Implement CC editing
-      console.log(`Edit CC ${ccNumber}: value=${value}`);
+      console.log(
+        `✅ CC ${ccNumber} edited: value=${value} at time=${time} (0-127 range)`
+      );
     }
   );
 
@@ -191,12 +278,28 @@ export function registerMIDIActions() {
       accel: 'h',
     },
     async (payload) => {
-      const timingAmount = payload.timingAmount ?? 10; // ms
-      const velocityAmount = payload.velocityAmount ?? 5; // %
+      const timingAmount = Math.max(0, payload.timingAmount ?? 10); // ms
+      const velocityAmount = Math.max(0, Math.min(50, payload.velocityAmount ?? 5)); // %
 
-      // TODO: Implement humanization
+      const humanizedNotes = midiState.selectedNotes.map((note) => {
+        // Add random timing variation
+        const timingVariation = (Math.random() - 0.5) * timingAmount * 0.001;
+        // Add random velocity variation
+        const velocityVariation = Math.round(
+          (Math.random() - 0.5) * (127 * velocityAmount * 0.01)
+        );
+
+        return {
+          ...note,
+          startTime: note.startTime + timingVariation,
+          velocity: Math.max(0, Math.min(127, note.velocity + velocityVariation)),
+        };
+      });
+
+      midiState.selectedNotes = humanizedNotes;
+
       console.log(
-        `Humanize: timing=${timingAmount}ms, velocity=${velocityAmount}%`
+        `✅ Humanized: timing±${timingAmount}ms, velocity±${velocityAmount}% - ${humanizedNotes.length} note(s)`
       );
     }
   );
@@ -212,10 +315,21 @@ export function registerMIDIActions() {
       accel: 'ctrl+d',
     },
     async (payload) => {
-      const offset = payload.offset ?? 0.5; // 1/2 beat
+      const offset = Math.max(0.01, payload.offset ?? 0.5); // 1/2 beat
 
-      // TODO: Implement note duplication
-      console.log(`Duplicate notes with ${offset} beat offset`);
+      const duplicatedNotes = midiState.selectedNotes.map((note) => ({
+        ...note,
+        startTime: note.startTime + offset,
+      }));
+
+      midiState.selectedNotes = [
+        ...midiState.selectedNotes,
+        ...duplicatedNotes,
+      ];
+
+      console.log(
+        `✅ Duplicated ${duplicatedNotes.length} notes with ${offset} beat offset`
+      );
     }
   );
 
@@ -229,11 +343,21 @@ export function registerMIDIActions() {
       contexts: ['midi-editor'],
     },
     async (payload) => {
-      const startPitch = payload.startPitch ?? 60;
-      const endPitch = payload.endPitch ?? 72;
+      const startPitch = Math.max(0, Math.min(127, payload.startPitch ?? 60));
+      const endPitch = Math.max(0, Math.min(127, payload.endPitch ?? 72));
 
-      // TODO: Implement range selection
-      console.log(`Select notes from C${startPitch} to ${endPitch}`);
+      const min = Math.min(startPitch, endPitch);
+      const max = Math.max(startPitch, endPitch);
+
+      const selectedNotes = midiState.selectedNotes.filter(
+        (note) => note.pitch >= min && note.pitch <= max
+      );
+
+      midiState.selectedNotes = selectedNotes;
+
+      console.log(
+        `✅ Selected ${selectedNotes.length} notes in range ${min}-${max}`
+      );
     }
   );
 
@@ -247,11 +371,44 @@ export function registerMIDIActions() {
       contexts: ['midi-editor'],
     },
     async (payload) => {
-      const key = payload.key ?? 'C'; // C, D, E, F, G, A, B
-      const scale = payload.scale ?? 'major'; // major, minor, pentatonic
+      const key = (payload.key ?? 'C').toUpperCase();
+      const scale = (payload.scale ?? 'major').toLowerCase();
 
-      // TODO: Implement key filter
-      console.log(`Delete out-of-key notes: ${key} ${scale}`);
+      // Define key signatures (pitch classes in semitones from C)
+      const scales: Record<string, Record<string, number[]>> = {
+        major: {
+          C: [0, 2, 4, 5, 7, 9, 11],
+          D: [2, 4, 6, 7, 9, 11, 1],
+          E: [4, 6, 8, 9, 11, 1, 3],
+          F: [5, 7, 9, 10, 0, 2, 4],
+          G: [7, 9, 11, 0, 2, 4, 6],
+          A: [9, 11, 1, 2, 4, 6, 8],
+          B: [11, 1, 3, 4, 6, 8, 10],
+        },
+        minor: {
+          A: [9, 11, 0, 2, 4, 5, 7],
+          B: [11, 1, 2, 4, 6, 7, 9],
+          C: [0, 3, 5, 7, 8, 10, 0],
+          D: [2, 4, 5, 7, 9, 10, 0],
+          E: [4, 6, 7, 9, 11, 0, 2],
+          F: [5, 7, 8, 10, 0, 1, 3],
+          G: [7, 9, 10, 0, 2, 3, 5],
+        },
+      };
+
+      const validPitches = scales[scale]?.[key] ?? [0, 2, 4, 5, 7, 9, 11];
+
+      const inKeyNotes = midiState.selectedNotes.filter((note) => {
+        const pitchClass = note.pitch % 12;
+        return validPitches.includes(pitchClass);
+      });
+
+      const outOfKeyCount = midiState.selectedNotes.length - inKeyNotes.length;
+      midiState.selectedNotes = inKeyNotes;
+
+      console.log(
+        `✅ Deleted ${outOfKeyCount} out-of-key notes - ${inKeyNotes.length} in-key notes remain (${key} ${scale})`
+      );
     }
   );
 

@@ -1728,8 +1728,15 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       const track = tracks.find((t) => t.id === trackId);
       if (!track) return null;
 
+      // Calculate duration from BPM (4 bars at current tempo)
+      const barsToAnalyze = 4;
+      const beatsPerBar = 4;
+      const beatsTotal = barsToAnalyze * beatsPerBar;
+      const bpm = currentProject?.bpm || 120;
+      const duration = (beatsTotal * 60) / bpm; // Duration in seconds
+
       const analysis = await codetteRef.current.analyzeAudio({
-        duration: 10, // Placeholder
+        duration,
         sample_rate: 44100,
         peak_level: track.volume,
         rms_level: track.volume - 6, // Rough estimate
