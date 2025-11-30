@@ -101,7 +101,7 @@ export function CodetteAnalysisPanel({
       {/* Analysis Results */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {analysis && (
-          <div className="p-3 bg-gray-800 border border-gray-700 rounded space-y-3 mr-2">
+          <div className="w-full min-w-0 p-3 bg-gray-800 border border-gray-700 rounded space-y-3 mr-2">
             {/* Quality Score */}
             {analysis.quality_score !== undefined && (
               <div>
