@@ -8,10 +8,35 @@ import Timeline from './components/Timeline';
 import Mixer from './components/Mixer';
 import EnhancedSidebar from './components/EnhancedSidebar';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
+import CommandPalette from './components/CommandPalette';
+import { initializeActions } from './lib/actions/initializeActions';
 
 function AppContent() {
   const [mixerHeight, setMixerHeight] = React.useState(200);
   const [isResizingMixer, setIsResizingMixer] = React.useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+
+  // Initialize action system on mount
+  React.useEffect(() => {
+    initializeActions();
+  }, []);
+
+  // Global keyboard shortcuts
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Command Palette: Ctrl+Shift+P or Ctrl+/
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'p') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   React.useEffect(() => {
     if (!isResizingMixer) return;
@@ -82,6 +107,10 @@ function AppContent() {
 
       {/* Global Modals */}
       <AudioSettingsModal />
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+      />
     </div>
   );
 }

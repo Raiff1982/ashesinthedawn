@@ -20,6 +20,7 @@ import {
 } from "../types";
 import { getAudioEngine } from "../lib/audioEngine";
 import { getCodetteBridge, CodetteSuggestion } from "../lib/codetteBridge";
+import { setDAWContext } from "../lib/actions/initializeActions";
 import { supabase } from "../lib/supabase";
 import {
   saveProjectToStorage,
@@ -234,6 +235,12 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       codetteRef.current = null;
     }
   }, []);
+
+  // Initialize action system (REAPER-like command palette)
+  useEffect(() => {
+    // This effect body will be filled once the context is created below
+  }, []);
+  
   // Phase 3: New state
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [loopRegion, setLoopRegion] = useState<LoopRegion>({
@@ -1766,9 +1773,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     return codetteRef.current.getState();
   };
 
-  return (
-    <DAWContext.Provider
-      value={{
+  // Create context value object
+  const contextValue = {
         currentProject,
         tracks,
         selectedTrack,
@@ -1907,8 +1913,24 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         selectAllTracks,
         deselectAllTracks,
         selectedTracks,
-      }}
-    >
+      };
+
+  // Initialize action system with DAW context
+  useEffect(() => {
+    setDAWContext(contextValue);
+  }, [
+    togglePlay,
+    addTrack,
+    deleteTrack,
+    updateTrack,
+    seek,
+    selectedTrack,
+    isPlaying,
+    currentTime,
+  ]);
+
+  return (
+    <DAWContext.Provider value={contextValue}>
       {children}
     </DAWContext.Provider>
   );
