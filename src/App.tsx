@@ -7,11 +7,14 @@ import TrackList from './components/TrackList';
 import Timeline from './components/Timeline';
 import Mixer from './components/Mixer';
 import EnhancedSidebar from './components/EnhancedSidebar';
+import FileSystemBrowser from './components/FileSystemBrowser';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
 
 function AppContent() {
   const [mixerHeight, setMixerHeight] = React.useState(200);
   const [isResizingMixer, setIsResizingMixer] = React.useState(false);
+  const [fileBrowserHeight, setFileBrowserHeight] = React.useState(150);
+  const [isResizingFileBrowser, setIsResizingFileBrowser] = React.useState(false);
 
   React.useEffect(() => {
     if (!isResizingMixer) return;
@@ -36,6 +39,29 @@ function AppContent() {
     };
   }, [isResizingMixer]);
 
+  React.useEffect(() => {
+    if (!isResizingFileBrowser) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const container = document.getElementById('file-browser-container');
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      const newHeight = Math.max(80, Math.min(400, containerRect.bottom - e.clientY));
+      setFileBrowserHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingFileBrowser(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingFileBrowser]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-950 overflow-hidden">
       <div className="h-8 flex-shrink-0">
@@ -46,37 +72,57 @@ function AppContent() {
         <TopBar />
       </div>
 
-      <div className="flex-1 flex overflow-hidden gap-0 min-h-0 min-w-0">
-        <div className="w-52 bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden text-xs">
-          <TrackList />
-        </div>
-
-        <div className="flex-1 flex flex-col overflow-hidden bg-gray-950">
-          <div className="flex-1 overflow-auto">
-            <Timeline />
+      <div className="flex-1 flex overflow-hidden gap-0 min-h-0 min-w-0 flex-col">
+        {/* Main Content Area (Tracks + Timeline + Mixer) */}
+        <div className="flex-1 flex overflow-hidden gap-0 min-h-0 min-w-0">
+          <div className="w-52 bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden text-xs">
+            <TrackList />
           </div>
 
-          <div
-            onMouseDown={() => setIsResizingMixer(true)}
-            className="h-1 bg-gradient-to-r from-gray-700 via-blue-600 to-gray-700 hover:from-gray-600 hover:via-blue-500 hover:to-gray-600 cursor-ns-resize transition-colors group flex items-center justify-center"
-            title="Drag to resize mixer"
-          >
-            <div className="w-12 h-0.5 bg-blue-400/50 rounded group-hover:bg-blue-300 transition-colors" />
-          </div>
+          <div className="flex-1 flex flex-col overflow-hidden bg-gray-950">
+            <div className="flex-1 overflow-auto">
+              <Timeline />
+            </div>
 
-          <div
-            id="mixer-container"
-            className="border-t border-gray-700 bg-gray-900 flex-shrink-0 overflow-hidden flex flex-col transition-all"
-            style={{ height: `${mixerHeight}px` }}
-          >
-            <div className="w-full h-full flex flex-col overflow-hidden">
-              <Mixer />
+            <div
+              onMouseDown={() => setIsResizingMixer(true)}
+              className="h-1 bg-gradient-to-r from-gray-700 via-blue-600 to-gray-700 hover:from-gray-600 hover:via-blue-500 hover:to-gray-600 cursor-ns-resize transition-colors group flex items-center justify-center"
+              title="Drag to resize mixer"
+            >
+              <div className="w-12 h-0.5 bg-blue-400/50 rounded group-hover:bg-blue-300 transition-colors" />
+            </div>
+
+            <div
+              id="mixer-container"
+              className="border-t border-gray-700 bg-gray-900 flex-shrink-0 overflow-hidden flex flex-col transition-all"
+              style={{ height: `${mixerHeight}px` }}
+            >
+              <div className="w-full h-full flex flex-col overflow-hidden">
+                <Mixer />
+              </div>
             </div>
           </div>
+
+          <div className="w-64 bg-gray-900 border-l border-gray-700 flex flex-col overflow-hidden text-xs">
+            <EnhancedSidebar />
+          </div>
         </div>
 
-        <div className="w-64 bg-gray-900 border-l border-gray-700 flex flex-col overflow-hidden text-xs">
-          <EnhancedSidebar />
+        {/* File Browser Panel (Bottom) - Like REAPER */}
+        <div
+          onMouseDown={() => setIsResizingFileBrowser(true)}
+          className="h-1 bg-gradient-to-r from-gray-700 via-yellow-600 to-gray-700 hover:from-gray-600 hover:via-yellow-500 hover:to-gray-600 cursor-ns-resize transition-colors group flex items-center justify-center"
+          title="Drag to resize file browser"
+        >
+          <div className="w-12 h-0.5 bg-yellow-400/50 rounded group-hover:bg-yellow-300 transition-colors" />
+        </div>
+
+        <div
+          id="file-browser-container"
+          className="border-t border-gray-700 bg-gray-900 flex-shrink-0 overflow-hidden flex flex-col transition-all"
+          style={{ height: `${fileBrowserHeight}px` }}
+        >
+          <FileSystemBrowser />
         </div>
       </div>
 
