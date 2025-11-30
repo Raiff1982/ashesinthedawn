@@ -151,11 +151,11 @@ export function CodetteSuggestionsPanel(props: CodetteSuggestionsPanelProps) {
   return (
     <div className="flex flex-col gap-3 w-full h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between flex-shrink-0">
-        <h3 className="text-sm font-semibold text-gray-100">
+      <div className="flex items-center justify-between flex-shrink-0 w-full min-w-0">
+        <h3 className="text-sm font-semibold text-gray-100 truncate">
           💡 Codette Suggestions
         </h3>
-        {loading && <div className="animate-spin text-xs text-blue-400">⟳</div>}
+        {loading && <div className="animate-spin text-xs text-blue-400 flex-shrink-0">⟳</div>}
       </div>
 
       {/* Error */}

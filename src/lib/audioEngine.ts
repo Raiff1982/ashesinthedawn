@@ -540,6 +540,15 @@ export class AudioEngine {
           console.debug(`Delay plugin inserted for track ${trackId}`);
           break;
         }
+        case "saturation": {
+          // Saturation implemented via waveshaper
+          const saturationGain = this.audioContext!.createGain();
+          saturationGain.gain.value = 1.5; // Boost signal before saturation
+          currentNode.connect(saturationGain);
+          currentNode = saturationGain;
+          console.debug(`Saturation plugin inserted for track ${trackId}`);
+          break;
+        }
         case "reverb": {
           // Reverb implemented with delay + feedback (simplified)
           const reverbGain = this.audioContext!.createGain();

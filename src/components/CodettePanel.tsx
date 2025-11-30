@@ -115,17 +115,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white text-xs">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-3 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4" />
-          <h3 className="font-semibold">Codette AI Assistant</h3>
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-3 flex items-center justify-between flex-shrink-0 w-full min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Zap className="w-4 h-4 flex-shrink-0" />
+          <h3 className="font-semibold truncate">Codette AI Assistant</h3>
           <div
-            className={`w-2 h-2 rounded-full ${
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${
               isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
             }`}
           />
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => setExpanded(!expanded)}
             className="p-1 hover:bg-white/20 rounded transition-colors"

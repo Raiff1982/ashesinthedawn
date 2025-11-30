@@ -76,6 +76,7 @@ interface DAWContextType {
   uploadAudioFile: (file: File) => Promise<boolean>;
   getWaveformData: (trackId: string) => number[];
   getAudioDuration: (trackId: string) => number;
+  getAudioLevels: () => Uint8Array | null;
   seek: (timeSeconds: number) => void;
   setTrackInputGain: (trackId: string, gainDb: number) => void;
   addPluginToTrack: (trackId: string, plugin: Plugin) => void;
@@ -832,6 +833,26 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         prev ? { ...prev, inserts: [...prev.inserts, plugin] } : null
       );
     }
+    // Auto-restart playback if playing to apply new plugin
+    if (isPlaying) {
+      audioEngineRef.current.stopAllAudio();
+      setTimeout(() => {
+        tracks.forEach((track) => {
+          if (
+            !track.muted &&
+            (track.type === "audio" || track.type === "instrument")
+          ) {
+            audioEngineRef.current.playAudio(
+              track.id,
+              currentTime,
+              track.volume,
+              track.pan,
+              track.id === trackId ? [...track.inserts, plugin] : track.inserts
+            );
+          }
+        });
+      }, 50);
+    }
   };
 
   // Remove a plugin from a track's insert chain
@@ -850,6 +871,29 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
           ? { ...prev, inserts: prev.inserts.filter((p) => p.id !== pluginId) }
           : null
       );
+    }
+    // Auto-restart playback if playing to apply plugin removal
+    if (isPlaying) {
+      audioEngineRef.current.stopAllAudio();
+      setTimeout(() => {
+        tracks.forEach((track) => {
+          if (
+            !track.muted &&
+            (track.type === "audio" || track.type === "instrument")
+          ) {
+            const newInserts = track.id === trackId
+              ? track.inserts.filter((p) => p.id !== pluginId)
+              : track.inserts;
+            audioEngineRef.current.playAudio(
+              track.id,
+              currentTime,
+              track.volume,
+              track.pan,
+              newInserts
+            );
+          }
+        });
+      }, 50);
     }
   };
 
@@ -883,6 +927,31 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
             }
           : null
       );
+    }
+    // Auto-restart playback if playing to apply plugin enable/disable change
+    if (isPlaying) {
+      audioEngineRef.current.stopAllAudio();
+      setTimeout(() => {
+        tracks.forEach((track) => {
+          if (
+            !track.muted &&
+            (track.type === "audio" || track.type === "instrument")
+          ) {
+            const newInserts = track.id === trackId
+              ? track.inserts.map((p) =>
+                  p.id === pluginId ? { ...p, enabled } : p
+                )
+              : track.inserts;
+            audioEngineRef.current.playAudio(
+              track.id,
+              currentTime,
+              track.volume,
+              track.pan,
+              newInserts
+            );
+          }
+        });
+      }, 50);
     }
   };
 
@@ -1099,6 +1168,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 
   const getAudioDuration = (trackId: string): number => {
     return audioEngineRef.current.getAudioDuration(trackId);
+  };
+
+  const getAudioLevels = (): Uint8Array | null => {
+    return audioEngineRef.current.getAudioLevels();
   };
 
   const toggleVoiceControl = () => {
@@ -1725,6 +1798,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         uploadAudioFile,
         getWaveformData,
         getAudioDuration,
+        getAudioLevels,
         seek,
         setTrackInputGain,
         addPluginToTrack,
