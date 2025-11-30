@@ -28,17 +28,9 @@ export default function AIPanel() {
   const [activeTab, setActiveTab] = useState<'health' | 'mixing' | 'routing' | 'full'>('health');
 
   useEffect(() => {
-    // Initial connection check
-    checkBackendConnection();
-
-    // Check backend connection periodically (reduced from 5s to 30s to prevent blocking)
-    const healthCheckInterval = setInterval(() => {
-      checkBackendConnection().catch(err => {
-        console.debug('[AIPanel] Health check failed:', err);
-      });
-    }, 30000);
-
-    return () => clearInterval(healthCheckInterval);
+    // Disabled: Backend health checks removed to prevent infinite loops
+    // when Codette backend is unavailable. Check will happen on-demand only.
+    return () => {};
   }, []);
 
   const checkBackendConnection = async () => {

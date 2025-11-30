@@ -185,14 +185,7 @@ export default function FileSystemBrowser() {
           <HardDrive className="w-3.5 h-3.5" />
           Project Directory
         </div>
-        <input
-          type="text"
-          placeholder="Search..."
-          id="file-search"
-          name="file-search"
-          autoComplete="off"
-          className="text-xs px-2 py-0.5 rounded bg-gray-700 border border-gray-600 text-gray-300 placeholder-gray-500 focus:outline-none focus:border-blue-500 w-32 flex-shrink-0"
-        />
+        <div className="text-xs text-gray-500">💡 Use top menu search</div>
       </div>
 
       {/* Column Headers - Like REAPER */}

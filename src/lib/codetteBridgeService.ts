@@ -54,14 +54,22 @@ class CodetteBridgeService {
    * Initialize connection to Codette backend
    */
   private async initializeConnection(): Promise<void> {
+    // Disabled to prevent infinite loop - backend health check will happen on demand
     try {
-      const response = await this.healthCheck();
-      this.isHealthy = response.success;
-      if (this.isHealthy) {
-        console.log('🌉 Codette Bridge connected successfully');
-      }
+      setTimeout(async () => {
+        try {
+          const response = await this.healthCheck();
+          this.isHealthy = response.success;
+          if (this.isHealthy) {
+            console.log('🌉 Codette Bridge connected successfully');
+          }
+        } catch (error) {
+          console.warn('⚠️ Codette Backend unavailable', error);
+          this.isHealthy = false;
+        }
+      }, 5000); // Delay health check by 5 seconds
     } catch (error) {
-      console.warn('⚠️ Codette Backend unavailable, will use local processing', error);
+      console.warn('⚠️ Codette initialization deferred', error);
       this.isHealthy = false;
     }
   }
