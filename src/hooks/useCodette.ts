@@ -258,96 +258,111 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
       trackColor?: string
     ): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/track/create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackType, trackName, trackColor }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to create track
+        const { addTrack } = useDAW();
+        addTrack(trackType as any);
+        return {
+          success: true,
+          message: `Track created: ${trackName || trackType}`,
+          trackType,
+          trackName: trackName || trackType,
+          trackColor: trackColor || '#808080',
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    []
   );
 
   const selectTrack = useCallback(
     async (trackId: string): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/track/select`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackId }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to select track
+        const { selectTrack: selectTrackDAW } = useDAW();
+        selectTrackDAW(trackId);
+        return {
+          success: true,
+          message: `Track selected: ${trackId}`,
+          trackId,
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    []
   );
 
   const deleteTrack = useCallback(
     async (trackId: string): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/track/delete`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackId }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to delete track
+        const { deleteTrack: deleteTrackDAW } = useDAW();
+        deleteTrackDAW(trackId);
+        return {
+          success: true,
+          message: `Track deleted: ${trackId}`,
+          trackId,
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    []
   );
 
   const toggleTrackMute = useCallback(
     async (trackId: string): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/track/mute`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackId }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to toggle mute
+        const { updateTrack } = useDAW();
+        const track = tracks.find(t => t.id === trackId);
+        if (track) {
+          updateTrack(trackId, { muted: !track.muted });
+        }
+        return {
+          success: true,
+          message: `Track mute toggled: ${trackId}`,
+          trackId,
+          muted: track ? !track.muted : true,
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    [tracks]
   );
 
   const toggleTrackSolo = useCallback(
     async (trackId: string): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/track/solo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackId }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to toggle solo
+        const { updateTrack } = useDAW();
+        const track = tracks.find(t => t.id === trackId);
+        if (track) {
+          updateTrack(trackId, { soloed: !track.soloed });
+        }
+        return {
+          success: true,
+          message: `Track solo toggled: ${trackId}`,
+          trackId,
+          soloed: track ? !track.soloed : true,
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    [tracks]
   );
 
   const setTrackLevel = useCallback(
@@ -357,20 +372,38 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
       value: number
     ): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/level/set`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackId, levelType, value }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to update track level
+        const { updateTrack, setTrackInputGain } = useDAW();
+        
+        const updates: Record<string, any> = {};
+        if (levelType === 'volume') {
+          updates.volume = value;
+        } else if (levelType === 'pan') {
+          updates.pan = Math.max(-1, Math.min(1, value));
+        } else if (levelType === 'input_gain') {
+          setTrackInputGain(trackId, value);
+        } else if (levelType === 'stereo_width') {
+          updates.stereoWidth = value;
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          updateTrack(trackId, updates);
+        }
+        
+        return {
+          success: true,
+          message: `Track ${levelType} set to ${value}`,
+          trackId,
+          levelType,
+          value,
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    []
   );
 
   const addEffect = useCallback(
@@ -378,90 +411,116 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
       trackId: string,
       effectType: string,
       effectName?: string,
-      position?: number
+      _position?: number
     ): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/effect/add`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackId, effectType, effectName, position }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to add plugin
+        const { addPluginToTrack } = useDAW();
+        
+        const plugin = {
+          id: `${effectType}-${Date.now()}`,
+          name: effectName || effectType,
+          type: effectType as any,
+          enabled: true,
+          parameters: {},
+        };
+        
+        addPluginToTrack(trackId, plugin);
+        
+        return {
+          success: true,
+          message: `Effect added: ${effectName || effectType}`,
+          trackId,
+          effectType,
+          effectName: effectName || effectType,
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    []
   );
 
   const removeEffect = useCallback(
     async (trackId: string, effectName: string): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/effect/remove`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackId, effectName }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to remove plugin
+        const { removePluginFromTrack } = useDAW();
+        removePluginFromTrack(trackId, effectName);
+        
+        return {
+          success: true,
+          message: `Effect removed: ${effectName}`,
+          trackId,
+          effectName,
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    []
   );
 
   const playAudio = useCallback(async (): Promise<Record<string, unknown> | null> => {
     try {
-      const response = await fetch(`${apiUrl}/codette/daw/transport/play`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
+      // Use DAW context directly to play audio
+      const { togglePlay } = useDAW();
+      togglePlay();
+      
+      return {
+        success: true,
+        message: 'Audio playback started',
+        action: 'play',
+      };
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       setError(error);
       return null;
     }
-  }, [apiUrl]);
+  }, []);
 
   const stopAudio = useCallback(async (): Promise<Record<string, unknown> | null> => {
     try {
-      const response = await fetch(`${apiUrl}/codette/daw/transport/stop`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
+      // Use DAW context directly to stop audio
+      const { stop } = useDAW();
+      stop();
+      
+      return {
+        success: true,
+        message: 'Audio playback stopped',
+        action: 'stop',
+      };
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       setError(error);
       return null;
     }
-  }, [apiUrl]);
+  }, []);
 
   const seekAudio = useCallback(
     async (seconds: number): Promise<Record<string, unknown> | null> => {
       try {
-        const response = await fetch(`${apiUrl}/codette/daw/transport/seek?seconds=${seconds}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        // Use DAW context directly to seek audio
+        const { seek } = useDAW();
+        seek(seconds);
+        
+        return {
+          success: true,
+          message: `Seeked to ${seconds}s`,
+          seconds,
+          action: 'seek',
+        };
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         return null;
       }
     },
-    [apiUrl]
+    []
   );
 
   const addAutomationPoint = useCallback(

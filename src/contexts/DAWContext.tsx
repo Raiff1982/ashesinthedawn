@@ -470,7 +470,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
                   track.id,
                   currentTime,
                   track.volume,
-                  track.pan
+                  track.pan,
+                  track.inserts
                 );
               }
             });
@@ -902,7 +903,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
                 track.id,
                 currentTime,
                 track.volume,
-                track.pan
+                track.pan,
+                track.inserts
               );
             }
           });
@@ -1002,7 +1004,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
             track.id,
             timeSeconds,
             track.volume,
-            track.pan
+            track.pan,
+            track.inserts
           );
         }
       });
