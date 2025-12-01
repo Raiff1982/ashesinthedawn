@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Folder, HardDrive, FolderOpen } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, HardDrive, FolderOpen, Music, Volume2 } from 'lucide-react';
 
 interface FileNode {
   id: string;
@@ -90,7 +90,7 @@ export default function FileSystemBrowser() {
     if (filename.endsWith('.cpr') || filename.endsWith('.rpp')) {
       return <Music className="w-3 h-3 text-purple-400" />;
     }
-    return <File className="w-3 h-3 text-gray-400" />;
+    return <Music className="w-3 h-3 text-gray-400" />;
   };
 
   const formatSize = (bytes?: number) => {
