@@ -37,6 +37,65 @@ input[type="range"]::-moz-range-thumb {
   border: none;
 }
 
+/* Vertical slider styling */
+input[type="range"].vertical-slider {
+  writing-mode: bt-lr;
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  width: 24px;
+  height: 100%;
+  padding: 0;
+}
+
+/* Track styling for vertical sliders */
+input[type="range"].vertical-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to top, #3b82f6, #1e40af);
+  border-radius: 8px;
+  height: 100%;
+  cursor: pointer;
+}
+
+input[type="range"].vertical-slider::-moz-range-track {
+  background: linear-gradient(to top, #3b82f6, #1e40af);
+  border-radius: 8px;
+  height: 100%;
+  cursor: pointer;
+  border: none;
+}
+
+/* Vertical slider thumb */
+input[type="range"].vertical-slider::-webkit-slider-thumb {
+  -webkit-appearance: slider-thumb;
+  appearance: slider-thumb;
+  background: #0ea5e9;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: background-color 0.2s;
+}
+
+input[type="range"].vertical-slider::-webkit-slider-thumb:hover {
+  background: #06b6d4;
+}
+
+input[type="range"].vertical-slider::-moz-range-thumb {
+  background: #0ea5e9;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: background-color 0.2s;
+}
+
+input[type="range"].vertical-slider::-moz-range-thumb:hover {
+  background: #06b6d4;
+}
+
 /* Channel strip styling */
 .channel-strip {
   background: linear-gradient(to bottom, #374151, #1f2937);
