@@ -123,7 +123,7 @@ class CodetteBridgeService {
       return this.analysisCache.get(cacheKey)!;
     }
 
-    const response = await this.makeRequest('POST', '/api/analyze/session', context);
+    const response = await this.makeRequest('POST', '/codette/analyze', context);
     if (response.success && response.data) {
       const data = response.data as any;
       const prediction: CodettePrediction = {
@@ -149,7 +149,7 @@ class CodetteBridgeService {
     peak: number;
     plugins: string[];
   }): Promise<CodettePrediction> {
-    const response = await this.makeRequest('POST', '/api/analyze/mixing', {
+    const response = await this.makeRequest('POST', '/codette/analyze', {
       trackType,
       metrics,
     });
@@ -177,7 +177,7 @@ class CodetteBridgeService {
     trackTypes: string[];
     hasAux: boolean;
   }): Promise<CodettePrediction> {
-    const response = await this.makeRequest('POST', '/api/analyze/routing', context);
+    const response = await this.makeRequest('POST', '/codette/analyze', context);
     if (response.success && response.data) {
       const data = response.data as any;
       return {
@@ -201,7 +201,7 @@ class CodetteBridgeService {
     masterPeak: number;
     hasClipping: boolean;
   }): Promise<CodettePrediction> {
-    const response = await this.makeRequest('POST', '/api/analyze/mastering', levels);
+    const response = await this.makeRequest('POST', '/codette/analyze', levels);
     if (response.success && response.data) {
       const data = response.data as any;
       return {
@@ -225,7 +225,7 @@ class CodetteBridgeService {
     sessionDuration: number;
     trackCount: number;
   }): Promise<CodettePrediction> {
-    const response = await this.makeRequest('POST', '/api/analyze/creative', context);
+    const response = await this.makeRequest('POST', '/codette/analyze', context);
     if (response.success && response.data) {
       const data = response.data as any;
       return {
@@ -249,7 +249,7 @@ class CodetteBridgeService {
     level: number;
     peak: number;
   }>): Promise<CodettePrediction> {
-    const response = await this.makeRequest('POST', '/api/analyze/gain-staging', { tracks });
+    const response = await this.makeRequest('POST', '/codette/analyze', { tracks });
     if (response.success && response.data) {
       const data = response.data as any;
       return {
@@ -270,7 +270,7 @@ class CodetteBridgeService {
    */
   async *streamAnalysis(context: Record<string, unknown>): AsyncGenerator<CodettePrediction, void, unknown> {
     try {
-      const response = await fetch(`${this.config.backendUrl}/api/analyze/stream`, {
+      const response = await fetch(`${this.config.backendUrl}/codette/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(context),
