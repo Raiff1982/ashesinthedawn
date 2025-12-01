@@ -18,12 +18,20 @@ import {
   HardDrive,
   X,
   ChevronUp,
+  Folder,
+  File,
+  Volume2,
 } from "lucide-react";
 import { useDAW } from "../contexts/DAWContext";
 import { useTransportClock } from "../hooks/useTransportClock";
 import { useSaveStatus } from "../hooks/useSaveStatus";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { getCodetteBridge } from "../lib/codetteBridgeService";
+import {
+  getDirectoryEntries,
+  subscribeDirectoryEntries,
+  type DirectoryEntry,
+} from "../lib/projectDirectoryStore";
 
 export default function TopBar() {
   const {
@@ -101,6 +109,51 @@ export default function TopBar() {
   const [showProjectDirDropdown, setShowProjectDirDropdown] = useState(false);
   const [isProjectDirDocked, setIsProjectDirDocked] = useState(true);
   const [showMIDIDropdown, setShowMIDIDropdown] = useState(false);
+  const [directoryEntries, setDirectoryEntries] = useState<DirectoryEntry[]>([]);
+
+  useEffect(() => {
+    setDirectoryEntries(getDirectoryEntries());
+    const unsubscribe = subscribeDirectoryEntries((entries) => {
+      setDirectoryEntries(entries);
+    });
+    return unsubscribe;
+  }, []);
+
+  const projectSearchResults = useMemo(() => {
+    const term = projectDirSearch.trim().toLowerCase();
+    if (!term) return [];
+    return directoryEntries
+      .filter(
+        (entry) =>
+          entry.name.toLowerCase().includes(term) ||
+          entry.path.toLowerCase().includes(term)
+      )
+      .sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, 8);
+  }, [projectDirSearch, directoryEntries]);
+
+  const getProjectDirIcon = (entry: DirectoryEntry) => {
+    if (entry.type === 'folder') {
+      return <Folder className="w-3 h-3 text-yellow-400" />;
+    }
+    if (entry.name.endsWith('.wav') || entry.name.endsWith('.mp3')) {
+      return <Volume2 className="w-3 h-3 text-blue-400" />;
+    }
+    return <File className="w-3 h-3 text-gray-400" />;
+  };
+
+  const handleProjectDirResultSelect = (entry: DirectoryEntry) => {
+    setProjectDirSearch(entry.name);
+    setShowProjectDirDropdown(false);
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(entry.path).catch(() => {
+        // Non-critical copy failure
+      });
+    }
+  };
 
   const suggestMixingChain = async () => {
     if (!selectedTrack) return;
@@ -332,7 +385,10 @@ export default function TopBar() {
                 type="text"
                 placeholder="Search projects..."
                 value={projectDirSearch}
-                onChange={(e) => setProjectDirSearch(e.target.value)}
+                onChange={(e) => {
+                  setProjectDirSearch(e.target.value);
+                  setShowProjectDirDropdown(true);
+                }}
                 onFocus={() => setShowProjectDirDropdown(true)}
                 onBlur={() => setTimeout(() => setShowProjectDirDropdown(false), 200)}
                 className="flex-1 min-w-0 text-xs px-2 py-0 bg-transparent text-gray-300 placeholder-gray-500 focus:outline-none"
@@ -361,9 +417,37 @@ export default function TopBar() {
             
             {/* Dropdown Results */}
             {showProjectDirDropdown && projectDirSearch && (
-              <div className="absolute top-full mt-1 left-0 right-0 bg-gray-800 border border-gray-700 rounded shadow-lg z-50 max-h-48 overflow-y-auto">
-                <div className="text-xs text-gray-400 p-2 text-center">Search results for "{projectDirSearch}"</div>
-                <div className="text-xs text-gray-500 p-2 text-center border-t border-gray-700">No results found</div>
+              <div className="absolute top-full mt-1 left-0 right-0 bg-gray-800 border border-gray-700 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
+                <div className="text-xs text-gray-400 p-2 flex justify-between">
+                  <span>
+                    Search results for "{projectDirSearch}" ({projectSearchResults.length})
+                  </span>
+                  <span className="text-gray-500">Indexed via Project Directory</span>
+                </div>
+                {projectSearchResults.length ? (
+                  <div className="divide-y divide-gray-700">
+                    {projectSearchResults.map((entry) => (
+                      <button
+                        key={entry.id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleProjectDirResultSelect(entry);
+                        }}
+                        className="w-full text-left px-2 py-1.5 text-xs text-gray-200 hover:bg-gray-700 flex items-center gap-2"
+                      >
+                        <span>{getProjectDirIcon(entry)}</span>
+                        <span className="flex-1 truncate">{entry.name}</span>
+                        <span className="text-gray-500 truncate max-w-[40%]">
+                          {entry.path}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-500 p-2 text-center border-t border-gray-700">
+                    No indexed files match. Open the Project Directory panel to index folders.
+                  </div>
+                )}
               </div>
             )}
           </div>

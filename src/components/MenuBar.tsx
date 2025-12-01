@@ -95,6 +95,7 @@ export default function MenuBar() {
   const { 
     addTrack, 
     deleteTrack,
+    duplicateTrack,
     selectedTrack,
     tracks,
     undo,
@@ -157,7 +158,7 @@ export default function MenuBar() {
       },
       { divider: true },
       { label: 'Delete Track', onClick: () => { if (selectedTrack) deleteTrack(selectedTrack.id); setActiveMenu(null); }, disabled: !selectedTrack },
-      { label: 'Duplicate Track', onClick: () => { if (selectedTrack) { const newTrack = { ...selectedTrack, id: 'track-' + Date.now() }; console.log('Duplicated track:', newTrack); } setActiveMenu(null); }, disabled: !selectedTrack },
+      { label: 'Duplicate Track', onClick: () => { if (selectedTrack) { duplicateTrack(selectedTrack.id).catch((error) => console.error('Failed to duplicate track', error)); } setActiveMenu(null); }, disabled: !selectedTrack },
       { divider: true },
       { label: 'Mute', onClick: () => { if (selectedTrack) updateTrack(selectedTrack.id, { muted: !selectedTrack.muted }); setActiveMenu(null); }, disabled: !selectedTrack },
       { label: 'Solo', onClick: () => { if (selectedTrack) updateTrack(selectedTrack.id, { soloed: !selectedTrack.soloed }); setActiveMenu(null); }, disabled: !selectedTrack },

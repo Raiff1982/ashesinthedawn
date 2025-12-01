@@ -38,12 +38,16 @@ export interface SessionHealthMetrics {
 
 export class AIService {
   private enabled: boolean = false;
+  private backendUrl: string;
+  private requestTimeout: number;
 
   constructor() {
     // Check if Codette AI is enabled via environment flag
-    this.enabled = process.env.REACT_APP_AI_ENABLED === 'true';
+    this.enabled = (import.meta.env.VITE_AI_ENABLED ?? import.meta.env.VITE_CODETTE_ENABLED) === 'true';
+    this.backendUrl = import.meta.env.VITE_CODETTE_API || 'http://localhost:8000';
+    this.requestTimeout = parseInt(import.meta.env.VITE_CODETTE_TIMEOUT || '10000', 10);
     if (this.enabled) {
-      console.log('✨ Codette AI Service initialized (standalone)');
+      console.log('✨ Codette AI Service initialized');
     }
   }
 
@@ -128,7 +132,7 @@ export class AIService {
   }
 
   /**
-   * Analyze audio frequency characteristics (placeholder)
+   * Analyze audio frequency characteristics
    */
   async analyzeAudioFrequencies(
     waveformData: number[]
@@ -192,13 +196,34 @@ export class AIService {
     userPrompt: string
   ): Promise<string> {
     if (!this.enabled) {
-      throw new Error('Codette AI Service not initialized. Set REACT_APP_AI_ENABLED=true in environment.');
+      throw new Error('Codette AI Service not initialized. Set VITE_AI_ENABLED=true in environment.');
     }
 
     try {
-      // Codette is standalone - this is a placeholder for Codette's internal processing
-      console.log('📡 Codette processing:', { systemPrompt, userPrompt });
-      return 'Analysis from Codette AI';
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), this.requestTimeout);
+
+      const response = await fetch(`${this.backendUrl}/codette/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt, userPrompt }),
+        signal: controller.signal,
+      });
+
+      window.clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Codette responded with HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (typeof data.message === 'string') {
+        return data.message;
+      }
+      if (typeof data.prediction === 'string') {
+        return data.prediction;
+      }
+      return JSON.stringify(data);
     } catch (error) {
       console.error('Codette error:', error);
       throw error;

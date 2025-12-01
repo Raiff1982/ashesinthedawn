@@ -1,7 +1,17 @@
+import { Track } from "../types";
+
 /**
  * Audio Engine - Handles Web Audio API playback, recording, and mixing
  * Provides core audio functionality for CoreLogic Studio
  */
+
+interface MixdownOptions {
+  format?: string;
+  quality?: string;
+  loopStart?: number;
+  loopEnd?: number;
+  projectName?: string;
+}
 
 interface LoopConfig {
   enabled: boolean;
@@ -41,6 +51,7 @@ export class AudioEngine {
     volume: 0.3,
   };
   private metronomeScheduler: number | null = null;
+  private fallbackSampleRate = 44100;
 
   /**
    * Initialize the Web Audio API context and master nodes
@@ -338,6 +349,40 @@ export class AudioEngine {
       };
       this.mediaRecorder!.stop();
     });
+  }
+
+  /**
+   * Duplicate decoded audio for a target track so cloned tracks retain audio
+   */
+  async duplicateTrackAudioBuffer(
+    sourceTrackId: string,
+    targetTrackId: string
+  ): Promise<boolean> {
+    if (!this.audioContext) await this.initialize();
+
+    const sourceBuffer = this.audioBuffers.get(sourceTrackId);
+    if (!sourceBuffer || !this.audioContext) {
+      console.warn(`[AudioEngine] No buffer found for ${sourceTrackId}`);
+      return false;
+    }
+
+    const cloned = this.audioContext.createBuffer(
+      sourceBuffer.numberOfChannels,
+      sourceBuffer.length,
+      sourceBuffer.sampleRate
+    );
+
+    for (let channel = 0; channel < sourceBuffer.numberOfChannels; channel++) {
+      cloned.copyToChannel(sourceBuffer.getChannelData(channel), channel);
+    }
+
+    this.audioBuffers.set(targetTrackId, cloned);
+    const waveform = this.waveformCache.get(sourceTrackId);
+    if (waveform) {
+      this.waveformCache.set(targetTrackId, [...waveform]);
+    }
+
+    return true;
   }
 
   /**
@@ -747,6 +792,146 @@ export class AudioEngine {
    */
   private dbToLinear(db: number): number {
     return Math.pow(10, db / 20);
+  }
+
+  /**
+   * Render current tracks into a stereo PCM blob for exporting
+   */
+  async renderMixdown(
+    tracks: Track[],
+    options: MixdownOptions = {}
+  ): Promise<{ blob: Blob; fileName: string; format: string; mimeType: string }> {
+    if (!this.audioContext) await this.initialize();
+
+    const activeTracks = tracks.filter(
+      (track) =>
+        track.type !== "master" &&
+        !track.muted &&
+        this.audioBuffers.has(track.id)
+    );
+
+    if (activeTracks.length === 0) {
+      throw new Error("No playable tracks found for export");
+    }
+
+    const sampleRate = this.audioContext?.sampleRate ?? this.fallbackSampleRate;
+    const format = (options.format || "wav").toLowerCase();
+    const loopStart = Math.max(0, options.loopStart ?? 0);
+    const loopEnd = options.loopEnd && options.loopEnd > loopStart ? options.loopEnd : undefined;
+
+    const maxDuration = activeTracks.reduce((max, track) => {
+      const buffer = this.audioBuffers.get(track.id)!;
+      return Math.max(max, buffer.duration);
+    }, 0);
+
+    const exportDuration = loopEnd ? loopEnd - loopStart : maxDuration;
+    const frameLength = Math.max(1, Math.ceil(exportDuration * sampleRate));
+    const startFrame = Math.floor(loopStart * sampleRate);
+
+    const leftChannel = new Float32Array(frameLength);
+    const rightChannel = new Float32Array(frameLength);
+
+    activeTracks.forEach((track) => {
+      const buffer = this.audioBuffers.get(track.id)!;
+      const trackPan = Math.max(-1, Math.min(1, track.pan ?? 0));
+      const panRad = ((trackPan + 1) * Math.PI) / 4; // Equal-power pan law
+      const volumeLinear = this.dbToLinear(track.volume ?? 0);
+      const leftGain = Math.cos(panRad) * volumeLinear;
+      const rightGain = Math.sin(panRad) * volumeLinear;
+
+      const sourceLeft = buffer.getChannelData(0);
+      const sourceRight = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : sourceLeft;
+
+      const availableFrames = buffer.length - startFrame;
+      const mixFrames = Math.min(frameLength, availableFrames);
+      if (mixFrames <= 0) {
+        return;
+      }
+
+      for (let i = 0; i < mixFrames; i++) {
+        const sourceIndex = startFrame + i;
+        if (sourceIndex >= buffer.length || i >= frameLength) break;
+        leftChannel[i] += sourceLeft[sourceIndex] * leftGain;
+        rightChannel[i] += sourceRight[sourceIndex] * rightGain;
+      }
+    });
+
+    for (let i = 0; i < frameLength; i++) {
+      leftChannel[i] = Math.max(-1, Math.min(1, leftChannel[i]));
+      rightChannel[i] = Math.max(-1, Math.min(1, rightChannel[i]));
+    }
+
+    const wavBuffer = this.encodeStereoPcm(leftChannel, rightChannel, sampleRate);
+
+    const mimeType = format === "mp3"
+      ? "audio/mpeg"
+      : format === "aac"
+        ? "audio/aac"
+        : format === "flac"
+          ? "audio/flac"
+          : "audio/wav";
+
+    if (mimeType !== "audio/wav") {
+      console.warn(
+        `[AudioEngine] ${format.toUpperCase()} export not supported natively. Falling back to WAV stream.`
+      );
+    }
+
+    const projectName = options.projectName?.replace(/\s+/g, "_") || "CoreLogic_Export";
+    const extension = mimeType === "audio/wav" ? "wav" : format;
+    const fileName = `${projectName}_${Date.now()}.${extension}`;
+
+    return {
+      blob: new Blob([wavBuffer], { type: mimeType }),
+      fileName,
+      format: mimeType === "audio/wav" ? "wav" : format,
+      mimeType,
+    };
+  }
+
+  private encodeStereoPcm(
+    left: Float32Array,
+    right: Float32Array,
+    sampleRate: number
+  ): ArrayBuffer {
+    const bytesPerSample = 2;
+    const blockAlign = bytesPerSample * 2;
+    const buffer = new ArrayBuffer(44 + left.length * blockAlign);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }
+    };
+
+    const dataLength = left.length * blockAlign;
+
+    writeString(0, "RIFF");
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 2, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bytesPerSample * 8, true);
+    writeString(36, "data");
+    view.setUint32(40, dataLength, true);
+
+    let offset = 44;
+    for (let i = 0; i < left.length; i++) {
+      const l = left[i];
+      const r = right[i];
+      view.setInt16(offset, l < 0 ? l * 0x8000 : l * 0x7fff, true);
+      offset += 2;
+      view.setInt16(offset, r < 0 ? r * 0x8000 : r * 0x7fff, true);
+      offset += 2;
+    }
+
+    return buffer;
   }
 
   /**
