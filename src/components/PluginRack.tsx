@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Zap, ChevronDown, Loader } from 'lucide-react';
+import { Plus, X, Zap, ChevronDown, Loader, Settings } from 'lucide-react';
 import { Plugin } from '../types';
 import { Tooltip } from './TooltipProvider';
 
@@ -8,6 +8,7 @@ interface PluginRackProps {
   onAddPlugin: (plugin: Plugin) => void;
   onRemovePlugin: (pluginId: string) => void;
   onTogglePlugin: (pluginId: string, enabled: boolean) => void;
+  onParameterChange?: (pluginId: string, paramName: string, value: unknown) => void;
   trackId: string;
 }
 
@@ -26,10 +27,12 @@ export default function PluginRack({
   onAddPlugin,
   onRemovePlugin,
   onTogglePlugin,
+  onParameterChange,
   trackId,
 }: PluginRackProps) {
   const [showPluginMenu, setShowPluginMenu] = useState(false);
   const [openPluginMenu, setOpenPluginMenu] = useState<string | null>(null);
+  const [expandedPluginId, setExpandedPluginId] = useState<string | null>(null);
   const [recentlyAdded, setRecentlyAdded] = useState<string | null>(null);
   const [executingPlugins, setExecutingPlugins] = useState<Set<string>>(new Set());
 
@@ -195,7 +198,28 @@ export default function PluginRack({
               )}
 
               {/* Options Dropdown */}
-              <div className="relative opacity-0 group-hover:opacity-100 transition">
+              <div className="relative opacity-0 group-hover:opacity-100 transition flex gap-1">
+                <Tooltip 
+                  content={{
+                    title: 'Plugin Settings',
+                    description: 'View and adjust plugin parameters',
+                    hotkey: '⚙️',
+                    category: 'effects',
+                    relatedFunctions: ['Add Plugin', 'Bypass'],
+                    performanceTip: 'Adjust parameters in real-time without reloading',
+                    examples: ['EQ frequency and resonance', 'Compressor ratio and threshold'],
+                  }}
+                  position="left"
+                >
+                  <button
+                    onClick={() => setExpandedPluginId(expandedPluginId === plugin.id ? null : plugin.id)}
+                    className="flex-shrink-0 p-0.5 rounded hover:bg-blue-600 text-gray-400 hover:text-blue-300 transition"
+                    title="Edit plugin settings"
+                  >
+                    <Settings className="w-3 h-3" />
+                  </button>
+                </Tooltip>
+
                 <Tooltip 
                   content={{
                     title: 'Plugin Options',
@@ -242,7 +266,37 @@ export default function PluginRack({
                   </div>
                 )}
               </div>
-            </div>
+
+            {/* Expanded Parameters View */}
+            {expandedPluginId === plugin.id && (
+              <div className="mt-2 p-2 bg-gray-800 border border-gray-600 rounded text-xs ml-2">
+                <div className="mb-2 pb-2 border-b border-gray-700 flex items-center justify-between">
+                  <h4 className="text-gray-300 font-semibold">{plugin.name} - Parameters</h4>
+                  <button
+                    onClick={() => setExpandedPluginId(null)}
+                    className="text-gray-500 hover:text-gray-300 transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                {Object.keys(plugin.parameters || {}).length === 0 ? (
+                  <div className="text-gray-500 italic">No parameters configured</div>
+                ) : (
+                  <div className="space-y-2">
+                    {Object.entries(plugin.parameters).map(([key, value]) => (
+                      <div key={key} className="flex justify-between items-center">
+                        <span className="text-gray-400">{key}:</span>
+                        <span className="text-gray-300 font-mono">
+                          {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           ))
         )}
       </div>

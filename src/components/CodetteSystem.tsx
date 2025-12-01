@@ -421,16 +421,16 @@ export function CodetteSystem({ defaultTab = 'chat', compactMode = false }: Code
       className={`flex flex-col ${compactMode ? 'fixed bottom-4 right-4 w-80 rounded-lg shadow-2xl' : 'h-full'} bg-gray-900 border border-gray-700 overflow-hidden z-50`}
     >
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-3 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4" />
-          <span className="font-semibold text-sm">Codette AI</span>
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
+      <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-3 flex items-center justify-between flex-shrink-0 w-full min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Brain className="w-4 h-4 flex-shrink-0" />
+          <span className="font-semibold text-sm truncate">Codette AI</span>
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
         </div>
         {compactMode && (
           <button
             onClick={() => setIsOpen(false)}
-            className="text-white hover:bg-blue-700 p-1 rounded transition"
+            className="text-white hover:bg-blue-700 p-1 rounded transition flex-shrink-0"
           >
             <X className="w-4 h-4" />
           </button>

@@ -6,38 +6,38 @@ Includes both standard endpoints and production-optimized features
 """
 
 import sys
-import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import json
 import logging
 from datetime import datetime
-from collections import Counter
 import asyncio
 import time
 import traceback
-
-# Setup paths
-codette_path = Path(__file__).parent / "Codette"
-sys.path.insert(0, str(codette_path))
-sys.path.insert(0, str(Path(__file__).parent))
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
+# Setup paths
+codette_path = Path(__file__).parent / "codette"
+sys.path.insert(0, str(codette_path))
+sys.path.insert(0, str(Path(__file__).parent))
+
 # Import genre templates
 try:
     from codette_genre_templates import (
         get_genre_suggestions,
         get_available_genres,
-        get_genre_characteristics,
-        combine_suggestions
+        get_genre_characteristics
     )
     GENRE_TEMPLATES_AVAILABLE = True
 except ImportError:
     GENRE_TEMPLATES_AVAILABLE = False
+    get_genre_suggestions = None  # type: ignore
+    get_available_genres = None  # type: ignore
+    get_genre_characteristics = None  # type: ignore
     print("[WARNING] Genre templates not available")
 
 # Try to import numpy for audio analysis
@@ -45,6 +45,7 @@ try:
     import numpy as np
     NUMPY_AVAILABLE = True
 except ImportError:
+    np = None  # type: ignore
     NUMPY_AVAILABLE = False
     print("[WARNING] NumPy not available - some analysis features will be limited")
 
@@ -91,14 +92,14 @@ except ImportError as e:
 
 # Try to import BroaderPerspectiveEngine
 try:
-    from codette import BroaderPerspectiveEngine
+    from codette import BroaderPerspectiveEngine  # type: ignore
     Codette = BroaderPerspectiveEngine
     codette = Codette()
     logger.info("[OK] Codette (BroaderPerspectiveEngine) imported and initialized")
 except Exception as e:
     logger.warning(f"[WARNING] Could not import BroaderPerspectiveEngine: {e}")
-    Codette = None
-    codette = None
+    Codette = None  # type: ignore
+    codette = None  # type: ignore
 
 # ============================================================================
 # FASTAPI APP SETUP
@@ -245,7 +246,8 @@ class TransportManager:
     def pause(self) -> TransportState:
         """Pause playback (time remains)"""
         if self.playing:
-            self.time_seconds = time.time() - self.start_time
+            if self.start_time is not None:
+                self.time_seconds = time.time() - self.start_time
             self.playing = False
         return self.get_state()
     
@@ -290,6 +292,8 @@ def get_timestamp():
 def to_db(value):
     """Convert linear amplitude to dB"""
     if value <= 0 or not NUMPY_AVAILABLE:
+        return -96.0
+    if np is None:
         return -96.0
     return float(20 * np.log10(np.clip(value, 1e-7, 1.0)))
 
@@ -415,7 +419,7 @@ async def chat_endpoint(request: ChatRequest):
         training_context = get_training_context_safe()
         daw_functions = training_context.get("daw_functions", {})
         ui_components = training_context.get("ui_components", {})
-        codette_abilities = training_context.get("codette_abilities", {})
+        # codette_abilities = training_context.get("codette_abilities", {})
         
         response = None
         confidence = 0.5
@@ -427,7 +431,7 @@ async def chat_endpoint(request: ChatRequest):
                     response = f"**{func_data['name']}** ({func_data['category']})\n\n{func_data['description']}\n\n"
                     response += f"📋 Parameters: {', '.join(func_data['parameters']) or 'None'}\n"
                     response += f"⏱️ Hotkey: {func_data.get('hotkey', 'N/A')}\n"
-                    response += f"💡 Tips:\n" + "\n".join([f"  • {tip}" for tip in func_data.get('tips', [])])
+                    response += "💡 Tips:\n" + "\n".join([f"  • {tip}" for tip in func_data.get('tips', [])])
                     confidence = 0.92
                     break
             if response:
@@ -441,7 +445,7 @@ async def chat_endpoint(request: ChatRequest):
                     response += f"📍 Location: {comp_data['location']}\n"
                     response += f"📏 Size: {comp_data['size']}\n"
                     response += f"⚙️ Functions: {', '.join(comp_data['functions'])}\n"
-                    response += f"💡 Tips:\n" + "\n".join([f"  • {tip}" for tip in comp_data.get('teaching_tips', [])])
+                    response += "💡 Tips:\n" + "\n".join([f"  • {tip}" for tip in comp_data.get('teaching_tips', [])])
                     confidence = 0.89
                     break
         
@@ -542,12 +546,15 @@ async def analyze_audio(request: AudioAnalysisRequest):
         # Perform analysis
         analysis_type = request.analysis_type or "spectrum"
         
+        # Convert track_metrics list to dict for analysis
+        metrics_dict = track_metrics[0] if track_metrics else {}
+        
         if analysis_type == "dynamic":
             result = analyzer.analyze_gain_staging(track_metrics)
         elif analysis_type == "loudness":
-            result = analyzer.analyze_mastering_readiness(track_metrics)
+            result = analyzer.analyze_mastering_readiness(metrics_dict)
         elif analysis_type == "quality":
-            result = analyzer.analyze_session_health(track_metrics, {})
+            result = analyzer.analyze_session_health(metrics_dict)
         else:
             result = analyzer.analyze_gain_staging(track_metrics)
         
@@ -587,9 +594,10 @@ async def get_suggestions(request: SuggestionRequest):
         genre = request.context.get("genre", "") if request.context else ""
         
         # Use genre templates if available
-        if GENRE_TEMPLATES_AVAILABLE and genre:
+        if GENRE_TEMPLATES_AVAILABLE and genre and get_genre_suggestions:
             genre_lower = genre.lower().strip()
-            genre_suggestions = get_genre_suggestions(genre_lower, limit=min(3, request.limit))
+            limit = min(3, request.limit or 5)
+            genre_suggestions = get_genre_suggestions(genre_lower, limit=limit)
             if genre_suggestions:
                 suggestions.extend(genre_suggestions)
         
@@ -845,14 +853,14 @@ async def websocket_general(websocket: WebSocket):
                             "analysis_type": analysis_type,
                             "timestamp": datetime.now().isoformat(),
                             "payload": {
-                                "peak_level": np.random.uniform(-20, -3) if NUMPY_AVAILABLE else -10,
-                                "rms_level": np.random.uniform(-30, -15) if NUMPY_AVAILABLE else -20,
+                                "peak_level": (np.random.uniform(-20, -3) if np is not None else -10) if NUMPY_AVAILABLE else -10,
+                                "rms_level": (np.random.uniform(-30, -15) if np is not None else -20) if NUMPY_AVAILABLE else -20,
                                 "frequency_balance": {
-                                    "low": np.random.uniform(-12, 6) if NUMPY_AVAILABLE else 0,
-                                    "mid": np.random.uniform(-12, 6) if NUMPY_AVAILABLE else 0,
-                                    "high": np.random.uniform(-12, 6) if NUMPY_AVAILABLE else 0,
+                                    "low": (np.random.uniform(-12, 6) if np is not None else 0) if NUMPY_AVAILABLE else 0,
+                                    "mid": (np.random.uniform(-12, 6) if np is not None else 0) if NUMPY_AVAILABLE else 0,
+                                    "high": (np.random.uniform(-12, 6) if np is not None else 0) if NUMPY_AVAILABLE else 0,
                                 },
-                                "quality_score": np.random.uniform(0.6, 1.0) if NUMPY_AVAILABLE else 0.8,
+                                "quality_score": (np.random.uniform(0.6, 1.0) if np is not None else 0.8) if NUMPY_AVAILABLE else 0.8,
                             }
                         }
                         await websocket.send_json(analysis_data)
@@ -1128,32 +1136,32 @@ async def get_status():
 
 # Try to import DSP effects
 try:
-    from daw_core.fx.eq_and_dynamics import EQ3Band, HighLowPass, Compressor
-    from daw_core.fx.dynamics_part2 import Limiter, Expander, Gate, NoiseGate
-    from daw_core.fx.saturation import Saturation, HardClip, Distortion, WaveShaper
-    from daw_core.fx.delays import SimpleDelay, PingPongDelay, MultiTapDelay, StereoDelay
-    from daw_core.fx.reverb import HallReverb, PlateReverb, RoomReverb, Reverb
-    from daw_core.fx.modulation_and_utility import Chorus, Flanger, Tremolo, Gain, WidthControl, DynamicEQ
+    from daw_core.fx.eq_and_dynamics import EQ3Band, Compressor
+    from daw_core.fx.dynamics_part2 import Limiter, Gate
+    from daw_core.fx.saturation import Saturation, Distortion
+    from daw_core.fx.delays import SimpleDelay, PingPongDelay
+    from daw_core.fx.reverb import HallReverb, PlateReverb
+    from daw_core.fx.modulation_and_utility import Chorus, Gain
     DSP_EFFECTS_AVAILABLE = True
+    
+    EFFECTS_REGISTRY = {
+        "eq_3band": {"class": EQ3Band, "name": "3-Band EQ", "category": "eq"},
+        "compressor": {"class": Compressor, "name": "Compressor", "category": "dynamics"},
+        "limiter": {"class": Limiter, "name": "Limiter", "category": "dynamics"},
+        "gate": {"class": Gate, "name": "Gate", "category": "dynamics"},
+        "reverb_plate": {"class": PlateReverb, "name": "Plate Reverb", "category": "reverb"},
+        "reverb_hall": {"class": HallReverb, "name": "Hall Reverb", "category": "reverb"},
+        "chorus": {"class": Chorus, "name": "Chorus", "category": "modulation"},
+        "delay": {"class": SimpleDelay, "name": "Simple Delay", "category": "delay"},
+        "delay_pingpong": {"class": PingPongDelay, "name": "Ping Pong Delay", "category": "delay"},
+        "distortion": {"class": Distortion, "name": "Distortion", "category": "saturation"},
+        "saturation": {"class": Saturation, "name": "Saturation", "category": "saturation"},
+        "gain": {"class": Gain, "name": "Gain", "category": "utility"},
+    }
 except ImportError as e:
     DSP_EFFECTS_AVAILABLE = False
+    EFFECTS_REGISTRY = {}
     logger.warning(f"[WARNING] DSP effects not available: {e}")
-
-
-EFFECTS_REGISTRY = {
-    "eq_3band": {"class": EQ3Band, "name": "3-Band EQ", "category": "eq"},
-    "compressor": {"class": Compressor, "name": "Compressor", "category": "dynamics"},
-    "limiter": {"class": Limiter, "name": "Limiter", "category": "dynamics"},
-    "gate": {"class": Gate, "name": "Gate", "category": "dynamics"},
-    "reverb_plate": {"class": PlateReverb, "name": "Plate Reverb", "category": "reverb"},
-    "reverb_hall": {"class": HallReverb, "name": "Hall Reverb", "category": "reverb"},
-    "chorus": {"class": Chorus, "name": "Chorus", "category": "modulation"},
-    "delay": {"class": SimpleDelay, "name": "Simple Delay", "category": "delay"},
-    "delay_pingpong": {"class": PingPongDelay, "name": "Ping Pong Delay", "category": "delay"},
-    "distortion": {"class": Distortion, "name": "Distortion", "category": "saturation"},
-    "saturation": {"class": Saturation, "name": "Saturation", "category": "saturation"},
-    "gain": {"class": Gain, "name": "Gain", "category": "utility"},
-}
 
 
 @app.get("/daw/effects/list")
@@ -1213,6 +1221,9 @@ async def process_audio(request_data: dict):
         parameters = request_data.get("parameters", {})
 
         # Convert to numpy array
+        if np is None:
+            return {"success": False, "error": "NumPy not available", "audioData": audio_data}
+        
         audio_array = np.array(audio_data, dtype=np.float32)
         
         # Get effect class and instantiate
@@ -1262,7 +1273,7 @@ async def process_audio(request_data: dict):
 async def get_available_genres_endpoint():
     """Get list of available genre templates"""
     try:
-        if GENRE_TEMPLATES_AVAILABLE:
+        if GENRE_TEMPLATES_AVAILABLE and get_available_genres:
             genres = get_available_genres()
             return {
                 "genres": genres,
@@ -1288,7 +1299,7 @@ async def get_available_genres_endpoint():
 async def get_genre_characteristics_endpoint(genre_id: str):
     """Get mixing characteristics for a specific genre"""
     try:
-        if GENRE_TEMPLATES_AVAILABLE:
+        if GENRE_TEMPLATES_AVAILABLE and get_genre_characteristics:
             characteristics = get_genre_characteristics(genre_id.lower())
             if characteristics:
                 return {

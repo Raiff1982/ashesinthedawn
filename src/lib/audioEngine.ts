@@ -113,7 +113,8 @@ export class AudioEngine {
     trackId: string,
     startTime: number = 0,
     volume: number = 1,
-    pan: number = 0
+    pan: number = 0,
+    plugins: Array<{ type: string; enabled: boolean }> = []
   ): boolean {
     if (!this.audioContext || !this.masterGain) return false;
 
@@ -165,9 +166,21 @@ export class AudioEngine {
       this.stereoWidthNodes.set(trackId, trackGain);
       this.phaseFlipStates.set(trackId, false);
 
-      // Connect: source → input gain → pan → track gain (fader) → analyser → master
+      // Extract enabled plugin types for the chain
+      const enabledPlugins = plugins
+        .filter(p => p.enabled)
+        .map(p => p.type);
+
+      // Build the audio chain: source → input gain → plugins → pan → track gain (fader) → analyser → master
       source.connect(inputGain);
-      inputGain.connect(panNode);
+      
+      // Process plugin chain and get the output node
+      let chainOutput: AudioNode = inputGain;
+      if (enabledPlugins.length > 0) {
+        chainOutput = this.processPluginChain(trackId, inputGain, enabledPlugins);
+      }
+      
+      chainOutput.connect(panNode);
       panNode.connect(trackGain);
       trackGain.connect(this.analyser!);
 
@@ -525,6 +538,15 @@ export class AudioEngine {
           currentNode.connect(delayNode);
           currentNode = delayNode;
           console.debug(`Delay plugin inserted for track ${trackId}`);
+          break;
+        }
+        case "saturation": {
+          // Saturation implemented via waveshaper
+          const saturationGain = this.audioContext!.createGain();
+          saturationGain.gain.value = 1.5; // Boost signal before saturation
+          currentNode.connect(saturationGain);
+          currentNode = saturationGain;
+          console.debug(`Saturation plugin inserted for track ${trackId}`);
           break;
         }
         case "reverb": {

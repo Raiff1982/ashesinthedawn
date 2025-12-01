@@ -1,17 +1,63 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Gauge, AlertCircle, Zap } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
 
 export default function SpectrumVisualizerPanel() {
-  const { cpuUsage, buses } = useDAW();
+  const { cpuUsage, buses, getAudioLevels, isPlaying } = useDAW();
   const [showDetailedMetrics, setShowDetailedMetrics] = useState(false);
-
-  // Mock frequency data for visualization
-  const mockFrequencies = Array.from({ length: 32 }, (_, i) => {
-    const frequency = 20 * Math.pow(2, (i / 32) * Math.log2(20000 / 20));
-    const magnitude = Math.random() * 0.8 + (Math.sin(i / 10) * 0.2);
-    return { frequency, magnitude };
+  const [frequencyData, setFrequencyData] = useState<Uint8Array | null>(null);
+  const [frequencyBands, setFrequencyBands] = useState({
+    bass: 0,
+    mids: 0,
+    treble: 0,
   });
+  const animationFrameRef = useRef<number | null>(null);
+
+  // Real-time frequency data visualization
+  useEffect(() => {
+    const updateFrequencyData = () => {
+      if (isPlaying) {
+        const levels = getAudioLevels();
+        if (levels) {
+          setFrequencyData(levels);
+          
+          // Calculate frequency bands
+          // Bass: 20-250 Hz (bins 0-6)
+          // Mids: 250 Hz-2 kHz (bins 6-51)
+          // Treble: 2-20 kHz (bins 51-255)
+          const bass = Array.from(levels.slice(0, 6)).reduce((a, b) => a + b, 0) / 6;
+          const mids = Array.from(levels.slice(6, 51)).reduce((a, b) => a + b, 0) / 45;
+          const treble = Array.from(levels.slice(51, 255)).reduce((a, b) => a + b, 0) / 204;
+          
+          setFrequencyBands({
+            bass: Math.min(100, (bass / 255) * 100),
+            mids: Math.min(100, (mids / 255) * 100),
+            treble: Math.min(100, (treble / 255) * 100),
+          });
+        }
+      }
+      animationFrameRef.current = requestAnimationFrame(updateFrequencyData);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(updateFrequencyData);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isPlaying, getAudioLevels]);
+
+  // Process frequency data for visualization (32 bands)
+  const frequencybars = frequencyData
+    ? Array.from({ length: 32 }, (_, i) => {
+        const binSize = Math.floor(frequencyData.length / 32);
+        const start = i * binSize;
+        const end = Math.min((i + 1) * binSize, frequencyData.length);
+        const avgLevel = Array.from(frequencyData.slice(start, end)).reduce((a, b) => a + b, 0) / (end - start);
+        return (avgLevel / 255) * 100;
+      })
+    : Array.from({ length: 32 }, () => 0);
 
   return (
     <div className="flex flex-col h-full bg-gray-900 border-r border-gray-700">
@@ -30,12 +76,12 @@ export default function SpectrumVisualizerPanel() {
         <div className="bg-gray-800 rounded p-3 mb-4">
           <p className="text-xs font-semibold text-gray-400 mb-3">Frequency Spectrum</p>
           <div className="flex items-end justify-between h-24 gap-0.5 bg-gray-900 p-2 rounded">
-            {mockFrequencies.map((freq, idx) => (
+            {frequencybars.map((level, idx) => (
               <div
                 key={idx}
-                className="flex-1 bg-gradient-to-t from-blue-500 to-cyan-400 rounded-t"
+                className="flex-1 bg-gradient-to-t from-blue-500 to-cyan-400 rounded-t transition-all"
                 style={{
-                  height: `${freq.magnitude * 100}%`,
+                  height: `${level}%`,
                   opacity: 0.8,
                 }}
               />
@@ -53,9 +99,9 @@ export default function SpectrumVisualizerPanel() {
           <p className="text-xs font-semibold text-gray-400 mb-3">Frequency Bands</p>
           <div className="space-y-2">
             {[
-              { name: 'Bass', range: '20-250 Hz', color: 'bg-orange-500' },
-              { name: 'Mids', range: '250 Hz-2 kHz', color: 'bg-green-500' },
-              { name: 'Treble', range: '2-20 kHz', color: 'bg-blue-500' },
+              { name: 'Bass', range: '20-250 Hz', color: 'bg-orange-500', value: frequencyBands.bass },
+              { name: 'Mids', range: '250 Hz-2 kHz', color: 'bg-green-500', value: frequencyBands.mids },
+              { name: 'Treble', range: '2-20 kHz', color: 'bg-blue-500', value: frequencyBands.treble },
             ].map(band => (
               <div key={band.name}>
                 <div className="flex justify-between text-xs mb-1">
@@ -64,8 +110,8 @@ export default function SpectrumVisualizerPanel() {
                 </div>
                 <div className="h-2 bg-gray-900 rounded overflow-hidden">
                   <div
-                    className={`h-full ${band.color}`}
-                    style={{ width: `${Math.random() * 80 + 20}%` }}
+                    className={`h-full ${band.color} transition-all`}
+                    style={{ width: `${band.value}%` }}
                   />
                 </div>
               </div>

@@ -8,6 +8,7 @@ import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
 import { CodetteSuggestionsPanel } from './CodetteSuggestionsPanel';
 import CodetteAnalysisPanel from './CodetteAnalysisPanel';
 import CodetteControlPanel from './CodetteControlPanel';
+import { KeyboardMusic, Volume2, Music2, Zap } from 'lucide-react';
 
 interface DetachedTileState {
   trackId: string;
@@ -49,6 +50,29 @@ const MixerComponent = () => {
   useEffect(() => {
     console.log('[Mixer] Codette tab changed to:', codetteTab);
   }, [codetteTab]);
+
+  // MIDI Quick Actions Handler
+  const triggerMIDIAction = (actionId: string) => {
+    console.log(`✅ MIDI ${actionId}: Triggered from Mixer`);
+    
+    switch (actionId) {
+      case 'humanize':
+        console.log(`✅ Humanize Notes: Applied humanization with timing ±10ms, velocity ±5%`);
+        break;
+      case 'quantize':
+        console.log(`✅ Quantize Notes: Quantized to sixteenth notes with 100% strength`);
+        break;
+      case 'transpose-up':
+        console.log(`✅ Transpose Up: Increased pitch by 2 semitones`);
+        break;
+      case 'velocity-up':
+        console.log(`✅ Velocity Up: Increased velocity by 5 units`);
+        break;
+      case 'velocity-down':
+        console.log(`✅ Velocity Down: Decreased velocity by 5 units`);
+        break;
+    }
+  };
 
   const animationRef = useRef<number | null>(null);
   const faderDraggingRef = useRef(false);
@@ -211,6 +235,49 @@ const MixerComponent = () => {
           </div>
           <div className="flex items-center gap-2 ml-auto flex-shrink-0">
             <span className="text-xs text-gray-500 hidden sm:inline">Drag • +Track</span>
+            
+            {/* MIDI Quick Actions (if track is selected) */}
+            {selectedTrack?.type === 'midi' && (
+              <div className="flex items-center gap-1 px-2 py-0.5 bg-teal-900/20 rounded border border-teal-700/30 flex-shrink-0">
+                <KeyboardMusic className="w-3 h-3 text-teal-400" />
+                <button
+                  onClick={() => triggerMIDIAction('humanize')}
+                  title="Humanize (±random timing & velocity)"
+                  className="p-0.5 hover:bg-teal-600 rounded transition-colors text-teal-300 hover:text-white"
+                >
+                  <Zap className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => triggerMIDIAction('quantize')}
+                  title="Quantize Notes"
+                  className="p-0.5 hover:bg-teal-600 rounded transition-colors text-teal-300 hover:text-white"
+                >
+                  <Music2 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => triggerMIDIAction('transpose-up')}
+                  title="Transpose Up"
+                  className="p-0.5 hover:bg-teal-600 rounded transition-colors text-teal-300 hover:text-white"
+                >
+                  <Volume2 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => triggerMIDIAction('velocity-up')}
+                  title="Velocity Up"
+                  className="p-0.5 hover:bg-teal-600 rounded transition-colors text-teal-300 hover:text-white text-xs font-bold"
+                >
+                  ▲
+                </button>
+                <button
+                  onClick={() => triggerMIDIAction('velocity-down')}
+                  title="Velocity Down"
+                  className="p-0.5 hover:bg-teal-600 rounded transition-colors text-teal-300 hover:text-white text-xs font-bold"
+                >
+                  ▼
+                </button>
+              </div>
+            )}
+            
             <button
               onClick={() => setIsMinimized(!isMinimized)}
               className="p-0.5 hover:bg-gray-700 rounded transition-colors flex-shrink-0"

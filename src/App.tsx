@@ -7,14 +7,36 @@ import TrackList from './components/TrackList';
 import Timeline from './components/Timeline';
 import Mixer from './components/Mixer';
 import EnhancedSidebar from './components/EnhancedSidebar';
-import FileSystemBrowser from './components/FileSystemBrowser';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
+import CommandPalette from './components/CommandPalette';
+import { initializeActions } from './lib/actions/initializeActions';
 
 function AppContent() {
   const [mixerHeight, setMixerHeight] = React.useState(200);
   const [isResizingMixer, setIsResizingMixer] = React.useState(false);
-  const [fileBrowserHeight, setFileBrowserHeight] = React.useState(150);
-  const [isResizingFileBrowser, setIsResizingFileBrowser] = React.useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+
+  // Initialize action system on mount
+  React.useEffect(() => {
+    initializeActions();
+  }, []);
+
+  // Global keyboard shortcuts
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Command Palette: Ctrl+Shift+P or Ctrl+/
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'p') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   React.useEffect(() => {
     if (!isResizingMixer) return;
@@ -38,29 +60,6 @@ function AppContent() {
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isResizingMixer]);
-
-  React.useEffect(() => {
-    if (!isResizingFileBrowser) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const container = document.getElementById('file-browser-container');
-      if (!container) return;
-      const containerRect = container.getBoundingClientRect();
-      const newHeight = Math.max(80, Math.min(400, containerRect.bottom - e.clientY));
-      setFileBrowserHeight(newHeight);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingFileBrowser(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingFileBrowser]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 overflow-hidden">
@@ -108,26 +107,15 @@ function AppContent() {
           </div>
         </div>
 
-        {/* File Browser Panel (Bottom) - Like REAPER */}
-        <div
-          onMouseDown={() => setIsResizingFileBrowser(true)}
-          className="h-1 bg-gradient-to-r from-gray-700 via-yellow-600 to-gray-700 hover:from-gray-600 hover:via-yellow-500 hover:to-gray-600 cursor-ns-resize transition-colors group flex items-center justify-center"
-          title="Drag to resize file browser"
-        >
-          <div className="w-12 h-0.5 bg-yellow-400/50 rounded group-hover:bg-yellow-300 transition-colors" />
-        </div>
 
-        <div
-          id="file-browser-container"
-          className="border-t border-gray-700 bg-gray-900 flex-shrink-0 overflow-hidden flex flex-col transition-all"
-          style={{ height: `${fileBrowserHeight}px` }}
-        >
-          <FileSystemBrowser />
-        </div>
       </div>
 
       {/* Global Modals */}
       <AudioSettingsModal />
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+      />
     </div>
   );
 }

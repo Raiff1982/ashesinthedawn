@@ -20,6 +20,7 @@ import {
 } from "../types";
 import { getAudioEngine } from "../lib/audioEngine";
 import { getCodetteBridge, CodetteSuggestion } from "../lib/codetteBridge";
+import { setDAWContext } from "../lib/actions/initializeActions";
 import { supabase } from "../lib/supabase";
 import {
   saveProjectToStorage,
@@ -76,6 +77,7 @@ interface DAWContextType {
   uploadAudioFile: (file: File) => Promise<boolean>;
   getWaveformData: (trackId: string) => number[];
   getAudioDuration: (trackId: string) => number;
+  getAudioLevels: () => Uint8Array | null;
   seek: (timeSeconds: number) => void;
   setTrackInputGain: (trackId: string, gainDb: number) => void;
   addPluginToTrack: (trackId: string, plugin: Plugin) => void;
@@ -233,6 +235,12 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       codetteRef.current = null;
     }
   }, []);
+
+  // Initialize action system (REAPER-like command palette)
+  useEffect(() => {
+    // This effect body will be filled once the context is created below
+  }, []);
+  
   // Phase 3: New state
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [loopRegion, setLoopRegion] = useState<LoopRegion>({
@@ -470,7 +478,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
                   track.id,
                   currentTime,
                   track.volume,
-                  track.pan
+                  track.pan,
+                  track.inserts
                 );
               }
             });
@@ -831,6 +840,26 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         prev ? { ...prev, inserts: [...prev.inserts, plugin] } : null
       );
     }
+    // Auto-restart playback if playing to apply new plugin
+    if (isPlaying) {
+      audioEngineRef.current.stopAllAudio();
+      setTimeout(() => {
+        tracks.forEach((track) => {
+          if (
+            !track.muted &&
+            (track.type === "audio" || track.type === "instrument")
+          ) {
+            audioEngineRef.current.playAudio(
+              track.id,
+              currentTime,
+              track.volume,
+              track.pan,
+              track.id === trackId ? [...track.inserts, plugin] : track.inserts
+            );
+          }
+        });
+      }, 50);
+    }
   };
 
   // Remove a plugin from a track's insert chain
@@ -849,6 +878,29 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
           ? { ...prev, inserts: prev.inserts.filter((p) => p.id !== pluginId) }
           : null
       );
+    }
+    // Auto-restart playback if playing to apply plugin removal
+    if (isPlaying) {
+      audioEngineRef.current.stopAllAudio();
+      setTimeout(() => {
+        tracks.forEach((track) => {
+          if (
+            !track.muted &&
+            (track.type === "audio" || track.type === "instrument")
+          ) {
+            const newInserts = track.id === trackId
+              ? track.inserts.filter((p) => p.id !== pluginId)
+              : track.inserts;
+            audioEngineRef.current.playAudio(
+              track.id,
+              currentTime,
+              track.volume,
+              track.pan,
+              newInserts
+            );
+          }
+        });
+      }, 50);
     }
   };
 
@@ -883,6 +935,31 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
           : null
       );
     }
+    // Auto-restart playback if playing to apply plugin enable/disable change
+    if (isPlaying) {
+      audioEngineRef.current.stopAllAudio();
+      setTimeout(() => {
+        tracks.forEach((track) => {
+          if (
+            !track.muted &&
+            (track.type === "audio" || track.type === "instrument")
+          ) {
+            const newInserts = track.id === trackId
+              ? track.inserts.map((p) =>
+                  p.id === pluginId ? { ...p, enabled } : p
+                )
+              : track.inserts;
+            audioEngineRef.current.playAudio(
+              track.id,
+              currentTime,
+              track.volume,
+              track.pan,
+              newInserts
+            );
+          }
+        });
+      }, 50);
+    }
   };
 
   const togglePlay = () => {
@@ -902,7 +979,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
                 track.id,
                 currentTime,
                 track.volume,
-                track.pan
+                track.pan,
+                track.inserts
               );
             }
           });
@@ -1002,7 +1080,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
             track.id,
             timeSeconds,
             track.volume,
-            track.pan
+            track.pan,
+            track.inserts
           );
         }
       });
@@ -1096,6 +1175,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 
   const getAudioDuration = (trackId: string): number => {
     return audioEngineRef.current.getAudioDuration(trackId);
+  };
+
+  const getAudioLevels = (): Uint8Array | null => {
+    return audioEngineRef.current.getAudioLevels();
   };
 
   const toggleVoiceControl = () => {
@@ -1645,8 +1728,15 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       const track = tracks.find((t) => t.id === trackId);
       if (!track) return null;
 
+      // Calculate duration from BPM (4 bars at current tempo)
+      const barsToAnalyze = 4;
+      const beatsPerBar = 4;
+      const beatsTotal = barsToAnalyze * beatsPerBar;
+      const bpm = currentProject?.bpm || 120;
+      const duration = (beatsTotal * 60) / bpm; // Duration in seconds
+
       const analysis = await codetteRef.current.analyzeAudio({
-        duration: 10, // Placeholder
+        duration,
         sample_rate: 44100,
         peak_level: track.volume,
         rms_level: track.volume - 6, // Rough estimate
@@ -1690,9 +1780,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     return codetteRef.current.getState();
   };
 
-  return (
-    <DAWContext.Provider
-      value={{
+  // Create context value object
+  const contextValue = {
         currentProject,
         tracks,
         selectedTrack,
@@ -1722,6 +1811,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         uploadAudioFile,
         getWaveformData,
         getAudioDuration,
+        getAudioLevels,
         seek,
         setTrackInputGain,
         addPluginToTrack,
@@ -1830,8 +1920,24 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         selectAllTracks,
         deselectAllTracks,
         selectedTracks,
-      }}
-    >
+      };
+
+  // Initialize action system with DAW context
+  useEffect(() => {
+    setDAWContext(contextValue);
+  }, [
+    togglePlay,
+    addTrack,
+    deleteTrack,
+    updateTrack,
+    seek,
+    selectedTrack,
+    isPlaying,
+    currentTime,
+  ]);
+
+  return (
+    <DAWContext.Provider value={contextValue}>
       {children}
     </DAWContext.Provider>
   );
