@@ -2,7 +2,7 @@
 
 ## Visual Overview
 
-```
+```text
 ┌─ MIXER PRO HEADER ─────────────────────────────────┐
 │  Mixer Pro  [20 tracks]  [Preset ▼]  [⚙️] [◀▶]    │
 └────────────────────────────────────────────────────┘
@@ -33,32 +33,37 @@
 ## Key Interactions
 
 ### 1. Resize Track Strips
-```
+
+```text
 Hover over right edge of track → Resize cursor appears
 Drag → Width changes (60-180px)
 ```
 
 ### 2. Adjust Volume
-```
+
+```text
 Click/drag vertical fader → Volume updates (-60 to +6 dB)
 Real-time label shows current dB value
 ```
 
 ### 3. Pan Control
-```
+
+```text
 Drag horizontal slider → Pan from L to R (-1 to +1)
 Center indicator shows: L / C / R
 ```
 
 ### 4. Detach Floating Fader
-```
+
+```text
 Click [▲] button on track → Floating window appears
 Drag title bar → Move anywhere on screen
 Click [X] → Close fader window
 ```
 
 ### 5. Switch Presets
-```
+
+```text
 Select from dropdown:
   • Default (100px, 350h) - General mixing
   • Compact (70px, 250h) - Small screens
@@ -67,20 +72,22 @@ Select from dropdown:
 ```
 
 ### 6. Toggle Meters
-```
+
+```text
 Click [🔊] button → Show/hide level meters
 Meters display real-time levels with color gradient
 ```
 
 ### 7. Adjust Track Height
-```
+
+```text
 Drag height slider → All tracks scale (150-500px)
 Useful for touch interfaces or detailed editing
 ```
 
 ## Master Track
 
-```
+```text
 MASTER (Purple)
 ├─ Master Level Fader
 ├─ 10-Segment Meter
@@ -89,6 +96,7 @@ MASTER (Purple)
 ```
 
 **Master Meter Colors**:
+
 - 🟢 Green: -20 dB or quieter
 - 🟡 Yellow: -20 to -8 dB
 - 🔴 Red: -8 to +6 dB (approach headroom carefully!)
@@ -123,7 +131,8 @@ MASTER (Purple)
 ## Common Workflows
 
 ### Quick Mix (Compact Preset)
-```
+
+```text
 1. Select Compact preset
 2. Set volume levels
 3. Adjust pan for stereo width
@@ -132,7 +141,8 @@ MASTER (Purple)
 ```
 
 ### Detailed Editing (Wide Preset)
-```
+
+```text
 1. Select Wide preset
 2. Resize tracks as needed (up to 180px)
 3. Open floating faders for fine control
@@ -141,7 +151,8 @@ MASTER (Purple)
 ```
 
 ### Mobile/Tablet (Vertical Height)
-```
+
+```text
 1. Reduce track height slider
 2. Switch to compact preset
 3. Use horizontal scrolling for all tracks
@@ -171,7 +182,7 @@ MASTER (Purple)
 
 ## Keyboard Shortcuts (Future)
 
-```
+```text
 Ctrl+M          Mute selected track
 Ctrl+S          Solo selected track
 Ctrl+R          Reset volume to 0 dB

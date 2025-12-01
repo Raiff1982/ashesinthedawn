@@ -11,25 +11,36 @@ A professional stereo chorus effect has been implemented in `daw_core/fx/chorus.
 The chorus effect uses a **classic LFO-modulated delay topology**:
 
 1. **Delay Line**: Separate buffered delay lines for L/R channels
+
 2. **LFO Modulation**: Independent sine-wave oscillators per channel with configurable stereo offset
+
 3. **Feedback Path**: Optional feedback for resonance effects
+
 4. **Wet/Dry Mixing**: Separate level controls for input and output balancing
 
 ### Key Parameters
 
 | Parameter | Range | Default | Description |
+
 |-----------|-------|---------|-------------|
+
 | `delay_ms` | 10–200 | 40 | Base delay time in milliseconds |
+
 | `rate_hz` | 0.1–10 | 1.5 | LFO frequency in Hertz |
+
 | `depth_ms` | 1–50 | 10 | Modulation depth (peak variation) |
+
 | `feedback_db` | -120–6 | -60 | Feedback amount in dB |
+
 | `wet_mix_db` | -120–6 | -6 | Wet signal level in dB |
+
 | `dry_mix_db` | -120–6 | -6 | Dry signal level in dB |
+
 | `stereo_offset` | 0–360 | 90 | Phase offset between L/R LFOs (degrees) |
 
 ### Processing Flow
 
-```
+```text
 Input (L/R)
     ↓
 [Delay Line with LFO Modulation]
@@ -39,38 +50,57 @@ Input (L/R)
 [Wet/Dry Mix]
     ↓
 Output (L/R)
-```
+
+```text
 
 ## Presets
 
 Five scientifically-tuned presets are included:
 
 ### 1. **Subtle** (Minimal presence)
+
 - 25ms delay, 0.8 Hz rate, 5ms depth
+
 - Best for: Transparent widening without obvious effect
+
 - Use case: Subtle enhancement on vocals, drums
 
-### 2. **Classic** (Balanced, general-purpose)
+### 2. Classic (Balanced, general-purpose)
+
 - 40ms delay, 1.5 Hz rate, 10ms depth
+
 - Best for: General-purpose chorus on any instrument
+
 - Use case: Default choice for guitars, pads, synths
 
-### 3. **Rich** (Full, musical)
+### 3. Rich (Full, musical)
+
 - 50ms delay, 1.2 Hz rate, 12ms depth
+
 - Includes 20% more feedback for resonance
+
 - Best for: Lush, spacious textures
+
 - Use case: Pad sounds, ambient music, strings
 
-### 4. **Vintage** (Slower modulation, warm)
+### 4. Vintage (Slower modulation, warm)
+
 - 35ms delay, 0.6 Hz rate, 8ms depth
+
 - Deeper feedback for classic analog feel
+
 - Best for: Recreating 80s/90s chorus tones
+
 - Use case: Electric bass, warm leads
 
-### 5. **Thick** (Deep modulation)
+### 5. Thick (Deep modulation)
+
 - 60ms delay, 0.9 Hz rate, 15ms depth
+
 - Longer base delay for massive sound
+
 - Best for: Bold, dramatic effect
+
 - Use case: Synth pads, chorus-heavy mixes
 
 ## API Usage
@@ -100,7 +130,8 @@ chorus = Chorus(
 left_in = np.random.randn(44100)
 right_in = np.random.randn(44100)
 left_out, right_out = chorus.process_block(left_in, right_in)
-```
+
+```text
 
 ### Real-Time Processing
 
@@ -113,7 +144,8 @@ for sample_index in range(num_samples):
     )
     output_l[sample_index] = left_out
     output_r[sample_index] = right_out
-```
+
+```text
 
 ### Parameter Control
 
@@ -125,14 +157,16 @@ chorus.set_depth(12.0)      # Change modulation depth to 12ms
 chorus.set_feedback(-30.0)  # Increase feedback for resonance
 chorus.set_wet_mix(-3.0)    # Increase wet signal level
 chorus.set_dry_mix(-3.0)    # Increase dry signal level
-```
+
+```text
 
 ### Reset State
 
 ```python
 # Clear buffers and reset LFO phases
 chorus.reset()
-```
+
+```text
 
 ## Implementation Details
 
@@ -147,23 +181,27 @@ def _read_delay_linear(buffer, read_pos):
     s1 = buffer[idx]
     s2 = buffer[(idx + 1) % len(buffer)]
     return s1 + frac * (s2 - s1)
-```
+
+```text
 
 ### LFO Modulation
 
 Independent LFO phases for each channel create the stereo width effect:
 
 - **Monophonic effect** (stereo_offset=0): Both channels modulated identically
+
 - **Typical stereo** (stereo_offset=90°): 90° phase difference creates correlated but distinct effect
+
 - **Maximum width** (stereo_offset=180°): Channels are 180° out of phase
 
 ### Buffer Management
 
 Delay buffer size is automatically calculated:
 
-```
+```text
 buffer_size = (delay_ms + depth_ms) * sample_rate / 1000 + 2 samples
-```
+
+```text
 
 The extra 2 samples ensure safe interpolation near buffer edges.
 
@@ -172,11 +210,17 @@ The extra 2 samples ensure safe interpolation near buffer edges.
 **25 tests passing** covering:
 
 1. **Initialization**: Default and custom parameters
+
 2. **Parameter Validation**: Range clamping and constraints
+
 3. **Audio Processing**: Single samples, blocks, silence handling
+
 4. **Stereo Characteristics**: L/R decorrelation and imaging
+
 5. **Presets**: All 5 presets functional and within bounds
+
 6. **Robustness**: Various sample rates, extreme mixing ratios
+
 7. **Signal Characteristics**: Frequency preservation, LFO visibility
 
 ### Run Tests
@@ -187,13 +231,17 @@ python -m pytest test_phase2_chorus.py -v
 
 # With coverage
 python -m pytest test_phase2_chorus.py -v --cov=daw_core.fx.chorus
-```
+
+```text
 
 ## DSP Quality Metrics
 
 - **Frequency Response**: Linear across 20 Hz – 20 kHz (delay-based architecture)
+
 - **Modulation Linearity**: ±0.1% depth accuracy via sine LFO
+
 - **Phase Offset Accuracy**: ±1° stereo phase accuracy
+
 - **Numerical Stability**: Safe for up to 16 hours of continuous playback
 
 ## Integration with CoreLogic Studio
@@ -220,7 +268,8 @@ The chorus effect will be accessible via the DAW's effects rack:
     }
   }}
 />
-```
+
+```text
 
 ### Backend (FastAPI)
 
@@ -235,19 +284,25 @@ POST /api/effects/process
   "audio_data": [...],
   "params": {...}
 }
-```
+
+```text
 
 ## Performance Characteristics
 
 - **CPU Usage**: ~0.5% per instance @ 44.1kHz (single core)
+
 - **Memory**: ~30 KB per instance (includes delay buffers)
+
 - **Latency**: ~0.1 ms (interpolation latency only)
+
 - **Voices**: Unlimited (independent instances)
 
 ## File References
 
 - **Implementation**: `daw_core/fx/chorus.py` (495 lines)
+
 - **Tests**: `test_phase2_chorus.py` (390+ lines, 25 tests)
+
 - **Registry**: `daw_core/fx/__init__.py` (updated exports)
 
 ## Future Enhancements
@@ -255,15 +310,21 @@ POST /api/effects/process
 Potential improvements for later phases:
 
 1. **Analog Modeling**: Add waveshaping to simulate vintage hardware
+
 2. **Envelope Follower**: Modulation depth controlled by input level
+
 3. **Voice Stack**: Parallel chorus processing with phase cycling
+
 4. **Frequency-Dependent Modulation**: Different rates per band
+
 5. **Automation Framework**: Full AutomatedParameter integration
 
 ## Credits & References
 
 - Classic chorus topology based on Cockos Reaper documentation
+
 - LFO modulation patterns from analog synthesizer design
+
 - Stereo imaging techniques from pro audio literature
 
 ---

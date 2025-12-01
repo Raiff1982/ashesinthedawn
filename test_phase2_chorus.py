@@ -377,7 +377,6 @@ class TestChorusCharacteristics:
         
         # Output should be different from input (modulated)
         # Compare RMS values
-        input_rms = np.sqrt(np.mean(signal**2))
         output_rms_l = np.sqrt(np.mean(out_l**2))
         output_rms_r = np.sqrt(np.mean(out_r**2))
         

@@ -5,7 +5,7 @@ Based on classic chorus topology with independent L/R LFOs
 """
 
 import numpy as np
-from typing import Optional, Tuple
+from typing import Tuple
 import math
 
 
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     peak_l = np.max(np.abs(out_l))
     peak_r = np.max(np.abs(out_r))
     
-    print(f"✓ Chorus effect test passed")
+    print("✓ Chorus effect test passed")
     print(f"  Input peak: {np.max(np.abs(test_signal)):.4f}")
     print(f"  Output L peak: {peak_l:.4f}")
     print(f"  Output R peak: {peak_r:.4f}")

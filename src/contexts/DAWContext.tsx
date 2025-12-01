@@ -60,6 +60,11 @@ interface DAWContextType {
   isAudioIOActive: boolean;
   audioIOError: string | null;
   selectedInputDevice: { label: string } | null;
+  selectedInputDeviceId: string | null;
+  selectedOutputDeviceId: string | null;
+  selectInputDevice: (deviceId: string) => Promise<void>;
+  selectOutputDevice: (deviceId: string) => Promise<void>;
+  getAudioContextStatus: () => AudioContextState | string;
   setCurrentProject: (project: Project | null) => void;
   addTrack: (type: Track["type"]) => void;
   selectTrack: (trackId: string) => void;
@@ -275,14 +280,21 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   // MIDI State
   const [midiDevices] = useState<MidiDevice[]>([]);
   const [midiRoutes, setMidiRoutes] = useState<MidiRoute[]>([]);
-  // Audio I/O State (placeholder for future real-time audio I/O features)
+  
+  // Audio I/O State - Real device management
+  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState<string | null>(null);
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string | null>(null);
+  const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
+  const [audioContextState, setAudioContextState] = useState<AudioContextState>('running');
+  
+  // Audio I/O State (legacy - for interface compatibility)
   const inputLevel = 0;
   const latencyMs = 5;
   const bufferUnderruns = 0;
   const bufferOverruns = 0;
-  const isAudioIOActive = false;
-  const audioIOError: string | null = null;
-  const selectedInputDevice: { label: string } | null = null;
+  const isAudioIOActive = audioContextState === 'running';
+  const audioIOError = audioDeviceError;
+  const selectedInputDevice = selectedInputDeviceId ? { label: selectedInputDeviceId } : null;
   // CPU usage detailed
   const [cpuUsageDetailedState] = useState<Record<string, number>>({
     audio: 2,
@@ -1512,6 +1524,58 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   const closeExportModal = () => setShowExportModal(false);
   const openAudioSettingsModal = () => setShowAudioSettingsModal(true);
   const closeAudioSettingsModal = () => setShowAudioSettingsModal(false);
+
+  /**
+   * Set the selected input device and apply it to the audio engine
+   */
+  const selectInputDevice = async (deviceId: string) => {
+    try {
+      setSelectedInputDeviceId(deviceId);
+      console.log(`[DAWContext] Selected input device: ${deviceId}`);
+      // Device selection is handled by the AudioDeviceManager
+      // The actual audio routing will happen when recording
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      setAudioDeviceError(`Failed to select input device: ${message}`);
+      console.error('[DAWContext] Input device selection error:', error);
+    }
+  };
+
+  /**
+   * Set the selected output device and apply it to the audio engine
+   */
+  const selectOutputDevice = async (deviceId: string) => {
+    try {
+      setSelectedOutputDeviceId(deviceId);
+      
+      // Resume audio context if needed for device switching
+      const audioContext = audioEngineRef.current.getAudioContext();
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioEngineRef.current.resumeAudioContext();
+      }
+      
+      console.log(`[DAWContext] Selected output device: ${deviceId}`);
+      setAudioDeviceError(null);
+      
+      // Update audio context state
+      if (audioContext) {
+        setAudioContextState(audioContext.state);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      setAudioDeviceError(`Failed to select output device: ${message}`);
+      console.error('[DAWContext] Output device selection error:', error);
+    }
+  };
+
+  /**
+   * Get current audio context state for status display
+   */
+  const getAudioContextStatus = () => {
+    const audioContext = audioEngineRef.current.getAudioContext();
+    return audioContext?.state || 'unknown';
+  };
+
   const openAboutModal = () => setShowAboutModal(true);
   const closeAboutModal = () => setShowAboutModal(false);
   const openSaveAsModal = () => setShowSaveAsModal(true);
@@ -1962,6 +2026,12 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         isAudioIOActive,
         audioIOError,
         selectedInputDevice,
+        // Audio Device Selection
+        selectInputDevice,
+        selectOutputDevice,
+        getAudioContextStatus,
+        selectedInputDeviceId,
+        selectedOutputDeviceId,
         // CPU Usage
         cpuUsageDetailed: cpuUsageDetailedState,
         // Codette AI Integration (Phase 1)
