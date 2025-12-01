@@ -5,7 +5,7 @@ import TopBar from './components/TopBar';
 import MenuBar from './components/MenuBar';
 import TrackList from './components/TrackList';
 import Timeline from './components/Timeline';
-import Mixer from './components/Mixer';
+import MixerPro from './components/MixerPro';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
 import CommandPalette from './components/CommandPalette';
 import { initializeActions } from './lib/actions/initializeActions';
@@ -96,7 +96,7 @@ function AppContent() {
               style={{ height: `${mixerHeight}px` }}
             >
               <div className="w-full h-full flex flex-col overflow-hidden">
-                <Mixer />
+                <MixerPro />
               </div>
             </div>
           </div>
