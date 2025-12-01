@@ -240,10 +240,11 @@ export function registerTrackActions() {
       if (!ctx?.selectedTrack) return;
 
       // Add new track of same type
-      if (ctx.addTrack) {
+      if (ctx.duplicateTrack) {
+        await ctx.duplicateTrack(ctx.selectedTrack.id);
+      } else if (ctx.addTrack) {
         ctx.addTrack(ctx.selectedTrack.type);
       }
-      // TODO: Copy effects, settings, etc.
     }
   );
 

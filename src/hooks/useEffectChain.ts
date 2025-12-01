@@ -308,7 +308,7 @@ export function useEffectChain({
   );
 
   /**
-   * Save effect chain preset (placeholder)
+   * Save effect chain preset to browser storage
    */
   const savePreset = useCallback(
     async (name: string) => {
@@ -333,7 +333,7 @@ export function useEffectChain({
   );
 
   /**
-   * Load effect chain preset (placeholder)
+   * Load effect chain preset from browser storage
    */
   const loadPreset = useCallback(
     async (name: string) => {

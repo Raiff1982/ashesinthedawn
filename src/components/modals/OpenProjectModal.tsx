@@ -1,23 +1,129 @@
-import { useState } from 'react';
-import { X, FolderOpen } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { X, FolderOpen, RefreshCcw, DownloadCloud, Loader2 } from 'lucide-react';
 import { useDAW } from '../../contexts/DAWContext';
+import { supabase } from '../../lib/supabase';
+import { loadProjectFromStorage, saveProjectToStorage } from '../../lib/projectStorage';
+import type { Project } from '../../types';
+
+interface ProjectListItem {
+  id: string;
+  name: string;
+  updatedAt: string;
+  sizeLabel: string;
+  trackCount: number;
+  source: 'local' | 'cloud';
+}
 
 export default function OpenProjectModal() {
   const { showOpenProjectModal, closeOpenProjectModal, loadProject } = useDAW();
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Mock project list
-  const recentProjects = [
-    { id: 'proj-1', name: 'My Podcast Episode 1', date: '2024-11-22', size: '125 MB' },
-    { id: 'proj-2', name: 'Summer Beats 2024', date: '2024-11-20', size: '342 MB' },
-    { id: 'proj-3', name: 'Ambient Loop Pack', date: '2024-11-18', size: '89 MB' },
-    { id: 'proj-4', name: 'Electronic Draft', date: '2024-11-15', size: '156 MB' },
-  ];
+  const fetchProjects = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const items: ProjectListItem[] = [];
+
+      const localProject = loadProjectFromStorage();
+      if (localProject) {
+        const updatedAt = localProject.updatedAt || localProject.createdAt || new Date().toISOString();
+        items.push({
+          id: localProject.id,
+          name: `${localProject.name} (Local)` ,
+          updatedAt,
+          sizeLabel: `${localProject.tracks.length} tracks @ ${localProject.sampleRate} Hz`,
+          trackCount: localProject.tracks.length,
+          source: 'local',
+        });
+      }
+
+      const { data, error: supabaseError } = await supabase
+        .from('projects')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(50);
+
+      if (supabaseError) {
+        throw supabaseError;
+      }
+
+      const cloudItems = (data || []).map((project: any) => ({
+        id: project.id,
+        name: project.name || 'Untitled Project',
+        updatedAt: project.updated_at || project.created_at || new Date().toISOString(),
+        sizeLabel: `${project.session_data?.tracks?.length ?? 0} tracks @ ${project.sample_rate || 44100} Hz`,
+        trackCount: project.session_data?.tracks?.length ?? 0,
+        source: 'cloud' as const,
+      }));
+
+      const merged = [...items];
+      cloudItems.forEach((item) => {
+        if (!merged.find((existing) => existing.id === item.id)) {
+          merged.push(item);
+        }
+      });
+
+      setProjects(merged);
+      setSelectedProject((prev) => {
+        if (prev && merged.some((item) => item.id === prev)) {
+          return prev;
+        }
+        return merged[0]?.id ?? null;
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load projects';
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showOpenProjectModal) {
+      fetchProjects();
+    }
+  }, [showOpenProjectModal, fetchProjects]);
+
+  const filteredProjects = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return projects;
+    return projects.filter((project) =>
+      project.name.toLowerCase().includes(term)
+    );
+  }, [projects, searchTerm]);
 
   const handleOpen = async () => {
     if (selectedProject) {
       await loadProject(selectedProject);
       closeOpenProjectModal();
+    }
+  };
+
+  const handleLocalFileBrowse = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as Project;
+      if (parsed?.id && Array.isArray(parsed.tracks)) {
+        saveProjectToStorage(parsed);
+        await loadProject(parsed.id);
+        closeOpenProjectModal();
+      } else {
+        throw new Error('Invalid project file');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid project file';
+      setError(message);
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -42,15 +148,39 @@ export default function OpenProjectModal() {
             <input
               type="text"
               placeholder="Search projects..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
             />
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-gray-400">
+            <span>
+              {filteredProjects.length} project{filteredProjects.length === 1 ? '' : 's'} available
+              {isLoading && ' • Loading...'}
+            </span>
+            <div className="flex items-center gap-2">
+              {error && <span className="text-red-400">{error}</span>}
+              <button
+                onClick={fetchProjects}
+                className="px-2 py-1 bg-gray-800 border border-gray-700 rounded hover:border-gray-500 flex items-center gap-1"
+              >
+                {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCcw className="w-3 h-3" />}
+                Refresh
+              </button>
+            </div>
           </div>
 
           {/* Recent Projects */}
           <div>
             <h3 className="text-sm font-medium text-gray-300 mb-3">Recent Projects</h3>
             <div className="space-y-2">
-              {recentProjects.map((project) => (
+              {filteredProjects.length === 0 && !isLoading && (
+                <div className="p-3 border border-dashed border-gray-700 rounded text-gray-500 text-sm text-center">
+                  No projects found. Save a project or import one from disk.
+                </div>
+              )}
+              {filteredProjects.map((project) => (
                 <div
                   key={project.id}
                   onClick={() => setSelectedProject(project.id)}
@@ -66,8 +196,9 @@ export default function OpenProjectModal() {
                       <div>
                         <p className="text-sm font-medium text-gray-200">{project.name}</p>
                         <p className="text-xs text-gray-500">
-                          Modified {project.date} • {project.size}
+                          Updated {project.updatedAt ? new Date(project.updatedAt).toLocaleString() : 'Unknown'} • {project.sizeLabel}
                         </p>
+                        <p className="text-[11px] text-gray-500 uppercase tracking-wide">{project.source === 'cloud' ? 'Cloud Sync' : 'Local Storage'}</p>
                       </div>
                     </div>
                     {selectedProject === project.id && (
@@ -82,9 +213,22 @@ export default function OpenProjectModal() {
           {/* File Browser */}
           <div>
             <h3 className="text-sm font-medium text-gray-300 mb-3">Or Browse Files</h3>
-            <button className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition text-sm">
-              Browse Local Files...
-            </button>
+            <>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition text-sm flex items-center gap-2 justify-center"
+              >
+                <DownloadCloud className="w-4 h-4" />
+                Import Project JSON...
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json,.corelogic,.cls"
+                hidden
+                onChange={handleLocalFileBrowse}
+              />
+            </>
           </div>
         </div>
 

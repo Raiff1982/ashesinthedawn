@@ -46,7 +46,7 @@ const TOTAL_ROTATION = MAX_ROTATION - MIN_ROTATION;
 const Knob: React.FC<{
   param: PluginParameter;
   onValueChange: (value: number) => void;
-}> = ({ param, onValueChange }) => {
+}> = ({ param, onValueChange: onParameterChange }) => {
   const [knobState, setKnobState] = useState<KnobState>({
     isDragging: false,
     lastY: 0,
@@ -80,7 +80,6 @@ const Knob: React.FC<{
 
       const range = param.max - param.min;
       const step = param.step || 0.01;
-      const stepsInRange = range / step;
       const deltaValue = (rawDelta / 100) * range;
 
       let newValue = param.value + deltaValue;
@@ -92,6 +91,8 @@ const Knob: React.FC<{
       if (step) {
         newValue = Math.round(newValue / step) * step;
       }
+      // Clamp to bounds
+      newValue = Math.max(param.min, Math.min(param.max, newValue));
 
       onParameterChange(newValue);
       setKnobState(prev => ({ ...prev, lastY: e.clientY }));
@@ -259,7 +260,6 @@ const Knob: React.FC<{
  * Plugin Knobs Panel Component
  */
 export const PluginKnobs: React.FC<PluginKnobsProps> = ({
-  pluginId,
   pluginName,
   parameters,
   onParameterChange,

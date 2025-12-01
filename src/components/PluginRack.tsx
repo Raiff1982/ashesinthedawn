@@ -27,7 +27,6 @@ export default function PluginRack({
   onAddPlugin,
   onRemovePlugin,
   onTogglePlugin,
-  onParameterChange,
   trackId,
 }: PluginRackProps) {
   const [showPluginMenu, setShowPluginMenu] = useState(false);

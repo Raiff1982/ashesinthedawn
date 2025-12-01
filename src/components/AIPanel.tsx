@@ -33,16 +33,6 @@ export default function AIPanel() {
     return () => {};
   }, []);
 
-  const checkBackendConnection = async () => {
-    try {
-      const bridge = getCodetteBridge();
-      const response = await bridge.healthCheck();
-      setBackendConnected(response.success);
-    } catch {
-      setBackendConnected(false);
-    }
-  };
-
   const analyzeSessionWithBackend = async () => {
     setLoading(true);
     try {
@@ -73,6 +63,7 @@ export default function AIPanel() {
       };
 
       const prediction = await bridge.analyzeSession(context);
+      setBackendConnected(true);
 
       setSuggestions([{
         type: 'full',
@@ -87,6 +78,7 @@ export default function AIPanel() {
         })),
       }]);
     } catch (error) {
+      setBackendConnected(false);
       console.error('Backend analysis error:', error);
       setSuggestions([{
         type: 'full',

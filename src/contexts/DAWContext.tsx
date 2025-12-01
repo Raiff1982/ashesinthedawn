@@ -65,6 +65,7 @@ interface DAWContextType {
   selectTrack: (trackId: string) => void;
   updateTrack: (trackId: string, updates: Partial<Track>) => void;
   deleteTrack: (trackId: string) => void; // Soft delete to trash
+  duplicateTrack: (trackId: string) => Promise<Track | null>;
   restoreTrack: (trackId: string) => void; // Restore from trash
   permanentlyDeleteTrack: (trackId: string) => void; // Hard delete
   togglePlay: () => void;
@@ -803,6 +804,55 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const duplicateTrack = async (trackId: string): Promise<Track | null> => {
+    const sourceTrack = tracks.find((t) => t.id === trackId);
+    if (!sourceTrack) {
+      console.warn(`[DAWContext] Cannot duplicate missing track ${trackId}`);
+      return null;
+    }
+
+    const uniqueId = `track-${Date.now()}`;
+    const clonePlugins = sourceTrack.inserts.map((plugin, index) => ({
+      ...plugin,
+      id: `${plugin.id || "plugin"}-${uniqueId}-${index}`,
+      parameters: { ...plugin.parameters },
+    }));
+    const cloneSends = sourceTrack.sends.map((send, index) => ({
+      ...send,
+      id: `${send.id || "send"}-${uniqueId}-${index}`,
+    }));
+
+    const clonedTrack: Track = {
+      ...sourceTrack,
+      id: uniqueId,
+      name: `${sourceTrack.name} Copy`,
+      inserts: clonePlugins,
+      sends: cloneSends,
+      childTrackIds: sourceTrack.childTrackIds
+        ? [...sourceTrack.childTrackIds]
+        : undefined,
+    };
+
+    setUndoHistory((prev) => [...prev, tracks]);
+    setRedoHistory([]);
+    setTracks((prev) => [...prev, clonedTrack]);
+    setSelectedTrack(clonedTrack);
+
+    if (sourceTrack.type !== "master") {
+      try {
+        await audioEngineRef.current.duplicateTrackAudioBuffer(
+          sourceTrack.id,
+          clonedTrack.id
+        );
+      } catch (error) {
+        console.warn("[DAWContext] Failed to duplicate audio buffer:", error);
+      }
+    }
+
+    console.log(`Track "${sourceTrack.name}" duplicated as "${clonedTrack.name}"`);
+    return clonedTrack;
+  };
+
   const selectAllTracks = () => {
     const allTrackIds = new Set(tracks.map((t) => t.id));
     setSelectedTracks(allTrackIds);
@@ -1477,18 +1527,34 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   const openShortcutsModal = () => setShowShortcutsModal(true);
   const closeShortcutsModal = () => setShowShortcutsModal(false);
 
-  // Export audio stub
+  // Export audio using audio engine mixdown
   const exportAudio = async (format: string, quality: string) => {
-    console.log(`Exporting audio as ${format} with ${quality} quality`);
-    // Simulate export process
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        console.log(`Export complete: ${currentProject?.name}.${format}`);
-        const message = `Audio exported as ${format.toUpperCase()}`;
-        alert(message);
-        resolve();
-      }, 1500);
-    });
+    try {
+      const { blob, fileName } = await audioEngineRef.current.renderMixdown(
+        tracks,
+        {
+          format,
+          quality,
+          loopStart: loopRegion.enabled ? loopRegion.startTime : 0,
+          loopEnd: loopRegion.enabled ? loopRegion.endTime : undefined,
+          projectName: currentProject?.name,
+        }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      alert(`Audio exported as ${fileName}`);
+    } catch (error) {
+      console.error("[DAWContext] Audio export failed:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      alert(`Failed to export audio: ${message}`);
+    }
   };
 
   // Export current project as JSON file
@@ -1799,6 +1865,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         selectTrack,
         updateTrack,
         deleteTrack,
+        duplicateTrack,
         restoreTrack,
         permanentlyDeleteTrack,
         togglePlay,
@@ -1929,6 +1996,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     togglePlay,
     addTrack,
     deleteTrack,
+    duplicateTrack,
     updateTrack,
     seek,
     selectedTrack,
