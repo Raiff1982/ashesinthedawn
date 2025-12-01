@@ -6,11 +6,11 @@ import TrackDetailsPanel from './TrackDetailsPanel';
 import MIDISettings from './MIDISettings';
 import MIDIEditor from './MIDIEditor';
 import MarkerPanel from './MarkerPanel';
+import { CodetteMasterPanel } from './CodetteMasterPanel';
 import {
   LazyRoutingMatrixWrapper,
   LazyPluginBrowserWrapper,
   LazySpectrumVisualizerPanelWrapper,
-  LazyCodetteSystemWrapper,
 } from './LazyComponents';
 
 type SidebarTab = 'files' | 'track' | 'routing' | 'plugins' | 'midi' | 'midi-editor' | 'spectrum' | 'markers' | 'monitor' | 'codette';
@@ -54,7 +54,7 @@ export default function EnhancedSidebar() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'codette' && <LazyCodetteSystemWrapper defaultTab="chat" />}
+        {activeTab === 'codette' && <CodetteMasterPanel />}
         {activeTab === 'track' && <TrackDetailsPanel />}
         {activeTab === 'files' && <Sidebar />}
         {activeTab === 'routing' && <LazyRoutingMatrixWrapper />}

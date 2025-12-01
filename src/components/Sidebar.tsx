@@ -9,11 +9,9 @@ import {
 } from './LazyComponents';
 import MIDISettings from './MIDISettings';
 import AIPanel from './AIPanel';
-import { CodetteSuggestionsPanel } from './CodetteSuggestionsPanel';
-import { Sparkles } from 'lucide-react';
 
 export default function Sidebar() {
-  const [activeTab, setActiveTab] = useState<'browser' | 'pluginbrowser' | 'plugins' | 'templates' | 'ai' | 'effectchain' | 'midi' | 'routing' | 'spectrum' | 'codette'>('browser');
+  const [activeTab, setActiveTab] = useState<'browser' | 'pluginbrowser' | 'plugins' | 'templates' | 'ai' | 'effectchain' | 'midi' | 'routing' | 'spectrum'>('browser');
   const [selectedBrowserTab, setSelectedBrowserTab] = useState<'projects' | 'audio' | 'samples' | 'loops'>('projects');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addTrack, uploadAudioFile, isUploadingFile, uploadError, currentProject } = useDAW();
@@ -186,15 +184,6 @@ export default function Sidebar() {
           title="Spectrum"
         >
           <Gauge className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => setActiveTab('codette')}
-          className={`flex-1 p-3 flex items-center justify-center space-x-2 min-w-fit ${
-            activeTab === 'codette' ? 'bg-gray-800 text-blue-400' : 'text-gray-400 hover:text-white'
-          }`}
-          title="Codette Suggestions"
-        >
-          <Sparkles className="w-4 h-4" />
         </button>
       </div>
 
@@ -397,16 +386,6 @@ export default function Sidebar() {
         )}
 
         {activeTab === 'ai' && <AIPanel />}
-
-        {activeTab === 'codette' && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              Codette Suggestions
-            </h3>
-            <CodetteSuggestionsPanel />
-          </div>
-        )}
       </div>
 
       {/* Phase 4 Components */}

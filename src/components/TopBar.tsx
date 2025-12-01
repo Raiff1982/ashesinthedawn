@@ -23,6 +23,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { useDAW } from "../contexts/DAWContext";
+import { useCodettePanel } from "../contexts/CodettePanelContext";
 import { useTransportClock } from "../hooks/useTransportClock";
 import { useSaveStatus } from "../hooks/useSaveStatus";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -56,6 +57,8 @@ export default function TopBar() {
     selectedTrack,
     tracks,
   } = useDAW();
+
+  const { showCodetteMasterPanel, setShowCodetteMasterPanel } = useCodettePanel();
 
   const { state: transport, connected } = useTransportClock();
   const { isSaving, isSaved, isError } = useSaveStatus();
@@ -465,6 +468,21 @@ export default function TopBar() {
 
       {/* Codette AI Quick Controls */}
       <div className="flex items-center gap-1 px-2 py-1 bg-purple-900/20 rounded border border-purple-700/50">
+        {/* Open Full Panel Button */}
+        <button
+          onClick={() => setShowCodetteMasterPanel(!showCodetteMasterPanel)}
+          className={`px-2 py-1 rounded transition-all duration-200 text-xs font-medium flex items-center gap-1 ${
+            showCodetteMasterPanel
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/50'
+              : 'text-purple-300 hover:text-purple-200 hover:bg-purple-600/30'
+          }`}
+          title="Open Codette AI Master Panel"
+        >
+          <Sparkles className="w-3 h-3" />
+          <span className="hidden sm:inline">Codette</span>
+        </button>
+
+        {/* Quick Suggestion Tab */}
         <button
           onClick={() => {
             setCodetteActiveTab('suggestions');
@@ -480,6 +498,8 @@ export default function TopBar() {
           <Sparkles className="w-3 h-3" />
           <span className="hidden sm:inline">AI</span>
         </button>
+
+        {/* Quick Analysis Tab */}
         <button
           onClick={() => {
             setCodetteActiveTab('analysis');
@@ -495,6 +515,8 @@ export default function TopBar() {
           <BarChart3 className="w-3 h-3" />
           <span className="hidden sm:inline">Analyze</span>
         </button>
+
+        {/* Quick Control Tab */}
         <button
           onClick={() => {
             setCodetteActiveTab('control');
@@ -539,7 +561,7 @@ export default function TopBar() {
         )}
 
         {/* Connection Status */}
-        <div className={`ml-1 w-2 h-2 rounded-full ${codetteBackendConnected ? 'bg-green-400' : 'bg-red-400'}`} />
+        <div className={`ml-1 w-2 h-2 rounded-full ${codetteBackendConnected ? 'bg-green-400' : 'bg-red-400'}`} title={codetteBackendConnected ? 'Connected to Codette backend' : 'Codette backend offline'} />
       </div>
 
       {/* MIDI Action Status Display - Enhanced Dropdown */}

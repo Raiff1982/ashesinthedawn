@@ -236,17 +236,20 @@ RETURNS TABLE(
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- Ensure predictable name resolution for the duration of this function call
+  PERFORM set_config('search_path', 'pg_catalog,public', true);
+
   RETURN QUERY
   SELECT 
     mk.id, 
     mk.topic, 
     mk.category, 
-    mk.suggestion->>'title' as title,
-    mk.suggestion->>'description' as description,
-    mk.suggestion->'parameters' as parameters,
+    mk.suggestion->>'title' AS title,
+    mk.suggestion->>'description' AS description,
+    mk.suggestion->'parameters' AS parameters,
     mk.confidence,
     mk.created_at
-  FROM public.music_knowledge mk
+  FROM public.music_knowledge AS mk
   WHERE (
     lower(mk.topic) LIKE '%' || lower(p_search_term) || '%'
     OR lower(mk.suggestion::text) LIKE '%' || lower(p_search_term) || '%'

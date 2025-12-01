@@ -1,13 +1,10 @@
 import { useDAW } from '../contexts/DAWContext';
-import { Sliders, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sliders, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { useState, useRef, useEffect, memo } from 'react';
 import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
 import MixerOptionsTile from './MixerOptionsTile';
 import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
-import { CodetteSuggestionsPanel } from './CodetteSuggestionsPanel';
-import CodetteAnalysisPanel from './CodetteAnalysisPanel';
-import CodetteControlPanel from './CodetteControlPanel';
 import { KeyboardMusic, Volume2, Music2, Zap } from 'lucide-react';
 
 interface DetachedTileState {
@@ -42,14 +39,8 @@ const MixerComponent = () => {
   const [scaledStripWidth, setScaledStripWidth] = useState(DEFAULT_STRIP_WIDTH);
   const [isHoveringMixer, setIsHoveringMixer] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [codetteTab, setCodetteTab] = useState<'suggestions' | 'analysis' | 'control'>('suggestions');
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showPluginRack, setShowPluginRack] = useState(false); // Show/hide plugin rack panel
-
-  // Debug: Log when tabs change
-  useEffect(() => {
-    console.log('[Mixer] Codette tab changed to:', codetteTab);
-  }, [codetteTab]);
 
   // MIDI Quick Actions Handler
   const triggerMIDIAction = (actionId: string) => {
@@ -476,83 +467,13 @@ const MixerComponent = () => {
               </div>
             )}
 
-            {/* Codette AI Panels */}
-            <div className="flex-1 border-t border-gray-700 bg-gray-800 flex flex-col min-h-0 overflow-hidden">
-              {/* Tab Headers */}
-              <div className="flex items-center gap-2 p-2 border-b border-gray-700 flex-shrink-0 overflow-x-auto">
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    console.log('[Tab Button] Clicking Suggestions tab');
-                    setCodetteTab('suggestions');
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
-                    codetteTab === 'suggestions'
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  type="button"
-                  title="Suggestions"
-                >
-                  💡 Suggestions
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    console.log('[Tab Button] Clicking Analysis tab');
-                    setCodetteTab('analysis');
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
-                    codetteTab === 'analysis'
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  type="button"
-                  title="Analysis"
-                >
-                  📊 Analysis
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    console.log('[Tab Button] Clicking Control tab');
-                    setCodetteTab('control');
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
-                    codetteTab === 'control'
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  type="button"
-                  title="Control"
-                >
-                  ⚙️ Control
-                </button>
-              </div>
-
-              {/* Tab Content - Dynamic height with scroll */}
-              <div className="flex-1 overflow-auto bg-gray-800 min-h-0">
-                {codetteTab === 'suggestions' && (
-                  <div key="suggestions-tab" className="w-full h-full">
-                    <CodetteSuggestionsPanel
-                      trackId={selectedTrack?.id}
-                      context="mixer"
-                    />
-                  </div>
-                )}
-                {codetteTab === 'analysis' && (
-                  <div key="analysis-tab" className="w-full h-full">
-                    <CodetteAnalysisPanel
-                      trackId={selectedTrack?.id}
-                      autoAnalyze={false}
-                    />
-                  </div>
-                )}
-                {codetteTab === 'control' && (
-                  <div key="control-tab" className="w-full h-full">
-                    <CodetteControlPanel />
-                  </div>
-                )}
+            {/* Codette AI via Master Panel - Use TopBar Codette button */}
+            <div className="flex-1 border-t border-gray-700 bg-gray-800 flex flex-col items-center justify-center text-center p-4">
+              <Sparkles className="w-8 h-8 text-purple-400 mb-2" />
+              <p className="text-sm text-gray-300 mb-2">Codette AI Features</p>
+              <p className="text-xs text-gray-500 mb-4">Use the <span className="text-purple-400 font-semibold">Codette</span> button in the top bar to access AI suggestions, analysis, and controls.</p>
+              <div className="text-xs text-gray-600 bg-gray-700 rounded px-3 py-2 max-w-xs">
+                💡 Tip: Select a track and click the Codette button to get track-specific suggestions
               </div>
             </div>
           </div>

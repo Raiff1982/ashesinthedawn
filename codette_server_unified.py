@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import time
 import traceback
@@ -146,14 +146,25 @@ logger.info("✅ FastAPI app created with CORS enabled")
 # ============================================================================
 
 supabase_client = None
+supabase_admin_client = None
 if SUPABASE_AVAILABLE:
     try:
         supabase_url = os.getenv('VITE_SUPABASE_URL')
         supabase_key = os.getenv('VITE_SUPABASE_ANON_KEY')
+        supabase_service_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
         
         if supabase_url and supabase_key:
+            # Create anon client for reads
             supabase_client = supabase.create_client(supabase_url, supabase_key)
-            logger.info("✅ Supabase connected for music knowledge base")
+            logger.info("✅ Supabase anon client connected")
+        
+        # Create admin client for writes (if service key available)
+        if supabase_url and supabase_service_key:
+            supabase_admin_client = supabase.create_client(supabase_url, supabase_service_key)
+            logger.info("✅ Supabase admin client connected (for writes)")
+        elif supabase_url and supabase_key:
+            logger.info("⚠️  Supabase admin key not found, using anon client for writes")
+            supabase_admin_client = supabase_client
         else:
             logger.warning("⚠️ Supabase credentials not found in environment variables")
     except Exception as e:
@@ -225,6 +236,20 @@ class TransportCommandResponse(BaseModel):
     success: bool
     message: str
     state: Optional[TransportState] = None
+
+# Embedding models
+class EmbedRow(BaseModel):
+    id: str
+    text: str
+
+class UpsertRequest(BaseModel):
+    rows: List[EmbedRow]
+
+class UpsertResponse(BaseModel):
+    success: bool
+    processed: int
+    updated: int
+    message: str
 
 # ============================================================================
 # TRANSPORT CLOCK MANAGER
@@ -442,6 +467,141 @@ async def training_health():
             "error": str(e),
             "timestamp": get_timestamp(),
         }
+
+# ============================================================================
+# EMBEDDING ENDPOINTS
+# ============================================================================
+
+def generate_simple_embedding(text: str, dim: int = 1536) -> List[float]:
+    """
+    Generate a simple deterministic embedding from text.
+    
+    In production, use a real embedding API:
+    - OpenAI: embedding-3-small
+    - Cohere: embed-english-v3.0
+    - HuggingFace: sentence-transformers/all-MiniLM-L6-v2
+    """
+    import hashlib
+    
+    # Create a deterministic hash from text
+    hash_bytes = hashlib.sha256(text.encode()).digest()
+    hash_ints = [int.from_bytes(hash_bytes[i:i+4], 'big') for i in range(0, len(hash_bytes), 4)]
+    
+    # Generate pseudo-random embedding based on hash
+    if NUMPY_AVAILABLE:
+        embedding = np.zeros(dim, dtype=np.float32)
+        for i in range(dim):
+            # Use hash values to seed deterministic randomness
+            seed_val = hash_ints[i % len(hash_ints)] + i
+            # Create value between -1 and 1
+            embedding[i] = np.sin(seed_val / 1000.0) * np.cos(seed_val / 2000.0)
+        
+        # Normalize to unit vector (L2 norm)
+        magnitude = np.linalg.norm(embedding)
+        if magnitude > 0:
+            embedding = embedding / magnitude
+        
+        return embedding.tolist()
+    else:
+        # Fallback without NumPy
+        import random
+        random.seed(int.from_bytes(hash_bytes[:4], 'big'))
+        embedding = [random.uniform(-1, 1) for _ in range(dim)]
+        magnitude = sum(x**2 for x in embedding) ** 0.5
+        if magnitude > 0:
+            embedding = [x / magnitude for x in embedding]
+        return embedding
+
+@app.post("/api/upsert-embeddings", response_model=UpsertResponse)
+async def upsert_embeddings(request: UpsertRequest):
+    """
+    Generate embeddings for rows and update database.
+    
+    Request:
+        {
+            "rows": [
+                {"id": "...", "text": "..."},
+                {"id": "...", "text": "..."}
+            ]
+        }
+    
+    Response:
+        {
+            "success": true,
+            "processed": 20,
+            "updated": 20,
+            "message": "Successfully updated 20 embeddings"
+        }
+    """
+    try:
+        if not request.rows:
+            raise HTTPException(status_code=400, detail="No rows provided")
+        
+        logger.info(f"[upsert-embeddings] Processing {len(request.rows)} rows...")
+        
+        # Generate embeddings
+        updates = []
+        for row in request.rows:
+            embedding = generate_simple_embedding(row.text)
+            updates.append({
+                "id": row.id,
+                "embedding": embedding
+            })
+        
+        logger.info(f"[upsert-embeddings] Generated {len(updates)} embeddings")
+        if updates:
+            logger.info(f"[upsert-embeddings] Sample embedding: {updates[0]['embedding'][:5]}... (showing first 5 dims)")
+        
+        # Update database with embeddings
+        updated_count = 0
+        if supabase_admin_client and SUPABASE_AVAILABLE:
+            try:
+                logger.info(f"[upsert-embeddings] Updating {len(updates)} rows in Supabase...")
+                
+                # Update each row with its embedding using admin client
+                for update in updates:
+                    try:
+                        # Prepare update payload - ensure embedding is JSON-serializable
+                        payload = {
+                            'embedding': update['embedding'],  # List of floats
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }
+                        
+                        logger.info(f"[upsert-embeddings] Sending update for ID {update['id']} (embedding dim: {len(update['embedding'])})")
+                        
+                        # Use admin client for writes
+                        response = supabase_admin_client.table('music_knowledge').update(payload).eq('id', update['id']).execute()
+                        
+                        # Check if update was successful (response should have data or status info)
+                        logger.info(f"[upsert-embeddings] Response for {update['id']}: {response}")
+                        
+                        # Count as updated if no error was raised
+                        updated_count += 1
+                        logger.info(f"[upsert-embeddings] ✅ Updated row {update['id']}")
+                        
+                    except Exception as row_error:
+                        logger.error(f"[upsert-embeddings] ❌ Failed to update row {update['id']}: {row_error}", exc_info=True)
+                
+                logger.info(f"[upsert-embeddings] Successfully updated {updated_count}/{len(updates)} rows")
+            except Exception as db_error:
+                logger.error(f"[upsert-embeddings] Database error: {db_error}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+        else:
+            logger.warning("[upsert-embeddings] Supabase admin not available - embeddings not persisted")
+            updated_count = 0
+        
+        return UpsertResponse(
+            success=True,
+            processed=len(request.rows),
+            updated=updated_count,
+            message=f"Successfully processed {len(updates)} embeddings, {updated_count} updated in database"
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[upsert-embeddings] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # CHAT ENDPOINTS

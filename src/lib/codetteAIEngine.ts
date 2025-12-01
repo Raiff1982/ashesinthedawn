@@ -600,6 +600,38 @@ Keep peaks around -6dB during mixing.
   }
 
   /**
+   * Format Codette response by cleaning up multi-perspective analysis markers
+   */
+  private formatCodetteResponse(response: string): string {
+    // Remove markdown-style perspective headers and clean formatting
+    if (response.includes('**') && (response.includes('neural_network') || response.includes('newtonian_logic'))) {
+      // Extract just the perspective content, remove technical markers
+      const cleaned = response
+        .replace(/\*\*.*?\*\*/g, '') // Remove **bold** markers
+        .replace(/\[NeuralNet\]/g, '')
+        .replace(/\[Reason\]/g, '')
+        .replace(/\[Dream\]/g, '')
+        .replace(/\[Ethics\]/g, '')
+        .replace(/\[Quantum\]/g, '')
+        .replace(/neural_network:/g, '')
+        .replace(/newtonian_logic:/g, '')
+        .replace(/davinci_synthesis:/g, '')
+        .replace(/resilient_kindness:/g, '')
+        .replace(/quantum_logic:/g, '')
+        .replace(/🧠/g, '')
+        .replace(/Multiple perspectives:/g, '')
+        .replace(/Codette's Multi-Perspective Analysis/g, '')
+        .trim();
+
+      // Split by perspective markers and rejoin more naturally
+      const perspectives = cleaned.split(/\n+/).filter(line => line.trim().length > 0);
+      return perspectives.join('\n\n');
+    }
+
+    return response;
+  }
+
+  /**
    * Send chat message to Codette backend
    */
   async sendMessage(message: string): Promise<string> {
@@ -626,7 +658,10 @@ Keep peaks around -6dB during mixing.
       }
 
       const data = await response.json();
-      const responseText = data.response || data.message || 'No response received';
+      let responseText = data.response || data.message || 'No response received';
+
+      // Clean up multi-perspective analysis format
+      responseText = this.formatCodetteResponse(responseText);
 
       // Add assistant response to history
       this.chatHistory.push({

@@ -1,5 +1,6 @@
 import React from 'react';
 import { DAWProvider } from './contexts/DAWContext';
+import { CodettePanelProvider, useCodettePanel } from './contexts/CodettePanelContext';
 import { ThemeProvider } from './themes/ThemeContext';
 import TopBar from './components/TopBar';
 import MenuBar from './components/MenuBar';
@@ -9,12 +10,14 @@ import Mixer from './components/Mixer';
 import Sidebar from './components/Sidebar';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
 import CommandPalette from './components/CommandPalette';
+import CodetteMasterPanel from './components/CodetteMasterPanel';
 import { initializeActions } from './lib/actions/initializeActions';
 
 function AppContent() {
   const [mixerHeight, setMixerHeight] = React.useState(200);
   const [isResizingMixer, setIsResizingMixer] = React.useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+  const { showCodetteMasterPanel, setShowCodetteMasterPanel } = useCodettePanel();
 
   // Initialize action system on mount
   React.useEffect(() => {
@@ -117,6 +120,15 @@ function AppContent() {
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
       />
+      
+      {/* Codette AI Master Panel - Floating Modal */}
+      {showCodetteMasterPanel && (
+        <div className="fixed inset-0 z-40 pointer-events-none">
+          <div className="absolute bottom-0 right-0 w-96 h-96 pointer-events-auto">
+            <CodetteMasterPanel onClose={() => setShowCodetteMasterPanel(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -125,7 +137,9 @@ function App() {
   return (
     <ThemeProvider initialTheme="codette-graphite">
       <DAWProvider>
-        <AppContent />
+        <CodettePanelProvider>
+          <AppContent />
+        </CodettePanelProvider>
       </DAWProvider>
     </ThemeProvider>
   );
