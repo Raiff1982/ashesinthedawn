@@ -4,6 +4,26 @@ import { useEffect, useRef, useState } from "react";
 import WaveformDisplay from "./WaveformDisplay";
 import { ChevronDown, ChevronUp, Zap } from "lucide-react";
 
+const syntheticWaveformCache = new Map<string, number[]>();
+
+const generateSyntheticWaveform = (trackId: string, seed: number) => {
+  if (syntheticWaveformCache.has(trackId)) {
+    return syntheticWaveformCache.get(trackId)!;
+  }
+
+  const length = 2048;
+  const data: number[] = new Array(length).fill(0).map((_, index) => {
+    const progress = (index + seed * 37) / length;
+    const base = Math.sin(progress * Math.PI * (2 + (seed % 5))) * 0.6;
+    const overlay = Math.sin(progress * Math.PI * 7) * 0.2;
+    const random = Math.sin(progress * 50 + seed) * 0.05;
+    return Math.max(-1, Math.min(1, base + overlay + random));
+  });
+
+  syntheticWaveformCache.set(trackId, data);
+  return data;
+};
+
 /**
  * Enhanced Timeline with Professional Audio Waveform Visualization
  * Features:
@@ -33,18 +53,46 @@ export default function Timeline() {
   const [selectedTrackForWaveform, setSelectedTrackForWaveform] = useState<
     string | null
   >(null);
-
+  const [smartScaleEnabled, setSmartScaleEnabled] = useState(true);
+  const [trackHeight, setTrackHeight] = useState(80);
   const basePixelsPerBar = 120;
-  const pixelsPerBar = basePixelsPerBar * zoom;
-  const pixelsPerSecond = pixelsPerBar / 4;
 
-  // Get total duration
   const maxDuration = Math.max(
     ...tracks.map((t) => getAudioDuration(t.id)),
     loopRegion?.endTime || 0,
     ...(markers.length > 0 ? markers.map((m) => m.time) : [0]),
     30 // minimum
   );
+
+  useEffect(() => {
+    if (!smartScaleEnabled) return;
+    const container = waveformContainerRef.current;
+    if (!container || maxDuration <= 0) return;
+
+    const updateSmartScale = () => {
+      if (!container || maxDuration <= 0) return;
+      const containerWidth = container.clientWidth;
+      if (containerWidth <= 0) return;
+      const desiredPixelsPerSecond = containerWidth / Math.max(maxDuration, 1);
+      const desiredZoom = (desiredPixelsPerSecond * 4) / basePixelsPerBar;
+      const clamped = Math.max(0.5, Math.min(4, Number(desiredZoom.toFixed(2))));
+      setZoom((prev) => (Math.abs(prev - clamped) < 0.01 ? prev : clamped));
+    };
+
+    updateSmartScale();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => updateSmartScale());
+      observer.observe(container);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", updateSmartScale);
+    return () => window.removeEventListener("resize", updateSmartScale);
+  }, [smartScaleEnabled, maxDuration, basePixelsPerBar]);
+
+  const pixelsPerBar = basePixelsPerBar * zoom;
+  const pixelsPerSecond = pixelsPerBar / 4;
 
   // Color mapping for waveforms
   const getWaveformColor = (index: number) => {
@@ -174,47 +222,28 @@ export default function Timeline() {
     );
   };
 
-  // Render individual audio track waveform
-  const renderAudioTrackWaveform = (track: Track, trackIndex: number) => {
-    if (track.type !== "audio") return null;
+  const renderTrackWaveform = (track: Track, trackIndex: number) => {
+    const regionColor = track.color || getWaveformColor(trackIndex);
+    const rawDuration = track.duration ?? getAudioDuration(track.id);
+    const duration = rawDuration && rawDuration > 0 ? rawDuration : Math.max(maxDuration / 4, 8);
+    const width = Math.max(60, duration * pixelsPerSecond);
 
-    const duration = getAudioDuration(track.id);
-    if (duration <= 0) {
-      console.debug(`Track ${track.id} has no duration`);
-      return null;
+    const waveformSource = getWaveformData(track.id);
+    const waveformArray = waveformSource && waveformSource.length
+      ? Array.from(waveformSource as ArrayLike<number>)
+      : generateSyntheticWaveform(track.id, trackIndex);
+
+    const blockSize = Math.max(1, Math.floor(waveformArray.length / Math.max(width, 1)));
+    const mins: number[] = [];
+    const maxs: number[] = [];
+
+    for (let i = 0; i < waveformArray.length; i += blockSize) {
+      const block = waveformArray.slice(i, Math.min(i + blockSize, waveformArray.length));
+      mins.push(block.length ? Math.min(...block) : 0);
+      maxs.push(block.length ? Math.max(...block) : 0);
     }
 
-    const waveformData = getWaveformData(track.id);
-    if (!waveformData || waveformData.length === 0) {
-      console.warn(
-        `No waveform data for track ${track.id} (duration: ${duration}s)`
-      );
-      return null;
-    }
-
-    const regionColor = getWaveformColor(trackIndex);
-    const width = duration * pixelsPerSecond;
-
-    // Compute peaks
-    const computePeaks = () => {
-      if (!waveformData || waveformData.length === 0) return null;
-      const blockSize = Math.max(1, Math.floor(waveformData.length / width));
-      const mins: number[] = [];
-      const maxs: number[] = [];
-
-      for (let i = 0; i < waveformData.length; i += blockSize) {
-        const block = waveformData.slice(
-          i,
-          Math.min(i + blockSize, waveformData.length)
-        );
-        if (block.length === 0) continue;
-        mins.push(Math.min(...block));
-        maxs.push(Math.max(...block));
-      }
-      return { mins, maxs };
-    };
-
-    const peaks = computePeaks();
+    const heightPx = Math.max(trackHeight - 8, 32);
 
     return (
       <div
@@ -228,10 +257,8 @@ export default function Timeline() {
         style={{
           width: `${width}px`,
           minWidth: "30px",
-          height: "calc(100% - 8px)",
-          backgroundColor: track.muted
-            ? "rgba(107, 114, 128, 0.2)"
-            : `${regionColor}20`,
+          height: `${heightPx}px`,
+          backgroundColor: track.muted ? "rgba(107, 114, 128, 0.2)" : `${regionColor}20`,
           borderLeft: `3px solid ${regionColor}`,
           borderRadius: selectedTrackForWaveform === track.id ? "4px" : "0",
         }}
@@ -239,64 +266,52 @@ export default function Timeline() {
           e.stopPropagation();
           setSelectedTrackForWaveform(track.id);
         }}
+        title={`${track.name} • ${track.type.toUpperCase()}`}
       >
-        {/* Waveform SVG */}
-        {peaks && (
-          <svg
-            width={Math.max(width, 1)}
-            height={56}
-            className="absolute inset-0"
-            style={{ pointerEvents: "none" }}
-          >
-            <defs>
-              <linearGradient
-                id={`grad-${track.id}`}
-                x1="0%"
-                y1="0%"
-                x2="0%"
-                y2="100%"
-              >
-                <stop offset="0%" stopColor={regionColor} stopOpacity="0.8" />
-                <stop offset="50%" stopColor={regionColor} stopOpacity="0.6" />
-                <stop offset="100%" stopColor={regionColor} stopOpacity="0.3" />
-              </linearGradient>
-            </defs>
+        <svg
+          width={Math.max(width, 1)}
+          height={heightPx}
+          className="absolute inset-0"
+          style={{ pointerEvents: "none" }}
+        >
+          <defs>
+            <linearGradient id={`grad-${track.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor={regionColor} stopOpacity="0.85" />
+              <stop offset="50%" stopColor={regionColor} stopOpacity="0.6" />
+              <stop offset="100%" stopColor={regionColor} stopOpacity="0.25" />
+            </linearGradient>
+          </defs>
 
-            {/* Draw waveform lines */}
-            {peaks.mins.map((_, x) => {
-              if (x >= Math.min(width, peaks.mins.length)) return null;
-              const minY = 28 - peaks.mins[x] * 28 * 0.85;
-              const maxY = 28 - peaks.maxs[x] * 28 * 0.85;
-              const amplitude = Math.abs(
-                Math.max(peaks.maxs[x], Math.abs(peaks.mins[x]))
-              );
-              return (
-                <line
-                  key={x}
-                  x1={x}
-                  y1={minY}
-                  x2={x}
-                  y2={maxY}
-                  stroke={`url(#grad-${track.id})`}
-                  strokeWidth="1"
-                  opacity={0.5 + amplitude * 0.5}
-                />
-              );
-            })}
+          {mins.map((_, x) => {
+            if (x >= Math.min(width, mins.length)) return null;
+            const centerY = heightPx / 2;
+            const minY = centerY - mins[x] * centerY * 0.85;
+            const maxY = centerY - maxs[x] * centerY * 0.85;
+            const amplitude = Math.abs(Math.max(maxs[x], Math.abs(mins[x])));
+            return (
+              <line
+                key={x}
+                x1={x}
+                y1={minY}
+                x2={x}
+                y2={maxY}
+                stroke={`url(#grad-${track.id})`}
+                strokeWidth="1"
+                opacity={0.35 + amplitude * 0.65}
+              />
+            );
+          })}
 
-            {/* Draw filled area */}
-            <rect
-              x={0}
-              y={0}
-              width={width}
-              height={56}
-              fill={`url(#grad-${track.id})`}
-              opacity="0.1"
-            />
-          </svg>
-        )}
+          <rect
+            x={0}
+            y={0}
+            width={width}
+            height={heightPx}
+            fill={`url(#grad-${track.id})`}
+            opacity="0.08"
+          />
+        </svg>
 
-        {/* Track selection indicator */}
         {selectedTrackForWaveform === track.id && (
           <div className="absolute inset-0 border-2 border-blue-400 rounded animate-scale-in pointer-events-none" />
         )}
@@ -324,7 +339,12 @@ export default function Timeline() {
           <span className="text-xs text-gray-400">Zoom:</span>
           <button
             onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
-            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
+            disabled={smartScaleEnabled}
+            className={`px-2 py-1 text-xs rounded transition ${
+              smartScaleEnabled
+                ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+            }`}
           >
             -
           </button>
@@ -333,10 +353,40 @@ export default function Timeline() {
           </span>
           <button
             onClick={() => setZoom(Math.min(4.0, zoom + 0.1))}
-            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition"
+            disabled={smartScaleEnabled}
+            className={`px-2 py-1 text-xs rounded transition ${
+              smartScaleEnabled
+                ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+            }`}
           >
             +
           </button>
+        </div>
+
+        <button
+          onClick={() => setSmartScaleEnabled((prev) => !prev)}
+          className={`px-2 py-1 text-xs rounded border transition ${
+            smartScaleEnabled
+              ? "bg-blue-600 border-blue-500 text-white"
+              : "bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600"
+          }`}
+          title="Automatically fit the timeline length to the visible viewport"
+        >
+          {smartScaleEnabled ? "Smart Scale On" : "Smart Scale Off"}
+        </button>
+
+        <div className="flex items-center gap-2 ml-4">
+          <span className="text-xs text-gray-400 whitespace-nowrap">Track Height</span>
+          <input
+            type="range"
+            min={48}
+            max={160}
+            value={trackHeight}
+            onChange={(e) => setTrackHeight(Number(e.target.value))}
+            className="accent-blue-500 cursor-pointer"
+          />
+          <span className="text-xs text-gray-500 w-10 text-right">{trackHeight}px</span>
         </div>
 
         <div className="flex-1" />
@@ -390,26 +440,29 @@ export default function Timeline() {
           {/* Markers */}
           {renderMarkers()}
 
-          {/* Audio Tracks */}
-          {tracks
-            .filter((t) => t.type === "audio")
-            .map((track, idx) => (
-              <div
-                key={`track-${track.id}`}
-                className="relative h-20 bg-gray-900 border-b border-gray-800 group"
-              >
-                {showTrackHeaders && (
-                  <div className="absolute left-0 top-0 bottom-0 w-24 bg-gray-800 border-r border-gray-700 flex items-center px-2 z-10">
-                    <span className="text-xs text-gray-300 truncate">
-                      {track.name}
-                    </span>
-                  </div>
-                )}
-                <div style={{ marginLeft: showTrackHeaders ? "96px" : "0" }}>
-                  {renderAudioTrackWaveform(track, idx)}
+          {/* Media Tracks */}
+          {tracks.map((track, idx) => (
+            <div
+              key={`track-${track.id}`}
+              className="relative bg-gray-900 border-b border-gray-800 group"
+              style={{ height: `${trackHeight}px` }}
+            >
+              {showTrackHeaders && (
+                <div className="absolute left-0 top-0 bottom-0 w-28 bg-gray-800 border-r border-gray-700 flex flex-col justify-center px-2 z-10">
+                  <span className="text-xs text-gray-200 truncate">{track.name}</span>
+                  <span className="text-[10px] text-gray-500 uppercase tracking-wide">{track.type}</span>
                 </div>
+              )}
+              <div
+                style={{
+                  marginLeft: showTrackHeaders ? "112px" : "0",
+                  height: "100%",
+                }}
+              >
+                {renderTrackWaveform(track, idx)}
               </div>
-            ))}
+            </div>
+          ))}
 
           {/* Playhead */}
           <div
