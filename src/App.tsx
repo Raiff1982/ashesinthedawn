@@ -6,6 +6,7 @@ import MenuBar from './components/MenuBar';
 import TrackList from './components/TrackList';
 import Timeline from './components/Timeline';
 import Mixer from './components/Mixer';
+import Sidebar from './components/Sidebar';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
 import CommandPalette from './components/CommandPalette';
 import { initializeActions } from './lib/actions/initializeActions';
@@ -101,7 +102,10 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Right sidebar removed to allocate full width to timeline/media window */}
+          {/* Right sidebar - File browser and plugins */}
+          <div className="w-64 bg-gray-900 border-l border-gray-700 flex flex-col overflow-hidden">
+            <Sidebar />
+          </div>
         </div>
 
 
