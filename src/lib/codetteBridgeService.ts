@@ -4,12 +4,16 @@
  * 
  * Backend endpoints:
  * - http://localhost:8000/ (FastAPI unified server)
+ * 
+ * Authentication: Includes Supabase credentials for backend verification
  */
 
 export interface CodetteBridgeConfig {
   backendUrl: string;
   timeout: number;
   retryAttempts: number;
+  supabaseUrl?: string;
+  supabaseKey?: string;
 }
 
 export interface CodettePrediction {
@@ -44,6 +48,8 @@ class CodetteBridgeService {
       backendUrl: import.meta.env.VITE_CODETTE_API || 'http://localhost:8000',
       timeout: parseInt(import.meta.env.VITE_CODETTE_TIMEOUT || '10000'),
       retryAttempts: parseInt(import.meta.env.VITE_CODETTE_RETRIES || '3'),
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+      supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
       ...config,
     };
 
@@ -72,6 +78,22 @@ class CodetteBridgeService {
       console.warn('⚠️ Codette initialization deferred', error);
       this.isHealthy = false;
     }
+  }
+
+  /**
+   * Build request headers with Supabase authentication
+   */
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Add Supabase authentication if available
+    if (this.config.supabaseKey) {
+      headers['Authorization'] = `Bearer ${this.config.supabaseKey}`;
+    }
+
+    return headers;
   }
 
   /**
@@ -266,13 +288,66 @@ class CodetteBridgeService {
   }
 
   /**
+   * Get suggestions for a track (primary method used by DAW)
+   * Backend returns: { suggestions: [{ type, title, description, confidence }, ...], confidence, timestamp }
+   */
+  async getSuggestions(context: {
+    type: string;
+    track_type: string;
+    mood: string;
+  }): Promise<{ suggestions: Array<{ id: string; title: string; description: string; type: string; confidence: number; parameters: Record<string, any> }> }> {
+    try {
+      // Wrap context in request object as backend expects
+      const requestBody = { context, limit: 5 };
+      
+      // Make direct fetch call to bypass makeRequest data transformation
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+      const response = await fetch(`${this.config.backendUrl}/codette/suggest`, {
+        method: 'POST',
+        headers: this.buildHeaders(),
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json() as any;
+      
+      // Backend returns { suggestions: [...], confidence, timestamp }
+      if (data.suggestions && Array.isArray(data.suggestions)) {
+        return {
+          suggestions: data.suggestions.map((s: any) => ({
+            id: s.id || `suggestion-${Date.now()}-${Math.random()}`,
+            title: s.title || 'Suggestion',
+            description: s.description || '',
+            type: s.type || 'effect',
+            confidence: s.confidence || 0.8,
+            parameters: s.parameters || {},
+          })),
+        };
+      }
+      
+      return { suggestions: [] };
+    } catch (error) {
+      console.error('Failed to get suggestions:', error);
+      return { suggestions: [] };
+    }
+  }
+
+  /**
    * Stream real-time analysis (if backend supports it)
    */
   async *streamAnalysis(context: Record<string, unknown>): AsyncGenerator<CodettePrediction, void, unknown> {
     try {
       const response = await fetch(`${this.config.backendUrl}/codette/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.buildHeaders(),
         body: JSON.stringify(context),
       });
 
@@ -323,7 +398,7 @@ class CodetteBridgeService {
         const response = await fetch(`${this.config.backendUrl}${endpoint}`, {
           method,
           headers: {
-            'Content-Type': 'application/json',
+            ...this.buildHeaders(),
             'X-Codette-Request': 'true',
           },
           body: body ? JSON.stringify(body) : undefined,

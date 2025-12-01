@@ -14,11 +14,30 @@ from datetime import datetime
 import asyncio
 import time
 import traceback
+import os
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    env_file = Path(__file__).parent / '.env'
+    if env_file.exists():
+        load_dotenv(env_file)
+except ImportError:
+    pass  # dotenv not installed, fall back to environment variables
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+import os
+
+# Try to import Supabase for music knowledge base
+try:
+    import supabase
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    SUPABASE_AVAILABLE = False
+    print("[WARNING] Supabase not installed - install with: pip install supabase")
 
 # Setup paths
 codette_path = Path(__file__).parent / "codette"
@@ -121,6 +140,26 @@ app.add_middleware(
 )
 
 logger.info("✅ FastAPI app created with CORS enabled")
+
+# ============================================================================
+# SUPABASE CLIENT SETUP (Music Knowledge Base)
+# ============================================================================
+
+supabase_client = None
+if SUPABASE_AVAILABLE:
+    try:
+        supabase_url = os.getenv('VITE_SUPABASE_URL')
+        supabase_key = os.getenv('VITE_SUPABASE_ANON_KEY')
+        
+        if supabase_url and supabase_key:
+            supabase_client = supabase.create_client(supabase_url, supabase_key)
+            logger.info("✅ Supabase connected for music knowledge base")
+        else:
+            logger.warning("⚠️ Supabase credentials not found in environment variables")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to connect to Supabase: {e}")
+else:
+    logger.info("ℹ️  Supabase not available - music knowledge base disabled")
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -587,83 +626,138 @@ async def analyze_audio(request: AudioAnalysisRequest):
 
 @app.post("/codette/suggest", response_model=SuggestionResponse)
 async def get_suggestions(request: SuggestionRequest):
-    """Get AI-powered suggestions with genre support"""
+    """Get AI-powered suggestions from Supabase music knowledge base"""
     try:
         suggestions = []
         context_type = request.context.get("type", "general") if request.context else "general"
-        genre = request.context.get("genre", "") if request.context else ""
+        track_type = request.context.get("track_type", "general") if request.context else "general"
         
-        # Use genre templates if available
-        if GENRE_TEMPLATES_AVAILABLE and genre and get_genre_suggestions:
-            genre_lower = genre.lower().strip()
-            limit = min(3, request.limit or 5)
-            genre_suggestions = get_genre_suggestions(genre_lower, limit=limit)
-            if genre_suggestions:
-                suggestions.extend(genre_suggestions)
+        # First, try to get suggestions from Supabase music knowledge base
+        if supabase_client:
+            try:
+                # Call Supabase RPC function to get music suggestions
+                response = supabase_client.rpc(
+                    'get_music_suggestions',
+                    {
+                        'p_prompt': context_type,
+                        'p_context': context_type
+                    }
+                ).execute()
+                
+                if response and response.data:
+                    # Handle response - could be a list or dict with suggestions key
+                    supabase_suggestions = response.data
+                    if isinstance(response.data, dict) and 'suggestions' in response.data:
+                        supabase_suggestions = response.data['suggestions']
+                    
+                    if supabase_suggestions and isinstance(supabase_suggestions, list):
+                        # Transform database schema to API response format
+                        for item in supabase_suggestions:
+                            formatted_suggestion = {
+                                "id": item.get('id', f"db-{len(suggestions)}"),
+                                "title": item.get('suggestion') or item.get('title', 'Untitled'),
+                                "description": item.get('description', ''),
+                                "category": item.get('category', 'general'),
+                                "topic": item.get('topic', context_type),
+                                "confidence": float(item.get('confidence', 0.85)),
+                                "source": "database",
+                                "type": "optimization"
+                            }
+                            suggestions.append(formatted_suggestion)
+                        
+                        logger.info(f"✅ Retrieved {len(supabase_suggestions)} suggestions from Supabase database")
+            except Exception as e:
+                logger.debug(f"⚠️ Supabase query info: {type(e).__name__}: {str(e)[:100]}")
+                # Fall back to genre templates or hardcoded suggestions
         
-        # Use real suggestions from training data
-        if context_type == "gain-staging":
-            base_suggestions = [
-                {
-                    "type": "optimization",
-                    "title": "Peak Level Optimization",
-                    "description": "Maintain -3dB headroom as per industry standard",
-                    "confidence": 0.92,
-                },
-                {
-                    "type": "optimization",
-                    "title": "Clipping Prevention",
-                    "description": "Ensure no signal exceeds 0dBFS",
-                    "confidence": 0.95,
-                },
-            ]
-            if not suggestions:
-                suggestions.extend(base_suggestions)
-        elif context_type == "mixing":
-            base_suggestions = [
-                {
-                    "type": "effect",
-                    "title": "EQ for Balance",
-                    "description": "Apply EQ to balance frequency content",
-                    "confidence": 0.88,
-                },
-                {
-                    "type": "routing",
-                    "title": "Bus Architecture",
-                    "description": "Create buses for better mix control",
-                    "confidence": 0.85,
-                },
-            ]
-            if not suggestions:
-                suggestions.extend(base_suggestions)
-        elif context_type == "mastering":
-            base_suggestions = [
-                {
-                    "type": "optimization",
-                    "title": "Loudness Target",
-                    "description": "Target -14 LUFS for streaming platforms",
-                    "confidence": 0.93,
-                },
-                {
-                    "type": "effect",
-                    "title": "Linear Phase EQ",
-                    "description": "Use linear phase EQ in mastering",
-                    "confidence": 0.87,
-                },
-            ]
-            if not suggestions:
-                suggestions.extend(base_suggestions)
-        else:
-            if not suggestions:
+        # Use genre templates if available and suggestions count is low
+        if len(suggestions) < (request.limit or 5) and GENRE_TEMPLATES_AVAILABLE and get_genre_suggestions:
+            genre = request.context.get("genre", "") if request.context else ""
+            if genre:
+                genre_lower = genre.lower().strip()
+                limit = min(3, (request.limit or 5) - len(suggestions))
+                genre_suggestions = get_genre_suggestions(genre_lower, limit=limit)
+                if genre_suggestions:
+                    suggestions.extend(genre_suggestions)
+                    logger.info(f"✅ Added {len(genre_suggestions)} genre template suggestions")
+        
+        # Use hardcoded suggestions as fallback if database is empty
+        if not suggestions:
+            if context_type == "gain-staging":
                 base_suggestions = [
                     {
+                        "id": "fallback-1",
                         "type": "optimization",
-                        "title": "Gain Optimization",
-                        "description": "Maintain proper gain levels throughout signal chain",
-                        "confidence": 0.85,
+                        "title": "Peak Level Optimization",
+                        "description": "Maintain -3dB headroom as per industry standard",
+                        "confidence": 0.92,
+                        "category": "gain-staging",
+                        "source": "fallback"
+                    },
+                    {
+                        "id": "fallback-2",
+                        "type": "optimization",
+                        "title": "Clipping Prevention",
+                        "description": "Ensure no signal exceeds 0dBFS",
+                        "confidence": 0.95,
+                        "category": "gain-staging",
+                        "source": "fallback"
                     },
                 ]
                 suggestions.extend(base_suggestions)
+            elif context_type == "mixing":
+                base_suggestions = [
+                    {
+                        "id": "fallback-3",
+                        "type": "effect",
+                        "title": "EQ for Balance",
+                        "description": "Apply EQ to balance frequency content",
+                        "confidence": 0.88,
+                        "category": "mixing",
+                        "source": "fallback"
+                    },
+                    {
+                        "id": "fallback-4",
+                        "type": "routing",
+                        "title": "Bus Architecture",
+                        "description": "Create buses for better mix control",
+                        "confidence": 0.85,
+                        "category": "mixing",
+                        "source": "fallback"
+                    },
+                ]
+                suggestions.extend(base_suggestions)
+            elif context_type == "mastering":
+                base_suggestions = [
+                    {
+                        "id": "fallback-5",
+                        "type": "optimization",
+                        "title": "Loudness Target",
+                        "description": "Target -14 LUFS for streaming platforms",
+                        "confidence": 0.93,
+                        "category": "mastering",
+                        "source": "fallback"
+                    },
+                    {
+                        "id": "fallback-6",
+                        "type": "effect",
+                        "title": "Linear Phase EQ",
+                        "description": "Use linear phase EQ in mastering",
+                        "confidence": 0.87,
+                    },
+                ]
+                suggestions.extend(base_suggestions)
+            else:
+                if not suggestions:
+                    base_suggestions = [
+                        {
+                            "type": "optimization",
+                            "title": "Gain Optimization",
+                            "description": "Maintain proper gain levels throughout signal chain",
+                            "confidence": 0.85,
+                        },
+                    ]
+                    suggestions.extend(base_suggestions)
         
         # Limit suggestions
         suggestions = suggestions[:request.limit]

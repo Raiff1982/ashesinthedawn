@@ -131,7 +131,7 @@ export class AudioEngine {
 
     const audioBuffer = this.audioBuffers.get(trackId);
     if (!audioBuffer) {
-      console.warn(`No audio buffer found for track ${trackId}`);
+      // Silently skip - master, aux, and instrument-only tracks don't need audio buffers
       return false;
     }
 
@@ -405,7 +405,7 @@ export class AudioEngine {
 
     const buffer = this.audioBuffers.get(trackId);
     if (!buffer) {
-      console.debug(`No audio buffer found for track ${trackId}`);
+      // Silently return empty - master/aux/instrument tracks don't have waveforms
       return [];
     }
 

@@ -591,22 +591,38 @@ class CodetteBridge {
         this.ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            console.debug("[CodetteBridge] WebSocket message:", message);
+            
+            // Enhanced logging with structured data
+            const logData = {
+              type: message.type,
+              hasData: !!message.data,
+              dataType: typeof message.data,
+              timestamp: new Date().toISOString(),
+              dataKeys: message.data && typeof message.data === 'object' ? Object.keys(message.data).slice(0, 5) : 'N/A'
+            };
+            console.debug("[CodetteBridge] WebSocket message received:", logData);
 
             // Emit events based on message type
             if (message.type === "transport_state") {
+              console.debug("[CodetteBridge] → transport_changed event emitted");
               this.emit("transport_changed", message.data);
             } else if (message.type === "suggestion") {
+              console.debug("[CodetteBridge] → suggestion_received event emitted", { count: message.data?.length || 0 });
               this.emit("suggestion_received", message.data);
             } else if (message.type === "analysis_complete") {
+              console.debug("[CodetteBridge] → analysis_complete event emitted");
               this.emit("analysis_complete", message.data);
             } else if (message.type === "state_update") {
+              console.debug("[CodetteBridge] → state_update event emitted", { keys: Object.keys(message.data || {}) });
               this.emit("state_update", message.data);
             } else if (message.type === "error") {
+              console.warn("[CodetteBridge] → ws_error event emitted", message.data);
               this.emit("ws_error", message.data);
+            } else {
+              console.debug("[CodetteBridge] Unknown message type:", message.type);
             }
           } catch (error) {
-            console.error("[CodetteBridge] Failed to parse WebSocket message:", error);
+            console.error("[CodetteBridge] Failed to parse WebSocket message:", error, { rawData: event.data?.substring(0, 100) });
           }
         };
 
