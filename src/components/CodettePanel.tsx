@@ -289,18 +289,27 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         Refreshing suggestions...
                       </div>
                     )}
-                    {suggestions.map((suggestion, idx) => (
+                    {suggestions.map((suggestion, idx) => {
+                      // Defensive: ensure title and description are strings
+                      const titleText = typeof suggestion.title === 'string' 
+                        ? suggestion.title 
+                        : (suggestion.title as any)?.title || (suggestion.title as any)?.prediction || String(suggestion.title);
+                      const descText = typeof suggestion.description === 'string'
+                        ? suggestion.description
+                        : (suggestion.description as any)?.description || (suggestion.description as any)?.reasoning || String(suggestion.description);
+                      
+                      return (
                       <div key={idx} className={`p-2 bg-gray-800 border border-gray-700 rounded transition ${isLoading ? 'opacity-60' : 'opacity-100'}`}>
                       <div className="flex items-start justify-between mb-1">
                         <h4 className="font-medium text-xs text-blue-400">
-                          {suggestion.title}
+                          {titleText}
                         </h4>
                         <span className="text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">
                           {Math.round(suggestion.confidence * 100)}%
                         </span>
                       </div>
                       <p className="text-xs text-gray-300 line-clamp-3">
-                        {suggestion.description}
+                        {descText}
                       </p>
                       {suggestion.source && (
                         <div className="mt-1 text-xs text-gray-500">
@@ -311,9 +320,9 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       {suggestion.confidence > 0.7 && (
                         <button
                           onClick={() => {
-                            console.log('🤖 Applying suggestion:', suggestion.title);
+                            console.log('🤖 Applying suggestion:', titleText);
                             // Parse and execute suggestion actions
-                            if (suggestion.title.toLowerCase().includes('eq')) {
+                            if (titleText.toLowerCase().includes('eq')) {
                               if (selectedTrack) {
                                 const eqPlugin: Plugin = {
                                   id: `eq-${Date.now()}`,
@@ -326,7 +335,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                                   inserts: [...(selectedTrack.inserts || []), eqPlugin],
                                 });
                               }
-                            } else if (suggestion.title.toLowerCase().includes('compress')) {
+                            } else if (titleText.toLowerCase().includes('compress')) {
                               if (selectedTrack) {
                                 const compPlugin: Plugin = {
                                   id: `comp-${Date.now()}`,
@@ -348,7 +357,8 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         </button>
                       )}
                     </div>
-                    ))}
+                    );
+                    })}
                   </>
                 ) : (
                   <div className="text-center py-6 text-gray-500 text-xs">
@@ -383,13 +393,20 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       <div className="space-y-1.5">
                         <button
                           onClick={async () => {
-                            if (!selectedTrack) return;
+                            if (!selectedTrack) {
+                              console.warn('[Analysis] No track selected');
+                              return;
+                            }
+                            console.log('[Analysis] Starting health check for:', selectedTrack.id);
                             const audioData = getAudioBufferData(selectedTrack.id);
+                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
                             if (audioData) {
                               await analyzeAudio(audioData, 'health-check');
+                            } else {
+                              alert('No audio data available for this track. Try uploading audio first.');
                             }
                           }}
-                          disabled={isLoading}
+                          disabled={isLoading || !selectedTrack}
                           className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
                         >
                           <span className="text-xs">🔍 Session Health Check</span>
@@ -397,13 +414,20 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         </button>
                         <button
                           onClick={async () => {
-                            if (!selectedTrack) return;
+                            if (!selectedTrack) {
+                              console.warn('[Analysis] No track selected');
+                              return;
+                            }
+                            console.log('[Analysis] Starting spectrum analysis for:', selectedTrack.id);
                             const audioData = getAudioBufferData(selectedTrack.id);
+                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
                             if (audioData) {
                               await analyzeAudio(audioData, 'spectrum');
+                            } else {
+                              alert('No audio data available for this track. Try uploading audio first.');
                             }
                           }}
-                          disabled={isLoading}
+                          disabled={isLoading || !selectedTrack}
                           className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
                         >
                           <span className="text-xs">📊 Audio Spectrum Analysis</span>
@@ -411,13 +435,20 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         </button>
                         <button
                           onClick={async () => {
-                            if (!selectedTrack) return;
+                            if (!selectedTrack) {
+                              console.warn('[Analysis] No track selected');
+                              return;
+                            }
+                            console.log('[Analysis] Starting metering for:', selectedTrack.id);
                             const audioData = getAudioBufferData(selectedTrack.id);
+                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
                             if (audioData) {
                               await analyzeAudio(audioData, 'metering');
+                            } else {
+                              alert('No audio data available for this track. Try uploading audio first.');
                             }
                           }}
-                          disabled={isLoading}
+                          disabled={isLoading || !selectedTrack}
                           className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
                         >
                           <span className="text-xs">📈 Level Metering</span>
@@ -425,13 +456,20 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         </button>
                         <button
                           onClick={async () => {
-                            if (!selectedTrack) return;
+                            if (!selectedTrack) {
+                              console.warn('[Analysis] No track selected');
+                              return;
+                            }
+                            console.log('[Analysis] Starting phase correlation for:', selectedTrack.id);
                             const audioData = getAudioBufferData(selectedTrack.id);
+                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
                             if (audioData) {
                               await analyzeAudio(audioData, 'phase');
+                            } else {
+                              alert('No audio data available for this track. Try uploading audio first.');
                             }
                           }}
-                          disabled={isLoading}
+                          disabled={isLoading || !selectedTrack}
                           className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
                         >
                           <span className="text-xs">🎚️ Phase Correlation</span>
@@ -464,11 +502,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       <div>
                         <h4 className="text-xs font-semibold text-gray-300 mb-1">Findings</h4>
                         <ul className="space-y-0.5">
-                          {analysis.findings.map((finding, idx) => (
-                            <li key={idx} className="text-xs text-gray-400">
-                              • {finding}
-                            </li>
-                          ))}
+                          {analysis.findings.map((finding, idx) => {
+                            // Handle both string and object findings
+                            const findingText = typeof finding === 'string' 
+                              ? finding 
+                              : (finding as any).message || (finding as any).text || JSON.stringify(finding);
+                            return (
+                              <li key={idx} className="text-xs text-gray-400">
+                                • {findingText}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}
@@ -477,11 +521,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       <div>
                         <h4 className="text-xs font-semibold text-gray-300 mb-1">Recommendations</h4>
                         <ul className="space-y-0.5">
-                          {analysis.recommendations.map((rec, idx) => (
-                            <li key={idx} className="text-xs text-gray-400">
-                              → {rec}
-                            </li>
-                          ))}
+                          {analysis.recommendations.map((rec, idx) => {
+                            // Handle both string and object recommendations
+                            const recText = typeof rec === 'string' 
+                              ? rec 
+                              : (rec as any).reason || (rec as any).action || JSON.stringify(rec);
+                            return (
+                              <li key={idx} className="text-xs text-gray-400">
+                                → {recText}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}

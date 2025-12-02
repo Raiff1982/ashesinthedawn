@@ -1,0 +1,144 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    RPC FUNCTION SIGNATURES - VISUAL GUIDE                  ║
+║                           December 2, 2025                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─ SIGNATURE 1: Suggestions Endpoint ─────────────────────────────────────────┐
+│                                                                              │
+│  Function Name:  get_music_suggestions(text, text)                         │
+│  Location:       /codette/suggest endpoint (Line 1772)                     │
+│                                                                              │
+│  Parameters:                                                                 │
+│  ├─ p_prompt    : text    → Context type ("mixing", "mastering", etc.)     │
+│  └─ p_context   : text    → Category filter (same as p_prompt typically)   │
+│                                                                              │
+│  Returns:                                                                    │
+│  ├─ id          : uuid                                                      │
+│  ├─ topic       : text    → e.g., "jazz_ballad"                            │
+│  ├─ category    : text    → e.g., "harmony"                                │
+│  ├─ suggestion  : jsonb   → Nested object with title, description          │
+│  └─ confidence  : float8  → Score 0.85-0.92                                │
+│                                                                              │
+│  Example Call:                                                               │
+│  supabase_client.rpc('get_music_suggestions',                              │
+│    {'p_prompt': 'mixing', 'p_context': 'mixing'})                          │
+│                                                                              │
+│  SQL:                                                                        │
+│  SELECT * FROM public.get_music_suggestions('mixing', 'mixing');           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SIGNATURE 2: Chat Semantic Search ─────────────────────────────────────────┐
+│                                                                              │
+│  Function Name:  get_music_suggestions(text, integer)                      │
+│  Location:       /codette/chat endpoint (Line 1263)                        │
+│                                                                              │
+│  Parameters:                                                                 │
+│  ├─ query       : text    → User search query ("How do I set up reverb?")  │
+│  └─ limit_count : integer → Number of results (default: 3)                 │
+│                                                                              │
+│  Returns:                                                                    │
+│  ├─ id          : uuid                                                      │
+│  ├─ topic       : text                                                      │
+│  ├─ category    : text                                                      │
+│  ├─ suggestion  : jsonb   → Full suggestion object                         │
+│  ├─ confidence  : float8                                                    │
+│  └─ content     : text    → Extracted title from suggestion                │
+│                                                                              │
+│  Example Call:                                                               │
+│  supabase_client.rpc('get_music_suggestions',                              │
+│    {'query': 'reverb settings', 'limit': 3})                               │
+│                                                                              │
+│  SQL:                                                                        │
+│  SELECT * FROM public.get_music_suggestions('reverb', 3);                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SIGNATURE 3: Context Retrieval ────────────────────────────────────────────┐
+│                                                                              │
+│  Function Name:  get_codette_context(text, text)                           │
+│  Location:       /codette/chat endpoint (Line 931)                         │
+│                                                                              │
+│  Parameters:                                                                 │
+│  ├─ input_prompt         : text    → User message for context              │
+│  └─ optionally_filename  : text    → Optional filename (usually NULL)      │
+│                                                                              │
+│  Returns:                                                                    │
+│  ├─ id          : uuid                                                      │
+│  ├─ topic       : text                                                      │
+│  ├─ category    : text                                                      │
+│  ├─ suggestion  : jsonb                                                     │
+│  └─ confidence  : float8                                                    │
+│                                                                              │
+│  Example Call:                                                               │
+│  supabase_client.rpc('get_codette_context',                                │
+│    {'input_prompt': 'What should I do?', 'optionally_filename': None})     │
+│                                                                              │
+│  SQL:                                                                        │
+│  SELECT * FROM public.get_codette_context('reverb', NULL);                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                              PROBLEM ANALYSIS                               ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  Current Error:  permission denied for function get_music_suggestions     ║
+║  Error Code:     42501 (PostgreSQL)                                        ║
+║                                                                              ║
+║  Root Causes:                                                                ║
+║  • Functions do not exist in Supabase                                       ║
+║  • OR functions exist but lack EXECUTE permission for anon role             ║
+║                                                                              ║
+║  Impact:                                                                     ║
+║  • Backend catches exception silently                                       ║
+║  • Falls back to hardcoded suggestions                                      ║
+║  • Suggestions show "source": "fallback"                                    ║
+║  • Real database suggestions (confidence 0.92) are never used               ║
+║                                                                              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                  SOLUTION                                   ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  1. Open:  https://app.supabase.com → Project → SQL Editor                 ║
+║                                                                              ║
+║  2. Copy:  Contents of supabase_migration_fix_rpc.sql                      ║
+║                                                                              ║
+║  3. Paste & Run:  All three function definitions                            ║
+║                                                                              ║
+║  4. Verify:  Look for success messages                                      ║
+║             "Function get_music_suggestions(text, text) created..."        ║
+║                                                                              ║
+║  5. Restart:  python codette_server_unified.py                             ║
+║                                                                              ║
+║  6. Test:  Suggestions should now show "source": "database"                │
+║                                                                              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                          DATA AVAILABILITY STATUS                           ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  music_knowledge table ..................... ✅ EXISTS (5+ rows)           ║
+║  Sample data: Jazz harmony suggestions .... ✅ VERIFIED                    ║
+║  Confidence scores (0.85-0.92) ............ ✅ GOOD QUALITY                ║
+║  Embeddings (1536-dim vectors) ............ ✅ AVAILABLE                   ║
+║  Full-text search enabled ................. ✅ YES                         ║
+║                                                                              ║
+║  RPC Function: get_music_suggestions ..... ❌ MISSING/NO PERMISSION        ║
+║  RPC Function: get_codette_context ....... ❌ MISSING/NO PERMISSION        ║
+║                                                                              ║
+║  Fix Status:  ✅ READY (SQL migration provided)                            ║
+║  Difficulty:  🟢 EASY (Copy-paste, <2 minutes)                             ║
+║                                                                              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+DOCUMENTATION FILES:
+  • ANSWER_RPC_SIGNATURES.md ........... Direct answer to your request
+  • RPC_QUICK_REFERENCE.md ............ One-page cheat sheet
+  • SUPABASE_FIX_GUIDE.md ............. Step-by-step instructions
+  • supabase_migration_fix_rpc.sql .... Copy-paste ready SQL
+  • RPC_SIGNATURE_ANALYSIS.md ......... Technical deep dive
+  • SESSION_SUMMARY_RPC_ANALYSIS.md ... Complete analysis summary

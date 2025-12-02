@@ -10,14 +10,15 @@ import { useDAW } from '../contexts/DAWContext';
 
 export interface Suggestion extends CodetteSuggestion {
   source?: string;
+  actionItems?: Record<string, unknown>[];
 }
 
 export interface AnalysisResult {
   trackId: string;
   analysisType: string;
   score: number;
-  findings: string[];
-  recommendations: string[];
+  findings: (string | Record<string, unknown>)[];
+  recommendations: (string | Record<string, unknown>)[];
   reasoning: string;
   metrics: Record<string, number>;
 }
@@ -242,7 +243,18 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         }
 
         const data = await response.json();
-        const suggestions: Suggestion[] = data.suggestions || [];
+        const rawSuggestions = data.suggestions || [];
+        
+        // Transform backend suggestions to frontend format
+        const suggestions: Suggestion[] = rawSuggestions.map((item: any) => ({
+          type: item.type || 'optimization',
+          title: item.title || item.prediction || 'Suggestion',
+          description: item.description || item.reasoning || item.prediction || 'No description available',
+          confidence: item.confidence || 0.5,
+          relatedAbility: item.relatedAbility,
+          source: item.source,
+          actionItems: item.actionItems,
+        }));
         
         setSuggestions(suggestions);
         return suggestions;

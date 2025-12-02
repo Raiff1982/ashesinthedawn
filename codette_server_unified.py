@@ -1244,12 +1244,9 @@ async def chat_endpoint(request: ChatRequest):
             if response:
                 break
         
-        # Track where response came from for UI and ML scoring
-        response_source = "fallback"
-        ml_scores = {"relevance": 0.65, "specificity": 0.60, "certainty": 0.55}
-        
         # ============ SEMANTIC SEARCH + ML MATCHING ============
         # Use the actual Supabase RPC functions for semantic search
+        # ONLY if we haven't found a response yet
         if not response and request.daw_context and supabase_client:
             try:
                 # Generate embedding for the user message
@@ -1299,10 +1296,11 @@ async def chat_endpoint(request: ChatRequest):
         
         # Try real Codette engine with context if available
         if not response and USE_REAL_ENGINE and codette_engine:
-            logger.info(f"[DAW ADVICE] Generating DAW-specific advice. Message: '{message[:50]}...' Track: {request.daw_context.get('selected_track', {}).get('name', 'Unknown')}")
+            daw_track_name = request.daw_context.get('selected_track', {}).get('name', 'Unknown') if request.daw_context else 'Unknown'
+            logger.info(f"[DAW ADVICE] Generating DAW-specific advice. Message: '{message[:50]}...' Track: {daw_track_name}")
             try:
                 daw_ctx = request.daw_context
-                track_info = daw_ctx.get('selected_track', {})
+                track_info = daw_ctx.get('selected_track', {}) if daw_ctx else {}
                 track_name = track_info.get('name', '').lower()
                 track_type = track_info.get('type', 'audio')
                 track_volume = track_info.get('volume', 0)
@@ -1566,10 +1564,6 @@ async def chat_endpoint(request: ChatRequest):
                     for perspective in perspectives_list:
                         perspective_name = perspective.get('name', 'Insight')
                         perspective_response = perspective.get('response', '')
-                        old_perspective_key = perspective.get('key', perspective_name.lower().replace(' ', '_'))
-                    for perspective in perspectives_list:
-                        perspective_name = perspective.get('name', 'Insight')
-                        perspective_response = perspective.get('response', '')
                         
                         # Convert display name or key to consistent key format
                         # Try direct mapping first
@@ -1661,7 +1655,11 @@ What would you like to learn?"""
             ml_score=ml_scores,
         )
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {e}")
+        import traceback
+        error_msg = f"Error in chat endpoint: {e}\nTraceback: {traceback.format_exc()}"
+        logger.error(error_msg)
+        # Also write to stderr for debugging
+        print(f"CHAT_ERROR: {error_msg}", file=__import__('sys').stderr)
         return ChatResponse(
             response="I'm having trouble understanding. Could you rephrase your question?",
             perspective=request.perspective or "mix_engineering",

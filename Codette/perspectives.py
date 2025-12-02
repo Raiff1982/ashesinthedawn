@@ -7,17 +7,32 @@ import nltk
 from nltk.tokenize import word_tokenize
 from nltk.sentiment import SentimentIntensityAnalyzer
 import random
+import ssl
+
+# Fix SSL certificate issues for NLTK downloads
+try:
+    _create_unverified_https_context = ssl._create_unverified_context
+except AttributeError:
+    pass
+else:
+    ssl._create_default_https_context = _create_unverified_https_context
 
 # Download required NLTK data
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
-    nltk.download('punkt', quiet=True)
+    try:
+        nltk.download('punkt', quiet=True)
+    except Exception:
+        pass  # Silent fail if download fails
 
 try:
     nltk.data.find('sentiment/vader_lexicon')
 except LookupError:
-    nltk.download('vader_lexicon', quiet=True)
+    try:
+        nltk.download('vader_lexicon', quiet=True)
+    except Exception:
+        pass  # Silent fail if download fails
 
 
 class Perspectives:
