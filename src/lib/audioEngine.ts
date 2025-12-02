@@ -40,6 +40,7 @@ export class AudioEngine {
   private panNodes: Map<string, StereoPannerNode> = new Map();
   private stereoWidthNodes: Map<string, GainNode> = new Map();
   private phaseFlipStates: Map<string, boolean> = new Map();
+  private trackAnalysers: Map<string, AnalyserNode> = new Map(); // Per-track metering
   private mediaRecorder: MediaRecorder | null = null;
   private recordedChunks: Blob[] = [];
   private playingTracksState: Map<string, TrackPlayState> = new Map();
@@ -182,7 +183,11 @@ export class AudioEngine {
         .filter(p => p.enabled)
         .map(p => p.type);
 
-      // Build the audio chain: source → input gain → plugins → pan → track gain (fader) → analyser → master
+      // Create per-track analyser for metering
+      const trackAnalyser = this.audioContext.createAnalyser();
+      trackAnalyser.fftSize = 2048;
+
+      // Build the audio chain: source → input gain → plugins → pan → track gain (fader) → track analyser → master
       source.connect(inputGain);
       
       // Process plugin chain and get the output node
@@ -193,12 +198,14 @@ export class AudioEngine {
       
       chainOutput.connect(panNode);
       panNode.connect(trackGain);
-      trackGain.connect(this.analyser!);
+      trackGain.connect(trackAnalyser);
+      trackAnalyser.connect(this.analyser!);
 
       // Store nodes for later updates
       this.inputGainNodes.set(trackId, inputGain);
       this.gainNodes.set(trackId, trackGain);
       this.panNodes.set(trackId, panNode);
+      this.trackAnalysers.set(trackId, trackAnalyser);
 
       // Track playback state
       this.playingTracksState.set(trackId, {
@@ -230,6 +237,8 @@ export class AudioEngine {
       try {
         source.stop();
         this.playingNodes.delete(trackId);
+        this.playingTracksState.delete(trackId);
+        this.trackAnalysers.delete(trackId); // Clean up track analyser
         console.log(`Stopped playback for track ${trackId}`);
       } catch (error) {
         console.error(`Error stopping audio for track ${trackId}:`, error);
@@ -509,6 +518,26 @@ export class AudioEngine {
     const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
     this.analyser.getByteFrequencyData(dataArray);
     return dataArray;
+  }
+
+  /**
+   * Get per-track audio level (normalized 0-1) for metering
+   */
+  getTrackLevel(trackId: string): number {
+    const analyser = this.trackAnalysers.get(trackId);
+    if (!analyser) return 0;
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
+
+    // Calculate RMS (Root Mean Square) for normalized level
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const normalized = dataArray[i] / 255;
+      sum += normalized * normalized;
+    }
+    const rms = Math.sqrt(sum / dataArray.length);
+    return rms;
   }
 
   /**
