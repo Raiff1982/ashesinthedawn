@@ -514,7 +514,8 @@ transport_manager = TransportManager()
 
 def get_timestamp():
     """Get ISO format timestamp"""
-    return datetime.utcnow().isoformat() + "Z"
+    from datetime import timezone
+    return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 def to_db(value):
     """Convert linear amplitude to dB"""
@@ -1459,7 +1460,7 @@ async def websocket_general(websocket: WebSocket):
             state = transport_manager.get_state()
             await websocket.send_json({
                 "type": "state",
-                "data": state.dict()
+                "data": state.model_dump()
             })
         except Exception as e:
             logger.error(f"Failed to send initial state on /ws: {e}")
@@ -1517,7 +1518,7 @@ async def websocket_general(websocket: WebSocket):
                         state = transport_manager.get_state()
                         await websocket.send_json({
                             "type": "state",
-                            "data": state.dict()
+                            "data": state.model_dump()
                         })
                         last_send = current_time
                     except RuntimeError as e:
@@ -1589,7 +1590,7 @@ async def websocket_transport_clock(websocket: WebSocket):
             state = transport_manager.get_state()
             await websocket.send_json({
                 "type": "state",
-                "data": state.dict()
+                "data": state.model_dump()
             })
         except Exception as e:
             logger.error(f"Failed to send initial state: {e}")
@@ -1638,7 +1639,7 @@ async def websocket_transport_clock(websocket: WebSocket):
                         state = transport_manager.get_state()
                         await websocket.send_json({
                             "type": "state",
-                            "data": state.dict()
+                            "data": state.model_dump()
                         })
                         last_send = current_time
                     except RuntimeError as e:
@@ -1777,7 +1778,7 @@ async def transport_metrics() -> Dict[str, Any]:
     """Get transport metrics"""
     state = transport_manager.get_state()
     return {
-        "state": state.dict(),
+        "state": state.model_dump(),
         "connected_clients": len(transport_manager.connected_clients),
         "timestamp": get_timestamp(),
         "beat_fraction": state.beat_pos,

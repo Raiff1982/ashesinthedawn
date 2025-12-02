@@ -270,7 +270,8 @@ const ChatTab: React.FC<ChatTabProps> = ({
       };
       
       for (const line of lines) {
-        const match = line.match(/\*\*([a-z_]+)\*\*:\s*\[([^\]]+)\]\s*(.*)/);
+        // Updated regex to handle emoji prefix in response (e.g., "🎚️ **mix_engineering**: [NeuralNet] content")
+        const match = line.match(/^.*?\*\*([a-z_]+)\*\*:\s*\[([^\]]+)\]\s*(.*)/);
         if (match) {
           if (currentPerspective) {
             perspectives.push({
