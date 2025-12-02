@@ -50,6 +50,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     updateTrack,
     isPlaying,
     getAudioBufferData,
+    tracks,
   } = useDAW();
 
   const [inputValue, setInputValue] = useState('');
@@ -100,7 +101,46 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     const message = inputValue;
     setInputValue('');
 
-    await sendMessage(message);
+    // Collect DAW context to provide track/project-specific advice
+    const dawContext: Record<string, unknown> = {};
+    
+    // Add selected track information
+    if (selectedTrack) {
+      dawContext.selected_track = {
+        id: selectedTrack.id,
+        name: selectedTrack.name,
+        type: selectedTrack.type,
+        volume: selectedTrack.volume,
+        pan: selectedTrack.pan,
+        muted: selectedTrack.muted,
+        armed: selectedTrack.armed,
+      };
+    }
+    
+    // Add project/session metadata
+    if (tracks.length > 0) {
+      dawContext.total_tracks = tracks.length;
+      dawContext.audio_tracks = tracks.filter(t => t.type === 'audio').length;
+      dawContext.instrument_tracks = tracks.filter(t => t.type === 'instrument').length;
+    }
+    
+    // Add audio analysis if available (placeholder for future audio buffer analysis)
+    if (selectedTrack && getAudioBufferData) {
+      try {
+        const bufferData = getAudioBufferData(selectedTrack.id);
+        if (bufferData && bufferData instanceof Float32Array) {
+          // bufferData is audio samples, add simple analysis
+          dawContext.audio_analysis = {
+            sample_count: bufferData.length,
+            channels: selectedTrack.type === 'audio' ? 2 : 1,
+          };
+        }
+      } catch (err) {
+        console.debug('Could not get audio buffer data:', err);
+      }
+    }
+
+    await sendMessage(message, dawContext);
   };
 
   const handleLoadSuggestions = async (context: string) => {
@@ -469,7 +509,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   </div>
                 ) : (
                   chatHistory.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-2`}>
                       <div
                         className={`max-w-[80%] px-2 py-1.5 rounded text-xs ${
                           msg.role === 'user'
@@ -478,6 +518,22 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         }`}
                       >
                         {msg.content}
+                        {msg.role === 'assistant' && (msg as any).source && (
+                          <div className="text-xs text-gray-500 mt-1 pt-1 border-t border-gray-700">
+                            <span className="inline-block mr-2">
+                              {(msg as any).source === 'daw_template' && '🎯 DAW-specific'}
+                              {(msg as any).source === 'semantic_search' && '🔍 From knowledge base'}
+                              {(msg as any).source === 'codette_engine' && '🤖 Codette analysis'}
+                              {(msg as any).source === 'daw_functions' && '⚙️ Function reference'}
+                              {(msg as any).source === 'ui_component' && '🖼️ UI reference'}
+                            </span>
+                            {(msg as any).confidence && (
+                              <span className="inline-block">
+                                Confidence: {Math.round((msg as any).confidence * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))

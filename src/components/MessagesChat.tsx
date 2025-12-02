@@ -1,12 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { useRoomMessages } from '@/hooks/useRoomMessages';
-import { sendMessage } from '@/lib/messagesService';
-import type { Message } from '@/types';
+import { useRoomMessages } from '../hooks/useRoomMessages';
+import { sendMessage } from '../lib/messagesService';
 
 interface MessagesChatProps {
   roomId: string;
   userId: string;
-  userName?: string;
 }
 
 /**
@@ -18,11 +16,11 @@ interface MessagesChatProps {
  * - Message input with send button
  * - Responsive design with Tailwind CSS
  */
-export function MessagesChat({ roomId, userId, userName = 'You' }: MessagesChatProps) {
+export function MessagesChat({ roomId, userId }: MessagesChatProps) {
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { messages, isLoading, error, addMessage, removeMessage } = useRoomMessages(roomId, {
+  const { messages, isLoading, error, addMessage } = useRoomMessages(roomId, {
     autoLoad: true,
     messageLimit: 50,
   });

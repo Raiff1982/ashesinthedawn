@@ -624,7 +624,7 @@ Keep peaks around -6dB during mixing.
   /**
    * Send chat message to Codette backend
    */
-  async sendMessage(message: string): Promise<string> {
+  async sendMessage(message: string, dawContext?: Record<string, unknown>): Promise<string> {
     try {
       // First, add user message to history
       this.chatHistory.push({
@@ -640,6 +640,7 @@ Keep peaks around -6dB during mixing.
           message: message,
           perspective: 'mix_engineering',
           context: this.chatHistory.slice(-5),
+          daw_context: dawContext || null,
         }),
       });
 

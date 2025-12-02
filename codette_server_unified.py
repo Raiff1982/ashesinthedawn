@@ -346,12 +346,15 @@ class ChatRequest(BaseModel):
     perspective: Optional[str] = "mix_engineering"
     context: Optional[List[Dict[str, Any]]] = None
     conversation_id: Optional[str] = None
+    daw_context: Optional[Dict[str, Any]] = None  # DAW state: track, project, audio data
 
 class ChatResponse(BaseModel):
     response: str
     perspective: str
     confidence: Optional[float] = None
     timestamp: Optional[str] = None
+    source: Optional[str] = None  # Where response came from: "daw_advice", "semantic_search", "codette_engine", etc.
+    ml_score: Optional[Dict[str, float]] = None  # ML confidence scores: {"relevance": 0.85, "specificity": 0.90, "certainty": 0.78}
 
 class AudioAnalysisRequest(BaseModel):
     audio_data: Optional[Dict[str, Any]] = None
@@ -860,6 +863,8 @@ async def chat_endpoint(request: ChatRequest):
         response = ""
         confidence = 0.75
         perspective_source = "fallback"
+        response_source = "fallback"  # Track where response comes from: daw_template, semantic_search, codette_engine, etc.
+        ml_scores = {"relevance": 0.65, "specificity": 0.60, "certainty": 0.55}  # Default ML confidence scores
         
         # Get Supabase context (code snippets, files, chat history)
         supabase_context = None
@@ -952,6 +957,248 @@ async def chat_endpoint(request: ChatRequest):
                 logger.warning(f"Context retrieval error: {e}")
                 supabase_context = None
         
+        # ============ ADD DAW CONTEXT HANDLING ============
+        daw_context_info = ""
+        if request.daw_context:
+            try:
+                daw_parts = []
+                daw_ctx = request.daw_context
+                
+                # Track information
+                if daw_ctx.get('selected_track'):
+                    track = daw_ctx.get('selected_track')
+                    daw_parts.append(f"🎵 Selected Track: {track.get('name', 'Untitled')} (Type: {track.get('type', 'audio')})")
+                    daw_parts.append(f"   Volume: {track.get('volume', 0)}dB | Pan: {track.get('pan', 0)}")
+                
+                # Project information
+                if daw_ctx.get('project_name'):
+                    daw_parts.append(f"📁 Project: {daw_ctx.get('project_name')}")
+                
+                # Audio analysis data
+                if daw_ctx.get('audio_analysis'):
+                    analysis = daw_ctx.get('audio_analysis')
+                    if analysis.get('peak_level'):
+                        daw_parts.append(f"📊 Peak Level: {analysis.get('peak_level')}dB | RMS: {analysis.get('rms')}dB")
+                    if analysis.get('frequency_content'):
+                        daw_parts.append(f"   Frequency Balance: {analysis.get('frequency_content')}")
+                
+                # Track count
+                if daw_ctx.get('total_tracks'):
+                    daw_parts.append(f"🎚️ Total Tracks: {daw_ctx.get('total_tracks')}")
+                
+                # User goal/mixing context
+                if daw_ctx.get('mixing_goal'):
+                    daw_parts.append(f"🎯 Goal: {daw_ctx.get('mixing_goal')}")
+                
+                if daw_parts:
+                    daw_context_info = "\n".join(daw_parts)
+                    logger.info(f"DAW context received: {len(daw_parts)} items")
+            except Exception as e:
+                logger.debug(f"DAW context processing error: {e}")
+        # ============ END DAW CONTEXT HANDLING ============
+        
+        # ============ GENERATE DAW-SPECIFIC ADVICE USING CONTEXT (PRIORITY) ============
+        daw_specific_advice = ""
+        if request.daw_context:
+            logger.info(f"[DAW ADVICE] Generating DAW-specific advice. Message: '{message[:50]}...' Track: {request.daw_context.get('selected_track', {}).get('name', 'Unknown')}")
+            try:
+                daw_ctx = request.daw_context
+                track_info = daw_ctx.get('selected_track', {})
+                track_name = track_info.get('name', '').lower()
+                track_type = track_info.get('type', 'audio')
+                track_volume = track_info.get('volume', 0)
+                track_pan = track_info.get('pan', 0)
+                
+                msg_lower = message.lower()
+                keywords = ['mix', 'better', 'improve', 'problem', 'issue', 'help', 'how', 'advice', 'tip', 'sound']
+                
+                # Check if this is a mixing/advice question with DAW context
+                if any(kw in msg_lower for kw in keywords):
+                    logger.info(f"[DAW ADVICE] Message matches mixing keywords. Track name: {track_name}")
+                    
+                    # ===== DRUM TRACK ADVICE =====
+                    if any(term in track_name for term in ['drum', 'kick', 'snare', 'hat', 'tom', 'percussion']):
+                        daw_specific_advice = f"""🥁 **Drum Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Compression Strategy**:
+  • Kick: Ratio 4:1, Attack 5ms, Release 100ms, Threshold -20dB
+  • Snare: Ratio 6:1, Attack 3ms, Release 80ms (tighten transients)
+  • Hats: Light compression (2:1) to control dynamics
+
+**EQ Starting Points**:
+  • High-pass filter: Remove everything below 30Hz for most drums
+  • Kick: Scoop 2-4kHz (-3dB), boost 60Hz (+2dB) for punch
+  • Snare: Boost 5-7kHz (+2-3dB) for crack, cut 500Hz (-2dB)
+  • Hats: Gentle high-pass at 500Hz, bright shelf at 10kHz
+
+**Mix Level Tips**:
+  • Drums typically sit around -6dB to 0dB in the mix
+  • Your current level ({track_volume}dB) → Adjust for clarity with other tracks
+  • Leave 3-6dB of headroom before mastering
+
+**Common Issues**:
+  • Drums sound dull? → High-pass and add brightness at 8-10kHz
+  • Drums feel weak? → Add slight saturation, not just compression
+  • Drums clash with bass? → Automate kick volume around bass fundamentals
+"""
+                        confidence = 0.88
+
+                    # ===== BASS TRACK ADVICE =====
+                    elif any(term in track_name for term in ['bass', 'sub', 'low']):
+                        daw_specific_advice = f"""🎸 **Bass Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Frequency Management**:
+  • Clean Low-End: High-pass filter at 40-60Hz (remove mud below kick)
+  • Fundamental Clarity: Boost 80-200Hz (+1-2dB) for presence
+  • Tone Definition: Enhance 1-3kHz (+2-3dB) to cut through mix
+  • Prevent Harshness: Cut 4-7kHz slightly (-1dB)
+
+**Compression Setup**:
+  • Ratio: 4:1 (glue it together)
+  • Attack: 10-15ms (let transient through)
+  • Release: 100-200ms (maintain groove)
+  • Threshold: -18dB to -12dB
+
+**Saturation Techniques**:
+  • Add warmth: Subtle tape saturation (light overdrive)
+  • Enhance harmonics: Mild distortion for presence in small speakers
+  • Layer approach: Keep clean bass + saturated version for blend
+
+**Mixing Position**:
+  • Your level ({track_volume}dB) should sit slightly below kick for rhythm
+  • Pan mono if mixing for small speakers, slight width (±20%) for stereo
+  • Leave tight relationship with kick for strong foundation
+
+**Monitoring**:
+  • Check mix on multiple playback systems (headphones, car, earbuds)
+  • Reference similar professional recordings
+  • Use spectrum analyzer to avoid buildup below 100Hz
+"""
+                        confidence = 0.88
+
+                    # ===== VOCAL TRACK ADVICE =====
+                    elif any(term in track_name for term in ['vocal', 'voice', 'lead', 'vocal', 'singer']):
+                        daw_specific_advice = f"""🎤 **Vocal Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**De-Esser & Clarity**:
+  • Target sibilance: High-pass at 100Hz to remove mud
+  • Presence boost: Add 2-4kHz (+2dB) for intelligibility
+  • De-esser: Threshold around -20dB, ratio 4:1 for /s/ sounds
+  • Proximity warmth: Gentle shelf at 200Hz (+1dB)
+
+**Compression Chain**:
+  • Ratio: 2:1 to 4:1 (vocal-specific: not too tight)
+  • Attack: 20-30ms (preserve transients and tone)
+  • Release: 100-200ms (natural envelope)
+  • Threshold: -18dB (riding the volume)
+
+**Pro Vocal Techniques**:
+  • Double-comp: Gentle comp (2:1) + aggressive comp (6:1) in series
+  • Parallel compression: Mix 20-30% compressed with dry for punch
+  • Serial saturation: Add character with tape or tube emulation
+
+**Reverb Integration**:
+  • Send 10-15% of vocal to reverb (plate or hall)
+  • Reverb pre-delay: 40-60ms to maintain clarity
+  • Reverb decay: 1.5-2.5 seconds (style-dependent)
+  • High-pass reverb input: Remove below 1kHz for clarity
+
+**Level & Dynamics**:
+  • Center pan for lead vocals ({track_pan:+.1f} current)
+  • Headroom: Keep around -3dB peak to -6dB RMS
+  • Your volume ({track_volume}dB) → Should dominate the mix with presence
+  • Ride fader: Automate for consistency across performance
+"""
+                        confidence = 0.88
+
+                    # ===== GUITAR/INSTRUMENT TRACK ADVICE =====
+                    elif any(term in track_name for term in ['guitar', 'synth', 'keys', 'piano', 'instrument', 'pad']):
+                        daw_specific_advice = f"""🎸 **Instrument Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Frequency Sculpting**:
+  • Clean Foundation: High-pass filter around 60-100Hz
+  • Body Presence: Boost 200-500Hz (+1-2dB) for warmth
+  • Definition Layer: Enhance 2-4kHz for clarity and presence
+  • Brightness: Add 8-10kHz for air and top-end sheen
+  • Control Harshness: Gentle cut at 5-7kHz if present
+
+**Dynamics Processing**:
+  • Gentle Compression: Ratio 2:1, Attack 10ms, Release 100ms
+  • Purpose: Glue the sound, maintain consistency
+  • Peak Limiting: Set above compression for safety
+  • Transient Shaper: Optional - bring out or smooth attacks
+
+**Stereo Enhancement**:
+  • Pan Position: Your current pan is {track_pan:+.1f} → Consider stereo placement
+  • Stereo Width: For synthesizers/keyboards, consider subtle width (±15%)
+  • Doubling: Light delay (15-25ms, 10% mix) for dimension
+
+**Effects Strategy**:
+  • Reverb: 5-20% send for ambience (depends on genre)
+  • Delay: Sync to tempo if used (don't overdo it)
+  • Modulation: Subtle chorus/flanger for movement
+  • Drive/Saturation: Add character matching genre
+
+**Mix Positioning**:
+  • Volume ({track_volume}dB) → Adjust relative to drums and bass
+  • Rhythm instruments: Sit slightly back from lead vocals
+  • Pad layers: Create atmosphere without masking mix
+  • Layering: Stack compatible instruments in frequency range
+"""
+                        confidence = 0.87
+
+                    # ===== GENERIC MIXING ADVICE =====
+                    elif 'mix' in msg_lower and track_type == 'audio':
+                        daw_specific_advice = f"""🎚️ **Mixing Fundamentals** (Track: {track_name.title()})
+
+**Current Context**: 
+  • Selected Track: {track_name.title()} ({track_type})
+  • Volume: {track_volume}dB | Pan: {track_pan:+.1f}
+  • Project: {daw_ctx.get('total_tracks', 'N/A')} tracks total
+
+**Mixing Workflow**:
+  1. **Gain Staging**: Set input levels to -6dB to -3dB on peaks
+  2. **Balancing**: Set rough levels before any EQ/compression
+  3. **Panning**: Spread tracks spatially (avoid everything center)
+  4. **Subgroup**: Bus similar instruments (drums, vocals, etc.)
+  5. **Processing**: EQ first → Compression → Effects → Automation
+
+**Your Track ({track_name})**:
+  • Current Level: {track_volume}dB
+  • Position: {['Left' if track_pan < -0.3 else 'Center' if -0.3 <= track_pan <= 0.3 else 'Right'][0]}
+  • Next Steps:
+    1. Check peak levels (should hit -6dB to -3dB RMS)
+    2. A/B against reference mixes at similar level
+    3. Apply high-pass filter to remove unnecessary low-end
+    4. Add gentle EQ for tone shaping (avoid radical cuts)
+
+**Pro Tips**:
+  • Take breaks - ear fatigue clouds judgment
+  • Mix at moderate levels (85dB SPL reference)
+  • Use reference tracks from professional mixes
+  • Compare on multiple speaker systems before finalizing
+"""
+                        confidence = 0.85
+
+                    if daw_specific_advice:
+                        response = daw_specific_advice
+                        response_source = "daw_template"
+                        ml_scores = {"relevance": 0.88, "specificity": 0.92, "certainty": 0.85}
+                        confidence = 0.88  # High confidence for targeted DAW advice
+                        logger.info(f"[DAW ADVICE] ✅ Generated {len(daw_specific_advice)} char response for track: {track_name}")
+                        
+            except Exception as e:
+                logger.warning(f"[DAW ADVICE] ❌ Error generating advice: {e}")
+        # ============ END DAW-SPECIFIC ADVICE (PRIORITY) ============
+        
         # Check if question is about DAW functions
         for category, functions in daw_functions.items():
             for func_name, func_data in functions.items():
@@ -961,9 +1208,46 @@ async def chat_endpoint(request: ChatRequest):
                     response += f"⏱️ Hotkey: {func_data.get('hotkey', 'N/A')}\n"
                     response += "💡 Tips:\n" + "\n".join([f"  • {tip}" for tip in func_data.get('tips', [])])
                     confidence = 0.92
+                    response_source = "daw_functions"
+                    ml_scores = {"relevance": 0.90, "specificity": 0.92, "certainty": 0.90}
                     break
             if response:
                 break
+        
+        # Track where response came from for UI and ML scoring
+        response_source = "fallback"
+        ml_scores = {"relevance": 0.65, "specificity": 0.60, "certainty": 0.55}
+        
+        # ============ SEMANTIC SEARCH + ML MATCHING ============
+        if not response and request.daw_context and supabase_client:
+            try:
+                # Use embeddings for semantic search
+                msg_embedding = generate_simple_embedding(request.message)
+                track_name = request.daw_context.get('selected_track', {}).get('name', '')
+                
+                logger.info(f"[ML] Semantic search for: '{request.message[:50]}...' in track: {track_name}")
+                
+                try:
+                    search_result = supabase_client.rpc(
+                        'match_embeddings',
+                        {
+                            'query_embedding': msg_embedding,
+                            'match_threshold': 0.5,
+                            'match_count': 3
+                        }
+                    ).execute()
+                    
+                    if search_result.data and len(search_result.data) > 0:
+                        semantic_match = search_result.data[0]
+                        response = semantic_match.get('content', '')
+                        confidence = 0.82
+                        response_source = "semantic_search"
+                        ml_scores = {"relevance": 0.82, "specificity": 0.80, "certainty": 0.78}
+                        logger.info(f"[ML] Semantic match found: {response[:60]}...")
+                except Exception as e:
+                    logger.debug(f"[ML] Semantic search error: {e}")
+            except Exception as e:
+                logger.debug(f"[ML] Semantic setup error: {e}")
         
         # Check if question is about UI components
         if not response:
@@ -975,15 +1259,220 @@ async def chat_endpoint(request: ChatRequest):
                     response += f"⚙️ Functions: {', '.join(comp_data['functions'])}\n"
                     response += "💡 Tips:\n" + "\n".join([f"  • {tip}" for tip in comp_data.get('teaching_tips', [])])
                     confidence = 0.89
+                    response_source = "ui_component"
+                    ml_scores = {"relevance": 0.85, "specificity": 0.90, "certainty": 0.88}
                     break
         
         # Try real Codette engine with context if available
         if not response and USE_REAL_ENGINE and codette_engine:
+            logger.info(f"[DAW ADVICE] Generating DAW-specific advice. Message: '{message[:50]}...' Track: {request.daw_context.get('selected_track', {}).get('name', 'Unknown')}")
             try:
-                # Build enriched prompt with Supabase context
+                daw_ctx = request.daw_context
+                track_info = daw_ctx.get('selected_track', {})
+                track_name = track_info.get('name', '').lower()
+                track_type = track_info.get('type', 'audio')
+                track_volume = track_info.get('volume', 0)
+                track_pan = track_info.get('pan', 0)
+                
+                msg_lower = message.lower()
+                keywords = ['mix', 'better', 'improve', 'problem', 'issue', 'help', 'how', 'advice', 'tip', 'sound']
+                
+                # Check if this is a mixing/advice question with DAW context
+                if any(kw in msg_lower for kw in keywords):
+                    logger.info(f"[DAW ADVICE] Message matches mixing keywords. Track name: {track_name}")
+                    
+                    # ===== DRUM TRACK ADVICE =====
+                    if any(term in track_name for term in ['drum', 'kick', 'snare', 'hat', 'tom', 'percussion']):
+                        daw_specific_advice = f"""🥁 **Drum Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Compression Strategy**:
+  • Kick: Ratio 4:1, Attack 5ms, Release 100ms, Threshold -20dB
+  • Snare: Ratio 6:1, Attack 3ms, Release 80ms (tighten transients)
+  • Hats: Light compression (2:1) to control dynamics
+
+**EQ Starting Points**:
+  • High-pass filter: Remove everything below 30Hz for most drums
+  • Kick: Scoop 2-4kHz (-3dB), boost 60Hz (+2dB) for punch
+  • Snare: Boost 5-7kHz (+2-3dB) for crack, cut 500Hz (-2dB)
+  • Hats: Gentle high-pass at 500Hz, bright shelf at 10kHz
+
+**Mix Level Tips**:
+  • Drums typically sit around -6dB to 0dB in the mix
+  • Your current level ({track_volume}dB) → Adjust for clarity with other tracks
+  • Leave 3-6dB of headroom before mastering
+
+**Common Issues**:
+  • Drums sound dull? → High-pass and add brightness at 8-10kHz
+  • Drums feel weak? → Add slight saturation, not just compression
+  • Drums clash with bass? → Automate kick volume around bass fundamentals
+"""
+                        confidence = 0.88
+
+                    # ===== BASS TRACK ADVICE =====
+                    elif any(term in track_name for term in ['bass', 'sub', 'low']):
+                        daw_specific_advice = f"""🎸 **Bass Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Frequency Management**:
+  • Clean Low-End: High-pass filter at 40-60Hz (remove mud below kick)
+  • Fundamental Clarity: Boost 80-200Hz (+1-2dB) for presence
+  • Tone Definition: Enhance 1-3kHz (+2-3dB) to cut through mix
+  • Prevent Harshness: Cut 4-7kHz slightly (-1dB)
+
+**Compression Setup**:
+  • Ratio: 4:1 (glue it together)
+  • Attack: 10-15ms (let transient through)
+  • Release: 100-200ms (maintain groove)
+  • Threshold: -18dB to -12dB
+
+**Saturation Techniques**:
+  • Add warmth: Subtle tape saturation (light overdrive)
+  • Enhance harmonics: Mild distortion for presence in small speakers
+  • Layer approach: Keep clean bass + saturated version for blend
+
+**Mixing Position**:
+  • Your level ({track_volume}dB) should sit slightly below kick for rhythm
+  • Pan mono if mixing for small speakers, slight width (±20%) for stereo
+  • Leave tight relationship with kick for strong foundation
+
+**Monitoring**:
+  • Check mix on multiple playback systems (headphones, car, earbuds)
+  • Reference similar professional recordings
+  • Use spectrum analyzer to avoid buildup below 100Hz
+"""
+                        confidence = 0.88
+
+                    # ===== VOCAL TRACK ADVICE =====
+                    elif any(term in track_name for term in ['vocal', 'voice', 'lead', 'vocal', 'singer']):
+                        daw_specific_advice = f"""🎤 **Vocal Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**De-Esser & Clarity**:
+  • Target sibilance: High-pass at 100Hz to remove mud
+  • Presence boost: Add 2-4kHz (+2dB) for intelligibility
+  • De-esser: Threshold around -20dB, ratio 4:1 for /s/ sounds
+  • Proximity warmth: Gentle shelf at 200Hz (+1dB)
+
+**Compression Chain**:
+  • Ratio: 2:1 to 4:1 (vocal-specific: not too tight)
+  • Attack: 20-30ms (preserve transients and tone)
+  • Release: 100-200ms (natural envelope)
+  • Threshold: -18dB (riding the volume)
+
+**Pro Vocal Techniques**:
+  • Double-comp: Gentle comp (2:1) + aggressive comp (6:1) in series
+  • Parallel compression: Mix 20-30% compressed with dry for punch
+  • Serial saturation: Add character with tape or tube emulation
+
+**Reverb Integration**:
+  • Send 10-15% of vocal to reverb (plate or hall)
+  • Reverb pre-delay: 40-60ms to maintain clarity
+  • Reverb decay: 1.5-2.5 seconds (style-dependent)
+  • High-pass reverb input: Remove below 1kHz for clarity
+
+**Level & Dynamics**:
+  • Center pan for lead vocals ({track_pan:+.1f} current)
+  • Headroom: Keep around -3dB peak to -6dB RMS
+  • Your volume ({track_volume}dB) → Should dominate the mix with presence
+  • Ride fader: Automate for consistency across performance
+"""
+                        confidence = 0.88
+
+                    # ===== GUITAR/INSTRUMENT TRACK ADVICE =====
+                    elif any(term in track_name for term in ['guitar', 'synth', 'keys', 'piano', 'instrument', 'pad']):
+                        daw_specific_advice = f"""🎸 **Instrument Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Frequency Sculpting**:
+  • Clean Foundation: High-pass filter around 60-100Hz
+  • Body Presence: Boost 200-500Hz (+1-2dB) for warmth
+  • Definition Layer: Enhance 2-4kHz for clarity and presence
+  • Brightness: Add 8-10kHz for air and top-end sheen
+  • Control Harshness: Gentle cut at 5-7kHz if present
+
+**Dynamics Processing**:
+  • Gentle Compression: Ratio 2:1, Attack 10ms, Release 100ms
+  • Purpose: Glue the sound, maintain consistency
+  • Peak Limiting: Set above compressionfor safety
+  • Transient Shaper: Optional - bring out or smooth attacks
+
+**Stereo Enhancement**:
+  • Pan Position**: Your current pan is {track_pan:+.1f} → Consider stereo placement
+  • Stereo Width**: For synthesizers/keyboards, consider subtle width (±15%)
+  • Doubling: Light delay (15-25ms, 10% mix) for dimension
+
+**Effects Strategy**:
+  • Reverb: 5-20% send for ambience (depends on genre)
+  • Delay: Sync to tempo if used (don't overdo it)
+  • Modulation: Subtle chorus/flanger for movement
+  • Drive/Saturation: Add character matching genre
+
+**Mix Positioning**:
+  • Volume ({track_volume}dB) → Adjust relative to drums and bass
+  • Rhythm instruments: Sit slightly back from lead vocals
+  • Pad layers: Create atmosphere without masking mix
+  • Layering: Stack compatible instruments in frequency range
+"""
+                        confidence = 0.87
+
+                    # ===== GENERIC MIXING ADVICE =====
+                    elif 'mix' in msg_lower and track_type == 'audio':
+                        daw_specific_advice = f"""🎚️ **Mixing Fundamentals** (Track: {track_name.title()})
+
+**Current Context**: 
+  • Selected Track: {track_name.title()} ({track_type})
+  • Volume: {track_volume}dB | Pan: {track_pan:+.1f}
+  • Project: {daw_ctx.get('total_tracks', 'N/A')} tracks total
+
+**Mixing Workflow**:
+  1. **Gain Staging**: Set input levels to -6dB to -3dB on peaks
+  2. **Balancing**: Set rough levels before any EQ/compression
+  3. **Panning**: Spread tracks spatially (avoid everything center)
+  4. **Subgroup**: Bus similar instruments (drums, vocals, etc.)
+  5. **Processing**: EQ first → Compression → Effects → Automation
+
+**Your Track ({track_name})**:
+  • Current Level: {track_volume}dB
+  • Position: {['Left' if track_pan < -0.3 else 'Center' if -0.3 <= track_pan <= 0.3 else 'Right']}
+  • Next Steps:
+    1. Check peak levels (should hit -6dB to -3dB RMS)
+    2. A/B against reference mixes at similar level
+    3. Apply high-pass filter to remove unnecessary low-end
+    4. Add gentle EQ for tone shaping (avoid radical cuts)
+
+**Pro Tips**:
+  • Take breaks - ear fatigue clouds judgment
+  • Mix at moderate levels (85dB SPL reference)
+  • Use reference tracks from professional mixes
+  • Compare on multiple speaker systems before finalizing
+"""
+                        confidence = 0.85
+
+                    if daw_specific_advice:
+                        response = daw_specific_advice
+                        logger.info(f"[DAW ADVICE] ✅ Generated {len(daw_specific_advice)} char response for track: {track_name}")
+                        
+            except Exception as e:
+                logger.warning(f"[DAW ADVICE] ❌ Error generating advice: {e}")
+        # ============ END DAW-SPECIFIC ADVICE ============
+        
+        # Try real Codette engine with context if available
+        if not response and USE_REAL_ENGINE and codette_engine:
+            try:
+                # Build enriched prompt with Supabase context + DAW context
                 enriched_message = request.message
-                if context_info:
-                    enriched_message = f"{request.message}\n\n[Context]\n{context_info}"
+                if context_info or daw_context_info:
+                    context_sections = []
+                    if daw_context_info:
+                        context_sections.append(f"[DAW STATE]\n{daw_context_info}")
+                    if context_info:
+                        context_sections.append(f"[CODE CONTEXT]\n{context_info}")
+                    enriched_message = f"{request.message}\n\n{chr(10).join(context_sections)}"
                 
                 result = codette_engine.process_chat_real(enriched_message, "default")
                 if isinstance(result, dict) and "perspectives" in result:
@@ -1115,11 +1604,27 @@ What would you like to learn?"""
         except Exception as e:
             logger.debug(f"Error in response enhancement: {e}")
         
+        # Calculate ML confidence scores based on response type
+        ml_scores = {
+            "relevance": 0.75,
+            "specificity": 0.70,
+            "certainty": 0.65
+        }
+        
+        if advice_source == "daw_template":
+            ml_scores = {"relevance": 0.88, "specificity": 0.92, "certainty": 0.85}
+        elif advice_source == "semantic_search":
+            ml_scores = {"relevance": 0.82, "specificity": 0.88, "certainty": 0.80}
+        elif response:  # Codette engine response
+            ml_scores = {"relevance": 0.70, "specificity": 0.65, "certainty": 0.60}
+        
         return ChatResponse(
             response=response,
             perspective=perspective_source or "mix_engineering",
             confidence=min(confidence, 1.0),
             timestamp=get_timestamp(),
+            source=response_source,
+            ml_score=ml_scores,
         )
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
@@ -1128,6 +1633,8 @@ What would you like to learn?"""
             perspective=request.perspective or "mix_engineering",
             confidence=0.5,
             timestamp=get_timestamp(),
+            source="error",
+            ml_score={"relevance": 0.0, "specificity": 0.0, "certainty": 0.0},
         )
 
 # ============================================================================

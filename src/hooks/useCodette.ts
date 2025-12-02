@@ -26,6 +26,13 @@ export interface CodetteChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp?: number;
+  source?: string; // Where advice came from: daw_template, semantic_search, codette_engine, etc.
+  confidence?: number; // Overall confidence (0-1)
+  ml_score?: {
+    relevance?: number;
+    specificity?: number;
+    certainty?: number;
+  };
 }
 
 export interface UseCodetteOptions {
@@ -46,7 +53,7 @@ export interface UseCodetteReturn {
   error: Error | null;
 
   // Chat Methods
-  sendMessage: (message: string) => Promise<string | null>;
+  sendMessage: (message: string, dawContext?: Record<string, unknown>) => Promise<string | null>;
   clearHistory: () => void;
 
   // Analysis Methods
@@ -109,19 +116,46 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
 
   // Real implementation: Send message
   const sendMessage = useCallback(
-    async (message: string): Promise<string | null> => {
+    async (message: string, dawContext?: Record<string, unknown>): Promise<string | null> => {
       setIsLoading(true);
       setError(null);
 
       try {
-        // Engine handles message history internally, just get response
-        const response = await codetteEngine.current.sendMessage(message);
-        
-        // Update chat history from engine to ensure consistency
-        const history = codetteEngine.current.getHistory();
-        setChatHistory(history);
+        // Add user message to chat history immediately
+        setChatHistory(prev => [...prev, {
+          role: 'user',
+          content: message,
+          timestamp: Date.now(),
+        }]);
 
-        return response;
+        // Send to backend with DAW context
+        const response = await fetch(`${apiUrl}/codette/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message,
+            daw_context: dawContext || {},
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const assistantMessage: CodetteChatMessage = {
+          role: 'assistant',
+          content: data.response || data.message || 'No response',
+          timestamp: Date.now(),
+          source: data.source || 'fallback',
+          confidence: data.confidence,
+          ml_score: data.ml_score,
+        };
+
+        // Add assistant response to chat history
+        setChatHistory(prev => [...prev, assistantMessage]);
+
+        return assistantMessage.content;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
@@ -131,7 +165,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         setIsLoading(false);
       }
     },
-    []
+    [apiUrl, onError]
   );
 
   // Real implementation: Analyze audio
