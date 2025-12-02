@@ -221,9 +221,11 @@ context_cache = ContextCache(ttl_seconds=300)  # 5-minute cache
 redis_client = None
 if REDIS_AVAILABLE:
     try:
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_port = int(os.getenv('REDIS_PORT', 6379))
         redis_client = redis.Redis(
-            host=os.getenv('REDIS_HOST', 'localhost'),
-            port=int(os.getenv('REDIS_PORT', 6379)),
+            host=redis_host,
+            port=redis_port,
             db=int(os.getenv('REDIS_DB', 0)),
             decode_responses=True,
             socket_connect_timeout=5,
@@ -234,12 +236,12 @@ if REDIS_AVAILABLE:
         logger.info("✅ Redis connected successfully")
         REDIS_ENABLED = True
     except Exception as e:
-        logger.warning(f"⚠️ Redis connection failed: {e} - using in-memory cache")
+        logger.info(f"ℹ️ Redis unavailable (expected if not running) - using in-memory cache only. To enable Redis: redis-server or docker run -d -p 6379:6379 redis")
         redis_client = None
         REDIS_ENABLED = False
 else:
     REDIS_ENABLED = False
-    logger.info("ℹ️ Redis not available - using in-memory cache only")
+    logger.info("ℹ️ Redis not installed - using in-memory cache only (optional: pip install redis)")
 
 # ============================================================================
 # REAL CODETTE AI ENGINE & TRAINING DATA
