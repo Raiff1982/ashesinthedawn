@@ -383,8 +383,8 @@ export default function MixerTile({
                 <div className="flex flex-col items-center gap-1">
                   <TrackMeter 
                     trackId={track.id} 
-                    height={meterHeight}
-                    width={meterWidth}
+                    height={meterHeight || 60}
+                    width={meterWidth || 16}
                   />
                 </div>
               </Tooltip>
