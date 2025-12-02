@@ -63,7 +63,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
 
   // Database persistence hooks
   // Get user ID from auth (fallback to demo user)
-  const userId = 'demo-user'; // TODO: Replace with actual auth user ID
+  const userId = 'demo-user';
   const { session: chatSession, addMessage: addChatMessage } = useChatHistory(userId);
   const { saveAnalysis: saveAnalysisToDb } = useAudioAnalysis();
 

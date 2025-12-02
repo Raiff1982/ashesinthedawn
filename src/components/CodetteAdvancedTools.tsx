@@ -161,11 +161,6 @@ export default function CodetteAdvancedTools({
       
       // 1. Auto-Apply Genre Template to DAW
       applyGenreTemplate(result.detected_genre);
-      
-      // Logging for debugging
-      if (selectedTrack) {
-        console.log(`[CODETTE→DAW] Detected genre: ${result.detected_genre} (${(result.confidence * 100).toFixed(0)}% confidence)`);
-      }
     } catch (error) {
       console.error("[CodetteAdvancedTools] Genre analysis error:", error);
     } finally {
