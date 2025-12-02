@@ -11,12 +11,14 @@ import Sidebar from './components/Sidebar';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
 import CommandPalette from './components/CommandPalette';
 import CodetteMasterPanel from './components/CodetteMasterPanel';
+import CodetteControlCenter from './components/CodetteControlCenter';
 import { initializeActions } from './lib/actions/initializeActions';
 
 function AppContent() {
   const [mixerHeight, setMixerHeight] = React.useState(200);
   const [isResizingMixer, setIsResizingMixer] = React.useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+  const [rightSidebarTab, setRightSidebarTab] = React.useState<'files' | 'control'>('files');
   const { showCodetteMasterPanel, setShowCodetteMasterPanel } = useCodettePanel();
 
   // Initialize action system on mount
@@ -105,9 +107,37 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Right sidebar - File browser and plugins */}
+          {/* Right sidebar - File browser and Codette Control */}
           <div className="w-64 bg-gray-900 border-l border-gray-700 flex flex-col overflow-hidden">
-            <Sidebar />
+            {/* Tab Navigation */}
+            <div className="flex gap-0 border-b border-gray-700 bg-gray-800 flex-shrink-0">
+              <button
+                onClick={() => setRightSidebarTab('files')}
+                className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                  rightSidebarTab === 'files'
+                    ? 'bg-gray-700 text-cyan-400 border-b-2 border-cyan-400'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                Files
+              </button>
+              <button
+                onClick={() => setRightSidebarTab('control')}
+                className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                  rightSidebarTab === 'control'
+                    ? 'bg-gray-700 text-cyan-400 border-b-2 border-cyan-400'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                Control
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-auto pb-20">
+              {rightSidebarTab === 'files' && <Sidebar />}
+              {rightSidebarTab === 'control' && <CodetteControlCenter />}
+            </div>
           </div>
         </div>
 
