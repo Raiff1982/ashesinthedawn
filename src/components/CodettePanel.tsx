@@ -39,6 +39,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     reconnect,
     getSuggestions,
     getMasteringAdvice,
+    analyzeAudio,
   } = useCodette({ autoConnect: true });
 
   // DAW Context for actual state updates
@@ -48,6 +49,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     togglePlay,
     updateTrack,
     isPlaying,
+    getAudioBufferData,
   } = useDAW();
 
   const [inputValue, setInputValue] = useState('');
@@ -273,10 +275,10 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             // Parse and execute suggestion actions
                             if (suggestion.title.toLowerCase().includes('eq')) {
                               if (selectedTrack) {
-                                const eqPlugin = {
+                                const eqPlugin: Plugin = {
                                   id: `eq-${Date.now()}`,
                                   name: 'EQ',
-                                  type: 'eq',
+                                  type: 'eq' as const,
                                   enabled: true,
                                   parameters: {},
                                 };
@@ -286,10 +288,10 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                               }
                             } else if (suggestion.title.toLowerCase().includes('compress')) {
                               if (selectedTrack) {
-                                const compPlugin = {
+                                const compPlugin: Plugin = {
                                   id: `comp-${Date.now()}`,
                                   name: 'Compressor',
-                                  type: 'compressor',
+                                  type: 'compressor' as const,
                                   enabled: true,
                                   parameters: {},
                                 };
@@ -319,7 +321,89 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             {/* Analysis Tab */}
             {activeTab === 'analysis' && (
               <div className="space-y-3">
-                {analysis ? (
+                {/* Track Selection */}
+                {!selectedTrack ? (
+                  <div className="p-2 bg-yellow-900/30 border border-yellow-700 rounded text-center">
+                    <p className="text-xs text-yellow-300">
+                      Select a track from the timeline to analyze
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Selected Track Info */}
+                    <div className="p-2 bg-gray-800 border border-gray-700 rounded">
+                      <div className="text-xs text-gray-400 mb-1">Analyzing:</div>
+                      <div className="text-xs font-medium text-blue-400">{selectedTrack.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">Type: {selectedTrack.type}</div>
+                    </div>
+
+                    {/* Analysis Function Selector */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-300 mb-1.5">Analysis Functions</h4>
+                      <div className="space-y-1.5">
+                        <button
+                          onClick={async () => {
+                            if (!selectedTrack) return;
+                            const audioData = getAudioBufferData(selectedTrack.id);
+                            if (audioData) {
+                              await analyzeAudio(audioData, 'health-check');
+                            }
+                          }}
+                          disabled={isLoading}
+                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs">🔍 Session Health Check</span>
+                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!selectedTrack) return;
+                            const audioData = getAudioBufferData(selectedTrack.id);
+                            if (audioData) {
+                              await analyzeAudio(audioData, 'spectrum');
+                            }
+                          }}
+                          disabled={isLoading}
+                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs">📊 Audio Spectrum Analysis</span>
+                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!selectedTrack) return;
+                            const audioData = getAudioBufferData(selectedTrack.id);
+                            if (audioData) {
+                              await analyzeAudio(audioData, 'metering');
+                            }
+                          }}
+                          disabled={isLoading}
+                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs">📈 Level Metering</span>
+                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!selectedTrack) return;
+                            const audioData = getAudioBufferData(selectedTrack.id);
+                            if (audioData) {
+                              await analyzeAudio(audioData, 'phase');
+                            }
+                          }}
+                          disabled={isLoading}
+                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs">🎚️ Phase Correlation</span>
+                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Analysis Results */}
+                {analysis && (
                   <>
                     <div className="p-2 bg-blue-900/30 border border-blue-700 rounded">
                       <div className="flex items-center justify-between mb-2">
@@ -362,9 +446,12 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       </div>
                     )}
                   </>
-                ) : (
-                  <div className="text-center py-6 text-gray-500 text-xs">
-                    {isLoading ? 'Analyzing audio...' : 'No analysis yet'}
+                )}
+
+                {!analysis && !isLoading && selectedTrack && (
+                  <div className="text-center py-4 text-gray-500 text-xs">
+                    <p className="mb-1">💡 Upload audio data to analyze...</p>
+                    <p className="text-xs text-gray-600">Select an analysis function above</p>
                   </div>
                 )}
               </div>
@@ -443,7 +530,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const eqPlugin: Plugin = {
                             id: `eq-${Date.now()}`,
                             name: 'EQ',
-                            type: 'eq',
+                            type: 'eq' as const,
                             enabled: true,
                             parameters: {},
                           };
@@ -465,7 +552,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const compPlugin: Plugin = {
                             id: `comp-${Date.now()}`,
                             name: 'Compressor',
-                            type: 'compressor',
+                            type: 'compressor' as const,
                             enabled: true,
                             parameters: {},
                           };
@@ -487,7 +574,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const reverbPlugin: Plugin = {
                             id: `reverb-${Date.now()}`,
                             name: 'Reverb',
-                            type: 'reverb',
+                            type: 'reverb' as const,
                             enabled: true,
                             parameters: {},
                           };

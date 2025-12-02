@@ -78,6 +78,7 @@ interface DAWContextType {
   uploadAudioFile: (file: File) => Promise<boolean>;
   getWaveformData: (trackId: string) => number[];
   getAudioDuration: (trackId: string) => number;
+  getAudioBufferData: (trackId: string) => Float32Array | null;
   getAudioLevels: () => Uint8Array | null;
   seek: (timeSeconds: number) => void;
   setTrackInputGain: (trackId: string, gainDb: number) => void;
@@ -1227,6 +1228,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     return audioEngineRef.current.getAudioDuration(trackId);
   };
 
+  const getAudioBufferData = (trackId: string): Float32Array | null => {
+    return audioEngineRef.current.getAudioBufferData(trackId);
+  };
+
   const getAudioLevels = (): Uint8Array | null => {
     return audioEngineRef.current.getAudioLevels();
   };
@@ -1878,6 +1883,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         uploadAudioFile,
         getWaveformData,
         getAudioDuration,
+        getAudioBufferData,
         getAudioLevels,
         seek,
         setTrackInputGain,

@@ -600,35 +600,25 @@ Keep peaks around -6dB during mixing.
   }
 
   /**
-   * Format Codette response by cleaning up multi-perspective analysis markers
+   * Format Codette response by preserving multi-perspective analysis
+   * Keep all perspectives intact for comprehensive AI reasoning display
    */
   private formatCodetteResponse(response: string): string {
-    // Remove markdown-style perspective headers and clean formatting
-    if (response.includes('**') && (response.includes('neural_network') || response.includes('newtonian_logic'))) {
-      // Extract just the perspective content, remove technical markers
-      const cleaned = response
-        .replace(/\*\*.*?\*\*/g, '') // Remove **bold** markers
-        .replace(/\[NeuralNet\]/g, '')
-        .replace(/\[Reason\]/g, '')
-        .replace(/\[Dream\]/g, '')
-        .replace(/\[Ethics\]/g, '')
-        .replace(/\[Quantum\]/g, '')
-        .replace(/neural_network:/g, '')
-        .replace(/newtonian_logic:/g, '')
-        .replace(/davinci_synthesis:/g, '')
-        .replace(/resilient_kindness:/g, '')
-        .replace(/quantum_logic:/g, '')
-        .replace(/🧠/g, '')
-        .replace(/Multiple perspectives:/g, '')
-        .replace(/Codette's Multi-Perspective Analysis/g, '')
-        .trim();
+    // DO NOT strip perspective markers or content
+    // The multi-perspective response is the complete AI reasoning
+    // Example format preserved:
+    // **neural_network**: Pattern analysis suggests...
+    // **newtonian_logic**: Logic dictates...
+    // **davinci_synthesis**: As Leonardo merged...
+    // **resilient_kindness**: Let's explore this with...
+    // **quantum_logic**: Quantum probability...
+    
+    // Only clean up duplicate/redundant headers if present
+    const cleaned = response
+      .replace(/🧠 \*\*Codette's Multi-Perspective Analysis\*\*\n\n/g, '') // Remove header if present
+      .trim();
 
-      // Split by perspective markers and rejoin more naturally
-      const perspectives = cleaned.split(/\n+/).filter(line => line.trim().length > 0);
-      return perspectives.join('\n\n');
-    }
-
-    return response;
+    return cleaned;
   }
 
   /**
@@ -648,7 +638,7 @@ Keep peaks around -6dB during mixing.
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: message,
-          perspective: 'neuralnets',
+          perspective: 'mix_engineering',
           context: this.chatHistory.slice(-5),
         }),
       });

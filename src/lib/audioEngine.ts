@@ -454,6 +454,46 @@ export class AudioEngine {
   }
 
   /**
+   * Get audio buffer data as Float32Array for analysis
+   */
+  getAudioBufferData(trackId: string): Float32Array | null {
+    const buffer = this.audioBuffers.get(trackId);
+    if (!buffer) {
+      return null;
+    }
+
+    try {
+      // Mix all channels into mono for analysis
+      const channelCount = buffer.numberOfChannels;
+      const audioData = new Float32Array(buffer.length);
+
+      if (channelCount === 1) {
+        // Mono: copy directly
+        audioData.set(buffer.getChannelData(0));
+      } else {
+        // Stereo or multi-channel: mix down to mono
+        const channelDataArrays = [];
+        for (let ch = 0; ch < channelCount; ch++) {
+          channelDataArrays.push(buffer.getChannelData(ch));
+        }
+
+        for (let i = 0; i < buffer.length; i++) {
+          let sum = 0;
+          for (let ch = 0; ch < channelCount; ch++) {
+            sum += channelDataArrays[ch][i];
+          }
+          audioData[i] = sum / channelCount;
+        }
+      }
+
+      return audioData;
+    } catch (error) {
+      console.error(`Error extracting audio buffer for track ${trackId}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Get duration of loaded audio
    */
   getAudioDuration(trackId: string): number {

@@ -61,6 +61,42 @@ export const CodetteMasterPanel: React.FC<{ onClose?: () => void }> = ({ onClose
     }
   };
 
+  const handleSmartMix = async () => {
+    if (!selectedTrack) return;
+    try {
+      await sendMessage(`Apply smart mixing optimization to track: ${selectedTrack.name}`);
+    } catch (err) {
+      console.error('Failed to apply smart mix:', err);
+    }
+  };
+
+  const handleDiagnose = async () => {
+    if (!selectedTrack) return;
+    try {
+      await sendMessage(`Diagnose audio quality issues in track: ${selectedTrack.name}`);
+    } catch (err) {
+      console.error('Failed to diagnose:', err);
+    }
+  };
+
+  const handleEnhance = async () => {
+    if (!selectedTrack) return;
+    try {
+      await sendMessage(`Apply AI-driven audio enhancements to track: ${selectedTrack.name}`);
+    } catch (err) {
+      console.error('Failed to enhance:', err);
+    }
+  };
+
+  const handleGenreMatch = async () => {
+    if (!selectedTrack) return;
+    try {
+      await sendMessage(`Analyze and match audio characteristics to music genre for track: ${selectedTrack.name}`);
+    } catch (err) {
+      console.error('Failed to match genre:', err);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-gray-900 border-l border-gray-700 rounded-lg overflow-hidden">
       {/* Header */}
@@ -143,6 +179,11 @@ export const CodetteMasterPanel: React.FC<{ onClose?: () => void }> = ({ onClose
           <ControlsTab
             selectedTrack={selectedTrack}
             onClearChat={clearHistory}
+            onSmartMix={handleSmartMix}
+            onDiagnose={handleDiagnose}
+            onEnhance={handleEnhance}
+            onGenreMatch={handleGenreMatch}
+            isLoading={isLoading}
           />
         )}
       </div>
@@ -202,6 +243,77 @@ const ChatTab: React.FC<ChatTabProps> = ({
   const formatMessage = (content: string, role: string) => {
     if (role !== 'assistant') return content;
 
+    // Detect multi-perspective response format (DAW-focused perspectives)
+    const perspectiveMarkers = [
+      'mix_engineering',
+      'audio_theory',
+      'creative_production',
+      'technical_troubleshooting',
+      'workflow_optimization'
+    ];
+    
+    const hasPerspectives = perspectiveMarkers.some(marker => content.includes(`**${marker}**`));
+    
+    if (hasPerspectives) {
+      // Parse and format multi-perspective response
+      const lines = content.split('\n');
+      const perspectives: { name: string; content: string; icon: string }[] = [];
+      let currentPerspective = '';
+      let currentContent: string[] = [];
+      
+      const perspectiveIcons: { [key: string]: string } = {
+        mix_engineering: '🎚️',
+        audio_theory: '📊',
+        creative_production: '🎵',
+        technical_troubleshooting: '🔧',
+        workflow_optimization: '⚡'
+      };
+      
+      for (const line of lines) {
+        const match = line.match(/\*\*([a-z_]+)\*\*:\s*\[([^\]]+)\]\s*(.*)/);
+        if (match) {
+          if (currentPerspective) {
+            perspectives.push({
+              name: currentPerspective,
+              content: currentContent.join(' ').trim(),
+              icon: perspectiveIcons[currentPerspective] || '✨'
+            });
+          }
+          currentPerspective = match[1];
+          currentContent = [match[3]];
+        } else if (currentPerspective && line.trim()) {
+          currentContent.push(line);
+        }
+      }
+      
+      // Add last perspective
+      if (currentPerspective) {
+        perspectives.push({
+          name: currentPerspective,
+          content: currentContent.join(' ').trim(),
+          icon: perspectiveIcons[currentPerspective] || '✨'
+        });
+      }
+      
+      return (
+        <div className="space-y-3 w-full">
+          {perspectives.map((perspective, idx) => (
+            <div key={idx} className="border-l-2 border-purple-500 pl-3 py-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">{perspective.icon}</span>
+                <span className="font-semibold text-purple-300 text-xs uppercase">
+                  {perspective.name.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <p className="text-sm text-gray-200 leading-relaxed">
+                {perspective.content}
+              </p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     // Split by paragraph for better readability
     const paragraphs = content.split('\n\n').filter(p => p.trim().length > 0);
     
@@ -235,10 +347,10 @@ const ChatTab: React.FC<ChatTabProps> = ({
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-xs px-3 py-2 rounded-lg text-sm ${
+                className={`px-3 py-2 rounded-lg text-sm ${
                   msg.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-200'
+                    ? 'bg-blue-600 text-white max-w-xs'
+                    : 'bg-gray-700 text-gray-200 max-w-2xl'
                 }`}
               >
                 {formatMessage(msg.content, msg.role)}
@@ -420,9 +532,22 @@ const AnalysisTab: React.FC<AnalysisTabProps> = ({
 interface ControlsTabProps {
   selectedTrack: any;
   onClearChat: () => void;
+  onSmartMix?: () => Promise<void>;
+  onDiagnose?: () => Promise<void>;
+  onEnhance?: () => Promise<void>;
+  onGenreMatch?: () => Promise<void>;
+  isLoading?: boolean;
 }
 
-const ControlsTab: React.FC<ControlsTabProps> = ({ selectedTrack, onClearChat }) => (
+const ControlsTab: React.FC<ControlsTabProps> = ({ 
+  selectedTrack, 
+  onClearChat, 
+  onSmartMix, 
+  onDiagnose, 
+  onEnhance, 
+  onGenreMatch,
+  isLoading = false
+}) => (
   <div className="space-y-4">
     <div className="bg-gray-800 border border-gray-700 rounded p-4 space-y-3">
       <h3 className="font-bold text-blue-400">Codette Controls</h3>
@@ -430,16 +555,36 @@ const ControlsTab: React.FC<ControlsTabProps> = ({ selectedTrack, onClearChat })
       <div className="space-y-2">
         <label className="text-xs text-gray-400">Quick Actions:</label>
         <div className="grid grid-cols-2 gap-2">
-          <button className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs font-medium transition-colors">
+          <button 
+            onClick={onSmartMix}
+            disabled={isLoading || !selectedTrack}
+            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-medium transition-colors disabled:cursor-not-allowed"
+            title={!selectedTrack ? "Select a track first" : "Automatically optimize mix for this track"}
+          >
             🎯 Smart Mix
           </button>
-          <button className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs font-medium transition-colors">
+          <button 
+            onClick={onDiagnose}
+            disabled={isLoading || !selectedTrack}
+            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-medium transition-colors disabled:cursor-not-allowed"
+            title={!selectedTrack ? "Select a track first" : "Analyze audio quality and detect issues"}
+          >
             🔍 Diagnose
           </button>
-          <button className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs font-medium transition-colors">
+          <button 
+            onClick={onEnhance}
+            disabled={isLoading || !selectedTrack}
+            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-medium transition-colors disabled:cursor-not-allowed"
+            title={!selectedTrack ? "Select a track first" : "Apply AI-driven enhancements"}
+          >
             ✨ Enhance
           </button>
-          <button className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs font-medium transition-colors">
+          <button 
+            onClick={onGenreMatch}
+            disabled={isLoading || !selectedTrack}
+            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-medium transition-colors disabled:cursor-not-allowed"
+            title={!selectedTrack ? "Select a track first" : "Match audio characteristics to genre"}
+          >
             🎵 Genre Match
           </button>
         </div>

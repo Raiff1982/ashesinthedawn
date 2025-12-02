@@ -15,6 +15,8 @@ import asyncio
 import time
 import traceback
 import os
+from functools import lru_cache
+import hashlib
 
 # Load environment variables from .env file
 try:
@@ -38,6 +40,14 @@ try:
 except ImportError:
     SUPABASE_AVAILABLE = False
     print("[WARNING] Supabase not installed - install with: pip install supabase")
+
+# Try to import Redis for persistent caching
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    print("[INFO] Redis not installed - using in-memory cache (install with: pip install redis)")
 
 # Setup paths
 codette_path = Path(__file__).parent / "codette"
@@ -77,6 +87,159 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# CACHING SYSTEM FOR PERFORMANCE OPTIMIZATION
+# ============================================================================
+
+class ContextCache:
+    """TTL-based cache for Supabase context retrieval (reduces API calls ~300ms per query)"""
+    
+    def __init__(self, ttl_seconds: int = 300):
+        self.cache: Dict[str, Dict[str, Any]] = {}
+        self.ttl = ttl_seconds
+        self.timestamps: Dict[str, float] = {}
+        
+        # Performance metrics
+        self.metrics: Dict[str, Any] = {
+            "hits": 0,
+            "misses": 0,
+            "total_requests": 0,
+            "total_hit_latency_ms": 0.0,
+            "total_miss_latency_ms": 0.0,
+            "average_hit_latency_ms": 0.0,
+            "average_miss_latency_ms": 0.0,
+            "hit_rate_percent": 0.0,
+            "started_at": time.time(),
+        }
+        self.operation_times: Dict[str, List[float]] = {
+            "hits": [],
+            "misses": []
+        }
+    
+    def get_cache_key(self, message: str, filename: Optional[str]) -> str:
+        """Generate cache key from message + filename"""
+        key_text = f"{message}:{filename or 'none'}"
+        return hashlib.md5(key_text.encode()).hexdigest()
+    
+    def get(self, message: str, filename: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Get cached context if exists and not expired"""
+        start_time = time.time()
+        key = self.get_cache_key(message, filename)
+        self.metrics["total_requests"] += 1
+        
+        if key not in self.cache:
+            # Cache miss
+            elapsed_ms = (time.time() - start_time) * 1000
+            self.metrics["misses"] += 1
+            self.metrics["total_miss_latency_ms"] += elapsed_ms
+            self.operation_times["misses"].append(elapsed_ms)
+            self._update_metrics()
+            logger.debug(f"Cache miss for {message[:30]}... ({elapsed_ms:.2f}ms)")
+            return None
+        
+        # Check if expired
+        age = time.time() - self.timestamps[key]
+        if age > self.ttl:
+            del self.cache[key]
+            del self.timestamps[key]
+            elapsed_ms = (time.time() - start_time) * 1000
+            self.metrics["misses"] += 1
+            self.metrics["total_miss_latency_ms"] += elapsed_ms
+            self.operation_times["misses"].append(elapsed_ms)
+            self._update_metrics()
+            logger.debug(f"Cache expired for {message[:30]}... ({elapsed_ms:.2f}ms)")
+            return None
+        
+        # Cache hit
+        elapsed_ms = (time.time() - start_time) * 1000
+        self.metrics["hits"] += 1
+        self.metrics["total_hit_latency_ms"] += elapsed_ms
+        self.operation_times["hits"].append(elapsed_ms)
+        self._update_metrics()
+        logger.debug(f"Cache hit for {message[:30]}... (age: {age:.1f}s, latency: {elapsed_ms:.2f}ms)")
+        return self.cache[key]
+    
+    def set(self, message: str, filename: Optional[str], data: Dict[str, Any]) -> None:
+        """Cache context data with timestamp"""
+        key = self.get_cache_key(message, filename)
+        self.cache[key] = data
+        self.timestamps[key] = time.time()
+        logger.debug(f"Cached context for {message[:30]}...")
+    
+    def clear(self) -> None:
+        """Clear all cache"""
+        self.cache.clear()
+        self.timestamps.clear()
+        logger.info("Context cache cleared")
+    
+    def _update_metrics(self) -> None:
+        """Update derived metrics"""
+        if self.metrics["total_requests"] > 0:
+            self.metrics["hit_rate_percent"] = (
+                self.metrics["hits"] / self.metrics["total_requests"] * 100
+            )
+        
+        if self.metrics["hits"] > 0:
+            self.metrics["average_hit_latency_ms"] = (
+                self.metrics["total_hit_latency_ms"] / self.metrics["hits"]
+            )
+        
+        if self.metrics["misses"] > 0:
+            self.metrics["average_miss_latency_ms"] = (
+                self.metrics["total_miss_latency_ms"] / self.metrics["misses"]
+            )
+    
+    def stats(self) -> Dict[str, Any]:
+        """Get comprehensive cache statistics"""
+        uptime_seconds = time.time() - self.metrics["started_at"]
+        
+        return {
+            "entries": len(self.cache),
+            "ttl_seconds": self.ttl,
+            "hits": self.metrics["hits"],
+            "misses": self.metrics["misses"],
+            "total_requests": self.metrics["total_requests"],
+            "hit_rate_percent": round(self.metrics["hit_rate_percent"], 2),
+            "average_hit_latency_ms": round(self.metrics["average_hit_latency_ms"], 2),
+            "average_miss_latency_ms": round(self.metrics["average_miss_latency_ms"], 2),
+            "total_hit_latency_ms": round(self.metrics["total_hit_latency_ms"], 2),
+            "total_miss_latency_ms": round(self.metrics["total_miss_latency_ms"], 2),
+            "uptime_seconds": round(uptime_seconds, 1),
+            "performance_gain": round(
+                self.metrics["average_miss_latency_ms"] / 
+                max(self.metrics["average_hit_latency_ms"], 0.01), 2
+            ) if self.metrics["average_hit_latency_ms"] > 0 else 0,
+        }
+
+context_cache = ContextCache(ttl_seconds=300)  # 5-minute cache
+
+# ============================================================================
+# REDIS SETUP (Optional persistent caching)
+# ============================================================================
+
+redis_client = None
+if REDIS_AVAILABLE:
+    try:
+        redis_client = redis.Redis(
+            host=os.getenv('REDIS_HOST', 'localhost'),
+            port=int(os.getenv('REDIS_PORT', 6379)),
+            db=int(os.getenv('REDIS_DB', 0)),
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_keepalive=True,
+        )
+        # Test connection
+        redis_client.ping()
+        logger.info("✅ Redis connected successfully")
+        REDIS_ENABLED = True
+    except Exception as e:
+        logger.warning(f"⚠️ Redis connection failed: {e} - using in-memory cache")
+        redis_client = None
+        REDIS_ENABLED = False
+else:
+    REDIS_ENABLED = False
+    logger.info("ℹ️ Redis not available - using in-memory cache only")
 
 # ============================================================================
 # REAL CODETTE AI ENGINE & TRAINING DATA
@@ -178,7 +341,7 @@ else:
 
 class ChatRequest(BaseModel):
     message: str
-    perspective: Optional[str] = "neuralnets"
+    perspective: Optional[str] = "mix_engineering"
     context: Optional[List[Dict[str, Any]]] = None
     conversation_id: Optional[str] = None
 
@@ -604,24 +767,187 @@ async def upsert_embeddings(request: UpsertRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
+# RESPONSE ENHANCEMENT HELPERS
+# ============================================================================
+
+def find_matching_training_example(user_input: str, perspective_key: str) -> dict | None:
+    """Find relevant training example for the given input and perspective"""
+    try:
+        from codette_training_data import PERSPECTIVE_RESPONSE_TRAINING
+        
+        if perspective_key not in PERSPECTIVE_RESPONSE_TRAINING:
+            return None
+        
+        perspective_training = PERSPECTIVE_RESPONSE_TRAINING[perspective_key]
+        training_examples = perspective_training.get("training_examples", [])
+        
+        # Simple keyword matching - find best matching training example
+        user_lower = user_input.lower()
+        best_match = None
+        best_score = 0
+        
+        for example in training_examples:
+            example_input = example.get("user_input", "").lower()
+            # Calculate keyword overlap
+            user_words = set(user_lower.split())
+            example_words = set(example_input.split())
+            overlap = len(user_words & example_words)
+            
+            if overlap > best_score:
+                best_score = overlap
+                best_match = example
+        
+        # Return if there's reasonable match (at least 2 keywords)
+        if best_score >= 2:
+            return best_match
+        
+        return None
+    except Exception as e:
+        logger.debug(f"Error finding training example: {e}")
+        return None
+
+def enhance_response_with_training(base_response: str, user_input: str, perspective_key: str) -> str:
+    """Enhance response quality using training examples as reference"""
+    try:
+        from codette_training_data import PERSPECTIVE_RESPONSE_TRAINING
+        
+        if perspective_key not in PERSPECTIVE_RESPONSE_TRAINING:
+            return base_response
+        
+        perspective_training = PERSPECTIVE_RESPONSE_TRAINING[perspective_key]
+        
+        # If response is too short or generic, enhance with training pattern
+        if len(base_response) < 100:
+            # Try to find matching example for pattern reference
+            example = find_matching_training_example(user_input, perspective_key)
+            if example:
+                # Use example structure as template
+                example_response = example.get("accurate_response", "")
+                # Extend base response with pattern-matched advice
+                if example_response:
+                    return f"{base_response}\n\n💡 Similar pattern: {example_response[:200]}..."
+        
+        return base_response
+    except Exception as e:
+        logger.debug(f"Error enhancing response: {e}")
+        return base_response
+
+# ============================================================================
 # CHAT ENDPOINTS
 # ============================================================================
 
 @app.post("/codette/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-    """Chat with Codette using training data and real engine"""
+    """Chat with Codette using training data, real engine, and Supabase context with message embeddings"""
     try:
-        perspective = request.perspective or "neuralnets"
+        perspective = request.perspective or "mix_engineering"
         message = request.message.lower()
+        
+        # Generate embedding for the incoming message (for semantic search)
+        message_embedding = generate_simple_embedding(request.message)
+        logger.info(f"Generated message embedding (dim: {len(message_embedding)})")
         
         # Get training context
         training_context = get_training_context_safe()
         daw_functions = training_context.get("daw_functions", {})
         ui_components = training_context.get("ui_components", {})
-        # codette_abilities = training_context.get("codette_abilities", {})
+        response_templates = training_context.get("response_templates", {})
         
-        response = None
-        confidence = 0.5
+        # Initialize variables
+        response = ""
+        confidence = 0.75
+        perspective_source = "fallback"
+        
+        # Get Supabase context (code snippets, files, chat history)
+        supabase_context = None
+        context_info = ""
+        context_cached = False
+        
+        if supabase_client:
+            try:
+                cache_key = context_cache.get_cache_key(request.message, None)
+                
+                # Try Redis first (if available)
+                if REDIS_ENABLED and redis_client:
+                    try:
+                        cached_data = redis_client.get(f"context:{cache_key}")
+                        if cached_data:
+                            import json as json_module
+                            supabase_context = json_module.loads(cached_data)
+                            context_cached = True
+                            logger.info(f"Context retrieved from Redis cache for: {request.message[:50]}...")
+                    except Exception as redis_err:
+                        logger.debug(f"Redis retrieval failed (fallback to memory): {redis_err}")
+                
+                # Fall back to in-memory cache if Redis miss
+                if not context_cached:
+                    cached_context = context_cache.get(request.message, None)
+                    if cached_context is not None:
+                        supabase_context = cached_context
+                        context_cached = True
+                        logger.info(f"Context retrieved from memory cache for: {request.message[:50]}...")
+                
+                # Fetch from Supabase if not cached anywhere
+                if not context_cached:
+                    logger.info(f"Retrieving fresh context from Supabase for: {request.message[:50]}...")
+                    context_result = supabase_client.rpc(
+                        'get_codette_context',
+                        {
+                            'input_prompt': request.message,
+                            'optionally_filename': None
+                        }
+                    ).execute()
+                    
+                    supabase_context = context_result.data
+                    
+                    # Cache the result in both memory and Redis
+                    if supabase_context:
+                        # Memory cache
+                        context_cache.set(request.message, None, supabase_context)
+                        
+                        # Redis cache (if available)
+                        if REDIS_ENABLED and redis_client:
+                            try:
+                                import json as json_module
+                                redis_client.setex(
+                                    f"context:{cache_key}",
+                                    300,  # 5-minute TTL
+                                    json_module.dumps(supabase_context)
+                                )
+                                logger.debug(f"Context cached to Redis for: {request.message[:50]}...")
+                            except Exception as redis_err:
+                                logger.debug(f"Redis caching failed: {redis_err}")
+                
+                # Format context information for Codette
+                if supabase_context:
+                    context_parts = []
+                    
+                    # Add relevant code snippets
+                    snippets = supabase_context.get('snippets', [])
+                    if snippets and len(snippets) > 0:
+                        context_parts.append(f"Related Code ({len(snippets)} snippets):")
+                        for snippet in snippets[:3]:  # Limit to top 3
+                            filename = snippet.get('filename', 'unknown')
+                            snippet_text = snippet.get('snippet', '')[:100]
+                            context_parts.append(f"  • {filename}: {snippet_text}...")
+                    
+                    # Add file metadata
+                    file_info = supabase_context.get('file')
+                    if file_info and file_info != 'null':
+                        context_parts.append(f"File Context: {file_info.get('filename')} ({file_info.get('file_type')})")
+                    
+                    # Add chat history context
+                    chat_history = supabase_context.get('chat_history', [])
+                    if chat_history and len(chat_history) > 0:
+                        context_parts.append(f"User History: {len(chat_history)} previous messages")
+                    
+                    context_info = "\n".join(context_parts)
+                    cache_source = "Redis" if (REDIS_ENABLED and redis_client and context_cached) else "Memory"
+                    logger.info(f"Context ready [{cache_source}]: {len(snippets)} snippets, {len(chat_history)} history items")
+                
+            except Exception as e:
+                logger.warning(f"Context retrieval error: {e}")
+                supabase_context = None
         
         # Check if question is about DAW functions
         for category, functions in daw_functions.items():
@@ -648,21 +974,99 @@ async def chat_endpoint(request: ChatRequest):
                     confidence = 0.89
                     break
         
-        # Try real Codette engine if available
-        perspective_source = "fallback"
+        # Try real Codette engine with context if available
         if not response and USE_REAL_ENGINE and codette_engine:
             try:
-                result = codette_engine.process_chat_real(request.message, "default")
+                # Build enriched prompt with Supabase context
+                enriched_message = request.message
+                if context_info:
+                    enriched_message = f"{request.message}\n\n[Context]\n{context_info}"
+                
+                result = codette_engine.process_chat_real(enriched_message, "default")
                 if isinstance(result, dict) and "perspectives" in result:
-                    # Format multi-perspective response
-                    response = "🧠 **Codette's Multi-Perspective Analysis**\n\n"
+                    # Format multi-perspective response with DAW-focused perspectives
+                    response = "🎚️ **Codette's Multi-Perspective Analysis**\n\n"
                     perspectives_list = result.get("perspectives", [])
+                    
+                    # Map old perspective names to new DAW-focused names
+                    perspective_name_map = {
+                        'neural_network': 'mix_engineering',
+                        'newtonian_logic': 'audio_theory',
+                        'davinci_synthesis': 'creative_production',
+                        'resilient_kindness': 'technical_troubleshooting',
+                        'quantum_logic': 'workflow_optimization',
+                    }
+                    
+                    # Map display names to keys (for engine that already returns display names)
+                    display_name_to_key = {
+                        'Mix Engineering': 'mix_engineering',
+                        'Audio Theory': 'audio_theory',
+                        'Creative Production': 'creative_production',
+                        'Technical Troubleshooting': 'technical_troubleshooting',
+                        'Workflow Optimization': 'workflow_optimization',
+                        'neural_network': 'mix_engineering',
+                        'newtonian_logic': 'audio_theory',
+                        'davinci_synthesis': 'creative_production',
+                        'resilient_kindness': 'technical_troubleshooting',
+                        'quantum_logic': 'workflow_optimization',
+                    }
+                    
+                    # Map new DAW-focused perspectives with icons
+                    perspective_icons = {
+                        'mix_engineering': '🎚️',
+                        'audio_theory': '📊',
+                        'creative_production': '🎵',
+                        'technical_troubleshooting': '🔧',
+                        'workflow_optimization': '⚡'
+                    }
+                    
+                    # DAW-focused perspective descriptions
+                    perspective_descriptions = {
+                        'mix_engineering': 'Mix Engineering',
+                        'audio_theory': 'Audio Theory',
+                        'creative_production': 'Creative Production',
+                        'technical_troubleshooting': 'Technical Troubleshooting',
+                        'workflow_optimization': 'Workflow Optimization',
+                    }
+                    
+                    # Extract primary perspective for metadata
+                    primary_perspective = "mix_engineering"
+                    if perspectives_list and len(perspectives_list) > 0:
+                        first_perspective = perspectives_list[0]
+                        if isinstance(first_perspective, dict):
+                            old_key = first_perspective.get('key') or first_perspective.get('name', 'neural_network').lower().replace(' ', '_')
+                            primary_perspective = perspective_name_map.get(old_key, 'mix_engineering')
+                    
                     for perspective in perspectives_list:
                         perspective_name = perspective.get('name', 'Insight')
                         perspective_response = perspective.get('response', '')
-                        response += f"**{perspective_name}**: {perspective_response}\n\n"
+                        old_perspective_key = perspective.get('key', perspective_name.lower().replace(' ', '_'))
+                    for perspective in perspectives_list:
+                        perspective_name = perspective.get('name', 'Insight')
+                        perspective_response = perspective.get('response', '')
+                        
+                        # Convert display name or key to consistent key format
+                        # Try direct mapping first
+                        if perspective_name in display_name_to_key:
+                            mapped_key = display_name_to_key[perspective_name]
+                        else:
+                            # Try converting name to lowercase with underscores
+                            key_format = perspective_name.lower().replace(' ', '_')
+                            if key_format in display_name_to_key:
+                                mapped_key = display_name_to_key[key_format]
+                            else:
+                                mapped_key = 'mix_engineering'  # Fallback
+                        
+                        icon = perspective_icons.get(mapped_key, '💡')
+                        # Use the key for parsing, not the display name
+                        response += f"{icon} **{mapped_key}**: {perspective_response}\n\n"
                     confidence = result.get("confidence", 0.88)
-                    perspective_source = "real-engine"
+                    # Increase confidence if using context
+                    if supabase_context and (supabase_context.get('snippets') or supabase_context.get('chat_history')):
+                        confidence = min(0.95, confidence + 0.05)
+                        perspective_source = primary_perspective
+                    else:
+                        perspective_source = primary_perspective
                 elif isinstance(result, str):
                     response = result
                     confidence = 0.88
@@ -670,22 +1074,47 @@ async def chat_endpoint(request: ChatRequest):
             except Exception as e:
                 logger.warning(f"Real engine error: {e}")
         
-        # Fallback to generic response
+        # Fallback to generic response with DAW context
         if not response:
-            response = f"""I'm Codette, your AI assistant for CoreLogic Studio! 🎵
+            response = f"""I'm Codette, your AI assistant for CoreLogic Studio DAW! 🎚️
 
-I can help you with:
-• **DAW Functions** ({len(daw_functions)} categories)
-• **UI Components** ({len(ui_components)} components)
-• **Audio Production** techniques
+**What I can help with:**
+
+🎚️ **Mix Engineering** - Practical mixing console techniques
+📊 **Audio Theory** - Scientific audio principles and signal flow
+🎵 **Creative Production** - Artistic decisions and inspiration
+🔧 **Technical Troubleshooting** - Problem diagnosis and fixes
+⚡ **Workflow Optimization** - Efficiency tips and shortcuts
+
+**Available Knowledge:**
+• DAW Functions ({len(daw_functions)} categories)
+• UI Components ({len(ui_components)} components)
+• Audio Production Workflows
 
 What would you like to learn?"""
             confidence = 0.75
             perspective_source = "fallback"
         
+        # Enhance response with training examples if applicable
+        try:
+            primary_perspective = perspective_source or perspective
+            response = enhance_response_with_training(response, request.message, primary_perspective)
+            
+            # If response comes from real engine, add training context info
+            if "Multi-Perspective" in response:
+                # Response already has good perspective analysis
+                pass
+            elif len(response) > 50:
+                # Find and log any matching training examples for future learning
+                example = find_matching_training_example(request.message, primary_perspective)
+                if example:
+                    logger.debug(f"Training example matched for '{primary_perspective}': {example.get('user_input')}")
+        except Exception as e:
+            logger.debug(f"Error in response enhancement: {e}")
+        
         return ChatResponse(
             response=response,
-            perspective=perspective_source,
+            perspective=perspective_source or "mix_engineering",
             confidence=min(confidence, 1.0),
             timestamp=get_timestamp(),
         )
@@ -693,7 +1122,7 @@ What would you like to learn?"""
         logger.error(f"Error in chat endpoint: {e}")
         return ChatResponse(
             response="I'm having trouble understanding. Could you rephrase your question?",
-            perspective=request.perspective or "neuralnets",
+            perspective=request.perspective or "mix_engineering",
             confidence=0.5,
             timestamp=get_timestamp(),
         )
@@ -1369,10 +1798,11 @@ async def get_status():
         "training_available": TRAINING_AVAILABLE,
         "codette_available": codette is not None,
         "perspectives_available": [
-            "neuralnets",
-            "newtonian",
-            "davinci",
-            "quantum",
+            "mix_engineering",
+            "audio_theory",
+            "creative_production",
+            "technical_troubleshooting",
+            "workflow_optimization",
         ],
         "features": [
             "chat",
@@ -1380,6 +1810,150 @@ async def get_status():
             "suggestions",
             "transport_control",
             "training_data",
+        ],
+        "timestamp": get_timestamp(),
+    }
+
+@app.get("/codette/cache/stats")
+async def get_cache_stats():
+    """Get context cache statistics"""
+    stats = context_cache.stats()
+    return {
+        "cache_enabled": True,
+        "entries": stats["entries"],
+        "ttl_seconds": stats["ttl_seconds"],
+        "timestamp": get_timestamp(),
+        "metrics": {
+            "hits": stats["hits"],
+            "misses": stats["misses"],
+            "total_requests": stats["total_requests"],
+            "hit_rate_percent": stats["hit_rate_percent"],
+            "average_hit_latency_ms": stats["average_hit_latency_ms"],
+            "average_miss_latency_ms": stats["average_miss_latency_ms"],
+            "performance_gain_multiplier": stats["performance_gain"],
+            "uptime_seconds": stats["uptime_seconds"],
+        }
+    }
+
+@app.get("/codette/cache/metrics")
+async def get_cache_metrics():
+    """Get detailed cache performance metrics"""
+    stats = context_cache.stats()
+    return {
+        "performance_dashboard": {
+            "cache_hit_rate": f"{stats['hit_rate_percent']}%",
+            "total_requests": stats["total_requests"],
+            "successful_hits": stats["hits"],
+            "cache_misses": stats["misses"],
+            "average_latency_comparison": {
+                "cached_response_ms": stats["average_hit_latency_ms"],
+                "uncached_response_ms": stats["average_miss_latency_ms"],
+                "speedup_multiplier": f"{stats['performance_gain']}x",
+                "time_saved_per_hit_ms": round(
+                    stats["average_miss_latency_ms"] - stats["average_hit_latency_ms"], 2
+                )
+            },
+            "cumulative_time_saved": {
+                "total_ms": round(
+                    stats["total_miss_latency_ms"] - stats["total_hit_latency_ms"], 2
+                ),
+                "total_seconds": round(
+                    (stats["total_miss_latency_ms"] - stats["total_hit_latency_ms"]) / 1000, 2
+                ),
+            },
+            "cache_efficiency": {
+                "memory_entries": stats["entries"],
+                "ttl_seconds": stats["ttl_seconds"],
+                "uptime_seconds": stats["uptime_seconds"],
+                "estimated_memory_mb": round(stats["entries"] * 0.004, 2),  # ~4KB per entry
+            }
+        },
+        "timestamp": get_timestamp(),
+    }
+
+@app.post("/codette/cache/clear")
+async def clear_cache():
+    """Clear all cached context"""
+    context_cache.clear()
+    
+    # Also clear Redis if available
+    if REDIS_ENABLED and redis_client:
+        try:
+            redis_client.delete(*redis_client.keys("context:*"))
+            logger.info("Redis cache cleared")
+        except Exception as e:
+            logger.warning(f"Failed to clear Redis cache: {e}")
+    
+    return {
+        "status": "cleared",
+        "timestamp": get_timestamp(),
+    }
+
+@app.get("/codette/analytics/dashboard")
+async def get_analytics_dashboard():
+    """Get comprehensive analytics dashboard"""
+    stats = context_cache.stats()
+    
+    return {
+        "analytics": {
+            "cache_performance": {
+                "overall_hit_rate": f"{stats['hit_rate_percent']}%",
+                "total_requests_processed": stats["total_requests"],
+                "successful_cache_hits": stats["hits"],
+                "cache_misses": stats["misses"],
+                "average_response_times": {
+                    "with_cache_ms": stats["average_hit_latency_ms"],
+                    "without_cache_ms": stats["average_miss_latency_ms"],
+                    "speedup_multiplier": f"{stats['performance_gain']}x",
+                },
+                "total_time_saved": {
+                    "milliseconds": round(
+                        stats["total_miss_latency_ms"] - stats["total_hit_latency_ms"], 2
+                    ),
+                    "seconds": round(
+                        (stats["total_miss_latency_ms"] - stats["total_hit_latency_ms"]) / 1000, 2
+                    ),
+                    "estimated_cost_savings": "Multiple RPC calls avoided",
+                },
+            },
+            "cache_infrastructure": {
+                "memory_cache_enabled": True,
+                "redis_cache_enabled": REDIS_ENABLED,
+                "redis_connected": bool(redis_client),
+                "memory_entries": stats["entries"],
+                "estimated_memory_usage_mb": round(stats["entries"] * 0.004, 2),
+                "ttl_seconds": stats["ttl_seconds"],
+                "uptime_seconds": stats["uptime_seconds"],
+            },
+            "optimization_recommendations": [
+                "Monitor hit rate - if below 50%, consider reducing TTL",
+                f"Current cache efficiency: {stats['performance_gain']}x faster for hits",
+                "Enable Redis for production deployments with multiple instances",
+                "Consider pre-warming cache with common queries during off-peak hours",
+            ] if stats["hit_rate_percent"] < 80 else [
+                "✅ Cache performing optimally with high hit rate",
+                f"Maintaining {stats['performance_gain']}x performance improvement",
+                "Consider Redis if scaling to multiple backend instances",
+            ],
+        },
+        "timestamp": get_timestamp(),
+    }
+
+@app.get("/codette/cache/status")
+async def get_cache_status():
+    """Get cache backend status (memory vs Redis)"""
+    redis_status = "connected" if (REDIS_ENABLED and redis_client) else "unavailable"
+    
+    return {
+        "cache_backends": {
+            "memory_cache": "active",
+            "redis_cache": redis_status,
+        },
+        "current_mode": "dual" if (REDIS_ENABLED and redis_client) else "memory-only",
+        "fallback_chain": [
+            "Redis (if enabled and connected)",
+            "In-memory cache",
+            "Fresh Supabase RPC call"
         ],
         "timestamp": get_timestamp(),
     }
@@ -1580,6 +2154,180 @@ async def get_genre_characteristics_endpoint(genre_id: str):
             "error": str(e),
             "timestamp": get_timestamp(),
         }
+
+# ============================================================================
+# MESSAGE EMBEDDING ENDPOINTS (for semantic search in chat history)
+# ============================================================================
+
+class MessageEmbeddingRequest(BaseModel):
+    """Request to store or retrieve message embeddings"""
+    message: str
+    conversation_id: Optional[str] = None
+    role: Optional[str] = "user"  # "user" or "assistant"
+    metadata: Optional[Dict[str, Any]] = None
+
+class MessageEmbeddingResponse(BaseModel):
+    """Response from message embedding operations"""
+    success: bool
+    message_id: Optional[str] = None
+    embedding: Optional[List[float]] = None
+    similar_messages: Optional[List[Dict[str, Any]]] = None
+    timestamp: Optional[str] = None
+
+@app.post("/codette/embeddings/store", response_model=MessageEmbeddingResponse)
+async def store_message_embedding(request: MessageEmbeddingRequest):
+    """
+    Store a message embedding in Supabase for future semantic search.
+    This enables finding similar questions/answers in chat history.
+    """
+    try:
+        # Generate embedding for the message
+        embedding = generate_simple_embedding(request.message)
+        
+        if not supabase_client or not SUPABASE_AVAILABLE:
+            logger.warning("Supabase not available for storing message embedding")
+            return MessageEmbeddingResponse(
+                success=False,
+                timestamp=get_timestamp(),
+            )
+        
+        try:
+            # Store message embedding in Supabase
+            # Assumes table: message_embeddings (id, message, embedding, conversation_id, role, metadata, created_at)
+            logger.info(f"Storing message embedding for: {request.message[:50]}...")
+            
+            payload = {
+                "message": request.message,
+                "embedding": embedding,
+                "conversation_id": request.conversation_id or "default",
+                "role": request.role,
+                "metadata": request.metadata or {},
+                "created_at": get_timestamp(),
+            }
+            
+            # Use RPC or direct table insert if available
+            result = supabase_client.table("message_embeddings").insert(payload).execute()
+            
+            message_id = result.data[0].get("id") if result.data else None
+            
+            logger.info(f"✅ Message embedding stored: {message_id}")
+            
+            return MessageEmbeddingResponse(
+                success=True,
+                message_id=message_id,
+                embedding=embedding,
+                timestamp=get_timestamp(),
+            )
+        
+        except Exception as db_err:
+            logger.warning(f"Could not store in database: {db_err}")
+            # Even if DB storage fails, return the embedding generated
+            return MessageEmbeddingResponse(
+                success=True,
+                embedding=embedding,
+                timestamp=get_timestamp(),
+            )
+    
+    except Exception as e:
+        logger.error(f"Error storing message embedding: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/codette/embeddings/search")
+async def search_similar_messages(request: MessageEmbeddingRequest):
+    """
+    Search for similar messages in chat history using embedding similarity.
+    Returns semantically similar messages for better context understanding.
+    """
+    try:
+        # Generate embedding for the query message
+        query_embedding = generate_simple_embedding(request.message)
+        
+        if not supabase_client or not SUPABASE_AVAILABLE:
+            logger.warning("Supabase not available for message search")
+            return {
+                "success": False,
+                "similar_messages": [],
+                "timestamp": get_timestamp(),
+            }
+        
+        try:
+            # Search for similar messages using Supabase vector search
+            # This assumes a vector similarity search capability in Supabase
+            logger.info(f"Searching for messages similar to: {request.message[:50]}...")
+            
+            # Use Supabase RPC for vector similarity search if available
+            search_result = supabase_client.rpc(
+                'search_similar_messages',
+                {
+                    'query_embedding': query_embedding,
+                    'conversation_id': request.conversation_id or "default",
+                    'limit': 5
+                }
+            ).execute()
+            
+            similar_messages = search_result.data if search_result.data else []
+            
+            logger.info(f"Found {len(similar_messages)} similar messages")
+            
+            return {
+                "success": True,
+                "similar_messages": similar_messages,
+                "query_embedding_dim": len(query_embedding),
+                "timestamp": get_timestamp(),
+            }
+        
+        except Exception as search_err:
+            logger.warning(f"Vector search not available: {search_err}")
+            return {
+                "success": False,
+                "similar_messages": [],
+                "timestamp": get_timestamp(),
+            }
+    
+    except Exception as e:
+        logger.error(f"Error searching messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/codette/embeddings/stats")
+async def get_embedding_statistics():
+    """Get statistics about stored message embeddings"""
+    try:
+        if not supabase_client or not SUPABASE_AVAILABLE:
+            return {
+                "success": False,
+                "message": "Supabase not available",
+                "timestamp": get_timestamp(),
+            }
+        
+        try:
+            # Get count of stored embeddings
+            count_result = supabase_client.table("message_embeddings").select("count()", count="exact").execute()
+            total_embeddings = count_result.count or 0
+            
+            # Get count by role
+            user_msgs = supabase_client.table("message_embeddings").select("count()", count="exact").eq("role", "user").execute()
+            assistant_msgs = supabase_client.table("message_embeddings").select("count()", count="exact").eq("role", "assistant").execute()
+            
+            return {
+                "success": True,
+                "total_embeddings": total_embeddings,
+                "user_messages": user_msgs.count or 0,
+                "assistant_messages": assistant_msgs.count or 0,
+                "embedding_dimension": 1536,
+                "timestamp": get_timestamp(),
+            }
+        
+        except Exception as stats_err:
+            logger.warning(f"Could not retrieve embedding statistics: {stats_err}")
+            return {
+                "success": False,
+                "message": str(stats_err),
+                "timestamp": get_timestamp(),
+            }
+    
+    except Exception as e:
+        logger.error(f"Error getting embedding stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # SERVER STARTUP

@@ -28,6 +28,7 @@ import { useTransportClock } from "../hooks/useTransportClock";
 import { useSaveStatus } from "../hooks/useSaveStatus";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { getCodetteBridge } from "../lib/codetteBridgeService";
+import type { Plugin } from "../types";
 import {
   getDirectoryEntries,
   subscribeDirectoryEntries,
@@ -56,6 +57,8 @@ export default function TopBar() {
     openAudioSettingsModal,
     selectedTrack,
     tracks,
+    updateTrack,
+    addTrack,
   } = useDAW();
 
   const { showCodetteMasterPanel, setShowCodetteMasterPanel } = useCodettePanel();
@@ -197,10 +200,10 @@ export default function TopBar() {
               console.log(`✅ Set ${item.parameter} to ${value}`);
             } else if (item.action === 'add_effect' && item.parameter) {
               const effectType = String(item.parameter).toLowerCase();
-              const newPlugin = {
+              const newPlugin: Plugin = {
                 id: `${effectType}-${Date.now()}`,
                 name: effectType.charAt(0).toUpperCase() + effectType.slice(1),
-                type: effectType,
+                type: (effectType as any) as Plugin['type'],
                 enabled: true,
                 parameters: {},
               };
@@ -254,7 +257,7 @@ export default function TopBar() {
             console.log(`   Processing action: ${item.action}(${item.parameter}) = ${item.value}`);
             
             if (item.action === 'create_aux_track' && !hasAux) {
-              addTrack('aux', `Aux ${tracks.filter((t: any) => t.type === 'aux').length + 1}`);
+              addTrack('aux');
               console.log('✅ Created auxiliary track');
             } else if (item.action === 'route_track' && item.parameter && selectedTrack) {
               updateTrack(selectedTrack.id, { routing: String(item.value) });
