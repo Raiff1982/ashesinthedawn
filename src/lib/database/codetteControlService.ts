@@ -52,8 +52,8 @@ export async function getOrCreateDefaultPermissions(
       .eq('user_id', userId);
 
     if (fetchError) {
-      // 404 means table doesn't exist - return defaults silently
-      if (fetchError.message?.includes('404') || fetchError.message?.includes('not found')) {
+      // 404 means table doesn't exist - silently return defaults
+      if (fetchError.code === '404' || fetchError.message?.includes('404') || fetchError.message?.includes('not found')) {
         const defaultPerms = {
           LoadPlugin: 'ask' as PermissionLevel,
           CreateTrack: 'allow' as PermissionLevel,
@@ -63,7 +63,10 @@ export async function getOrCreateDefaultPermissions(
         };
         return { success: true, data: defaultPerms };
       }
-      console.error('[CodetteControlService] Fetch error:', fetchError);
+      // Only log non-404 errors
+      if (fetchError.message && !fetchError.message.includes('404')) {
+        console.error('[CodetteControlService] Fetch error:', fetchError);
+      }
       return { success: false, error: fetchError.message };
     }
 

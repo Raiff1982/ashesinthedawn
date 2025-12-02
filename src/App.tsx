@@ -13,10 +13,16 @@ import AudioSettingsModal from './components/modals/AudioSettingsModal';
 import CommandPalette from './components/CommandPalette';
 import CodetteMasterPanel from './components/CodetteMasterPanel';
 import { initializeActions } from './lib/actions/initializeActions';
-import { installErrorSuppressionHandler } from './lib/database/supabaseErrorHandler';
 
-// Install error suppression for expected 404s from missing Supabase tables
-installErrorSuppressionHandler();
+// Suppress 404 errors from missing Supabase tables in browser console
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    const msg = event.message || String(event);
+    if (msg.includes('404') && msg.includes('codette_')) {
+      event.preventDefault();
+    }
+  }, true);
+}
 
 function AppContent() {
   const [mixerHeight, setMixerHeight] = React.useState(200);
