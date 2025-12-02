@@ -193,20 +193,29 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         }
 
         const data = await response.json();
+        
+        // Handle nested analysis object from backend
+        const analysis = data.analysis || {};
+        const score = analysis.quality_score !== undefined 
+          ? Math.round(analysis.quality_score * 100)
+          : (data.score || 0);
+        
         const result: AnalysisResult = {
-          trackId: selectedTrack?.id || 'unknown',
+          trackId: data.trackId || selectedTrack?.id || 'unknown',
           analysisType: data.analysis_type || 'general',
-          score: data.score || 0,
-          findings: data.findings || [],
-          recommendations: data.recommendations || [],
-          reasoning: data.reasoning || '',
-          metrics: data.metrics || {},
+          score: score,
+          findings: analysis.findings || data.findings || [],
+          recommendations: analysis.recommendations || data.recommendations || [],
+          reasoning: analysis.reasoning || data.reasoning || '',
+          metrics: analysis.metrics || data.metrics || {},
         };
         
+        console.log('[useCodette] Analysis result:', result);
         setAnalysis(result);
         return result;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
+        console.error('[useCodette] Analysis error:', error);
         setError(error);
         onError?.(error);
         return null;

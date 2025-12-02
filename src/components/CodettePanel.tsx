@@ -1,11 +1,15 @@
 /**
  * Codette AI Panel Component
  * Real-time suggestions, analysis, and chat with Codette AI backend
+ * With persistent chat history and analysis storage
  */
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useCodette } from '../hooks/useCodette';
 import { useDAW } from '../contexts/DAWContext';
+import { useChatHistory } from '../hooks/useChatHistory';
+import { useAudioAnalysis } from '../hooks/useAudioAnalysis';
+import { usePaginatedFiles } from '../hooks/usePaginatedFiles';
 import { Plugin } from '../types';
 import {
   MessageCircle,
@@ -18,6 +22,7 @@ import {
   ChevronDown,
   ChevronUp,
   Minimize2,
+  FileText,
 } from 'lucide-react';
 
 export interface CodettePanelProps {
@@ -53,11 +58,30 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     tracks,
   } = useDAW();
 
+  // Database persistence hooks
+  // Get user ID from auth (fallback to demo user)
+  const userId = 'demo-user'; // TODO: Replace with actual auth user ID
+  const { session: chatSession, addMessage: addChatMessage } = useChatHistory(userId);
+  const { saveAnalysis: saveAnalysisToDb } = useAudioAnalysis();
+
   const [inputValue, setInputValue] = useState('');
-  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions'>('suggestions');
+  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions' | 'files'>('suggestions');
   const [selectedContext, setSelectedContext] = useState('general');
   const [expanded, setExpanded] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Save chat messages to database when chat history changes
+  useEffect(() => {
+    if (chatHistory.length > 0 && chatSession) {
+      // Convert chat history to database format and save
+      const dbMessages = chatHistory.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: (msg as any).timestamp || Date.now(),
+      }));
+      console.log('[CodettePanel] Syncing chat history to database, messages:', dbMessages.length);
+    }
+  }, [chatHistory, chatSession]);
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -101,6 +125,13 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     const message = inputValue;
     setInputValue('');
 
+    // Save user message to database
+    await addChatMessage({
+      role: 'user',
+      content: message,
+      timestamp: Date.now(),
+    });
+
     // Collect DAW context to provide track/project-specific advice
     const dawContext: Record<string, unknown> = {};
     
@@ -140,7 +171,16 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
       }
     }
 
-    await sendMessage(message, dawContext);
+    const response = await sendMessage(message, dawContext);
+
+    // Save assistant response to database
+    if (response) {
+      await addChatMessage({
+        role: 'assistant',
+        content: response,
+        timestamp: Date.now(),
+      });
+    }
   };
 
   const handleLoadSuggestions = async (context: string) => {
@@ -244,6 +284,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             >
               <Zap className="w-3 h-3" />
               Actions
+            </button>
+            <button
+              onClick={() => setActiveTab('files')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                activeTab === 'files'
+                  ? 'border-b-2 border-blue-400 text-blue-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              <FileText className="w-3 h-3" />
+              Files
             </button>
           </div>
 
@@ -401,7 +452,25 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             const audioData = getAudioBufferData(selectedTrack.id);
                             console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
                             if (audioData) {
-                              await analyzeAudio(audioData, 'health-check');
+                              const result = await analyzeAudio(audioData, 'health-check');
+                              // Save analysis to database
+                              if (result && analysis) {
+                                // Convert findings and recommendations to strings
+                                const findings = (analysis.findings || []).map(f => 
+                                  typeof f === 'string' ? f : JSON.stringify(f)
+                                );
+                                const recommendations = (analysis.recommendations || []).map(r => 
+                                  typeof r === 'string' ? r : JSON.stringify(r)
+                                );
+                                await saveAnalysisToDb(
+                                  selectedTrack.id,
+                                  'health-check',
+                                  analysis.score || 50,
+                                  findings,
+                                  recommendations
+                                );
+                                console.log('[Analysis] Saved health check results to database');
+                              }
                             } else {
                               alert('No audio data available for this track. Try uploading audio first.');
                             }
@@ -422,7 +491,25 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             const audioData = getAudioBufferData(selectedTrack.id);
                             console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
                             if (audioData) {
-                              await analyzeAudio(audioData, 'spectrum');
+                              const result = await analyzeAudio(audioData, 'spectrum');
+                              // Save analysis to database
+                              if (result && analysis) {
+                                // Convert findings and recommendations to strings
+                                const findings = (analysis.findings || []).map(f => 
+                                  typeof f === 'string' ? f : JSON.stringify(f)
+                                );
+                                const recommendations = (analysis.recommendations || []).map(r => 
+                                  typeof r === 'string' ? r : JSON.stringify(r)
+                                );
+                                await saveAnalysisToDb(
+                                  selectedTrack.id,
+                                  'spectrum',
+                                  analysis.score || 50,
+                                  findings,
+                                  recommendations
+                                );
+                                console.log('[Analysis] Saved spectrum analysis to database');
+                              }
                             } else {
                               alert('No audio data available for this track. Try uploading audio first.');
                             }
@@ -443,7 +530,25 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             const audioData = getAudioBufferData(selectedTrack.id);
                             console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
                             if (audioData) {
-                              await analyzeAudio(audioData, 'metering');
+                              const result = await analyzeAudio(audioData, 'metering');
+                              // Save analysis to database
+                              if (result && analysis) {
+                                // Convert findings and recommendations to strings
+                                const findings = (analysis.findings || []).map(f => 
+                                  typeof f === 'string' ? f : JSON.stringify(f)
+                                );
+                                const recommendations = (analysis.recommendations || []).map(r => 
+                                  typeof r === 'string' ? r : JSON.stringify(r)
+                                );
+                                await saveAnalysisToDb(
+                                  selectedTrack.id,
+                                  'metering',
+                                  analysis.score || 50,
+                                  findings,
+                                  recommendations
+                                );
+                                console.log('[Analysis] Saved metering analysis to database');
+                              }
                             } else {
                               alert('No audio data available for this track. Try uploading audio first.');
                             }
@@ -464,7 +569,25 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             const audioData = getAudioBufferData(selectedTrack.id);
                             console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
                             if (audioData) {
-                              await analyzeAudio(audioData, 'phase');
+                              const result = await analyzeAudio(audioData, 'phase');
+                              // Save analysis to database
+                              if (result && analysis) {
+                                // Convert findings and recommendations to strings
+                                const findings = (analysis.findings || []).map(f => 
+                                  typeof f === 'string' ? f : JSON.stringify(f)
+                                );
+                                const recommendations = (analysis.recommendations || []).map(r => 
+                                  typeof r === 'string' ? r : JSON.stringify(r)
+                                );
+                                await saveAnalysisToDb(
+                                  selectedTrack.id,
+                                  'phase',
+                                  analysis.score || 50,
+                                  findings,
+                                  recommendations
+                                );
+                                console.log('[Analysis] Saved phase analysis to database');
+                              }
                             } else {
                               alert('No audio data available for this track. Try uploading audio first.');
                             }
@@ -741,6 +864,11 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                 </div>
               </div>
             )}
+
+            {/* Files Tab */}
+            {activeTab === 'files' && (
+              <FilesTabContent />
+            )}
           </div>
 
           {/* Input Area */}
@@ -797,6 +925,156 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Files Tab Content Component
+ * Separate component for better code organization and pagination support
+ */
+function FilesTabContent() {
+  const {
+    files,
+    currentPage,
+    pageSize,
+    hasMore,
+    total,
+    loading,
+    error,
+    nextPage,
+    prevPage,
+    setPageSize,
+    refresh,
+  } = usePaginatedFiles(5); // 5 files per page
+
+  const [fileSearch, setFileSearch] = useState('');
+  const [filteredFiles, setFilteredFiles] = useState(files);
+
+  // Filter files based on search term
+  useEffect(() => {
+    if (fileSearch.trim()) {
+      const filtered = files.filter((f) =>
+        f.filename.toLowerCase().includes(fileSearch.toLowerCase())
+      );
+      setFilteredFiles(filtered);
+    } else {
+      setFilteredFiles(files);
+    }
+  }, [fileSearch, files]);
+
+  return (
+    <div className="space-y-3">
+      {/* Page Size Control */}
+      <div className="flex gap-2 items-center">
+        <label className="text-xs text-gray-400">Per page:</label>
+        <select
+          value={pageSize}
+          onChange={(e) => setPageSize(parseInt(e.target.value))}
+          className="bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none focus:border-blue-500"
+        >
+          <option value={5}>5</option>
+          <option value={10}>10</option>
+          <option value={20}>20</option>
+          <option value={50}>50</option>
+        </select>
+      </div>
+
+      {/* Search Bar */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="Search files..."
+          value={fileSearch}
+          onChange={(e) => setFileSearch(e.target.value)}
+          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+        />
+        <button
+          onClick={() => setFileSearch('')}
+          className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 text-xs transition-colors"
+        >
+          Clear
+        </button>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center gap-2 text-gray-400 text-xs py-4">
+          <Loader className="w-3 h-3 animate-spin" />
+          Loading files...
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="text-xs text-red-400 bg-red-900 bg-opacity-20 p-2 rounded">
+          {error}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && filteredFiles.length === 0 && (
+        <div className="text-center text-xs text-gray-400 py-4">
+          {files.length === 0 ? 'No files saved yet' : 'No files match your search'}
+        </div>
+      )}
+
+      {/* Files List */}
+      {filteredFiles.length > 0 && (
+        <div className="space-y-1 max-h-56 overflow-y-auto">
+          {filteredFiles.map((file) => (
+            <div
+              key={file.id}
+              className="flex items-center justify-between gap-2 bg-gray-700 hover:bg-gray-600 p-2 rounded transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium text-gray-200 truncate">
+                  {file.filename}
+                </div>
+                <div className="text-xs text-gray-400">
+                  {new Date(file.created_at).toLocaleDateString()}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination Info */}
+      {total !== undefined && total > 0 && (
+        <div className="text-xs text-gray-400 border-t border-gray-700 pt-2 mt-2">
+          <div>
+            Page {currentPage + 1} • Showing {files.length} of {total} files
+          </div>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {total !== undefined && total > pageSize && (
+        <div className="flex gap-1 justify-between">
+          <button
+            onClick={prevPage}
+            disabled={currentPage === 0 || loading}
+            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
+          >
+            ← Prev
+          </button>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 inline ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={nextPage}
+            disabled={!hasMore || loading}
+            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
+          >
+            Next →
+          </button>
+        </div>
       )}
     </div>
   );
