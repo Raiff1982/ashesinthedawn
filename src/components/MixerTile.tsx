@@ -3,6 +3,7 @@ import { Track, Plugin } from "../types";
 import { Trash2, Maximize2, Plus, X, Minimize } from "lucide-react";
 import { Tooltip } from "./TooltipProvider";
 import VolumeFader from "./VolumeFader";
+import TrackMeter from "./TrackMeter";
 
 interface MixerTileProps {
   track: Track;
@@ -168,6 +169,7 @@ export default function MixerTile({
 
   const headerHeight = Math.max(currentHeight * 0.12, 24);
   const meterWidth = Math.max(currentWidth * 0.15, 6);
+  const meterHeight = Math.max(currentHeight * 0.45, 40);
 
   // Docked tile styling
   if (!isDetached) {
@@ -366,24 +368,26 @@ export default function MixerTile({
           {activeTab === "controls" ? (
             // CONTROLS TAB: METER + FADER
             <div className="flex flex-col items-center justify-end flex-1 gap-2 w-full">
-              {/* Meter */}
-              <div
-                className="rounded border border-gray-700 bg-gray-950 flex flex-col-reverse shadow-inner"
-                style={{
-                  width: `${meterWidth}px`,
-                  height: "60%",
-                  minHeight: "40px",
+              {/* Track Meter - Vertical Level Display */}
+              <Tooltip 
+                content={{
+                  title: 'Track Level Meter',
+                  description: 'Real-time per-track level display with smooth falloff and color interpolation. Green→Yellow→Red indicates safe→good→clipping risk.',
+                  category: 'mixer',
+                  relatedFunctions: ['Volume Fader', 'Master Meter', 'Input Gain'],
+                  performanceTip: 'Aim for peak levels around -6dB to -3dB for optimal headroom',
+                  examples: ['Monitor dynamics in real-time', 'Spot clipping issues', 'Balance track levels visually'],
                 }}
+                position="left"
               >
-                <div
-                  style={{
-                    height: `${meter * 100}%`,
-                    backgroundColor: getMeterColor(db),
-                    transition: "height 0.1s linear",
-                    borderRadius: "1px",
-                  }}
-                />
-              </div>
+                <div className="flex flex-col items-center gap-1">
+                  <TrackMeter 
+                    trackId={track.id} 
+                    height={meterHeight}
+                    width={meterWidth}
+                  />
+                </div>
+              </Tooltip>
 
               {/* dB Display */}
               <Tooltip 
