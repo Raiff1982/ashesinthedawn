@@ -178,7 +178,30 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
       setError(null);
 
       try {
-        const result = await codetteEngine.current.analyzeSessionHealth(tracks);
+        const response = await fetch(`${apiUrl}/codette/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            track_id: selectedTrack?.id,
+            track_type: selectedTrack?.type,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const result: AnalysisResult = {
+          trackId: selectedTrack?.id || 'unknown',
+          analysisType: data.analysis_type || 'general',
+          score: data.score || 0,
+          findings: data.findings || [],
+          recommendations: data.recommendations || [],
+          reasoning: data.reasoning || '',
+          metrics: data.metrics || {},
+        };
+        
         setAnalysis(result);
         return result;
       } catch (err) {
@@ -190,7 +213,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         setIsLoading(false);
       }
     },
-    [tracks, onError]
+    [selectedTrack, apiUrl, onError]
   );
 
   // Real implementation: Get suggestions
@@ -200,18 +223,24 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
       setError(null);
 
       try {
-        let suggestions: CodetteSuggestion[] = [];
+        // Call the backend API for suggestions
+        const response = await fetch(`${apiUrl}/codette/suggest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            context,
+            track_type: selectedTrack?.type || 'audio',
+            message: `Get ${context} suggestions`,
+          }),
+        });
 
-        if (context === 'mixing') {
-          suggestions = await codetteEngine.current.teachMixingTechniques('vocals');
-        } else if (context === 'mastering') {
-          suggestions = await codetteEngine.current.suggestEnhancements('vocals');
-        } else {
-          // General suggestions - combine multiple abilities
-          const issues = await codetteEngine.current.detectIssues(tracks);
-          suggestions = issues;
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
         }
 
+        const data = await response.json();
+        const suggestions: Suggestion[] = data.suggestions || [];
+        
         setSuggestions(suggestions);
         return suggestions;
       } catch (err) {
@@ -223,7 +252,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         setIsLoading(false);
       }
     },
-    [tracks, onError]
+    [selectedTrack, apiUrl, onError]
   );
 
   // Real implementation: Get mastering advice

@@ -17,6 +17,7 @@ import traceback
 import os
 from functools import lru_cache
 import hashlib
+import uuid
 
 # Load environment variables from .env file
 try:
@@ -681,6 +682,29 @@ def generate_simple_embedding(text: str, dim: int = 1536) -> List[float]:
             embedding = [x / magnitude for x in embedding]
         return embedding
 
+
+def ensure_valid_uuid(id_value: Any) -> Optional[str]:
+    """
+    Validate and convert a value to a valid UUID string.
+    Returns None if the value is invalid or a placeholder.
+    """
+    if not id_value:
+        return None
+    
+    # Check for placeholder values
+    if isinstance(id_value, str) and id_value.lower() in ('string', 'string...', 'unknown', 'none', 'null', ''):
+        logger.warning(f"[UUID] Rejecting placeholder ID: {id_value}")
+        return None
+    
+    try:
+        # Try to parse as UUID
+        valid_uuid = str(uuid.UUID(str(id_value)))
+        return valid_uuid
+    except (ValueError, AttributeError, TypeError) as e:
+        logger.warning(f"[UUID] Invalid UUID format: {id_value} - {e}")
+        return None
+
+
 @app.post("/api/upsert-embeddings", response_model=UpsertResponse)
 async def upsert_embeddings(request: UpsertRequest):
     """
@@ -730,26 +754,32 @@ async def upsert_embeddings(request: UpsertRequest):
                 # Update each row with its embedding using admin client
                 for update in updates:
                     try:
+                        # Validate UUID first
+                        valid_id = ensure_valid_uuid(update['id'])
+                        if not valid_id:
+                            logger.warning(f"[upsert-embeddings] Skipping row with invalid ID: {update['id']}")
+                            continue
+                        
                         # Prepare update payload - ensure embedding is JSON-serializable
                         payload = {
                             'embedding': update['embedding'],  # List of floats
                             'updated_at': datetime.now(timezone.utc).isoformat()
                         }
                         
-                        logger.info(f"[upsert-embeddings] Sending update for ID {update['id']} (embedding dim: {len(update['embedding'])})")
+                        logger.info(f"[upsert-embeddings] Sending update for ID {valid_id} (embedding dim: {len(update['embedding'])})")
                         
-                        # Use admin client for writes
-                        response = supabase_admin_client.table('music_knowledge').update(payload).eq('id', update['id']).execute()
+                        # Use admin client for writes with validated UUID
+                        response = supabase_admin_client.table('music_knowledge').update(payload).eq('id', valid_id).execute()
                         
                         # Check if update was successful (response should have data or status info)
-                        logger.info(f"[upsert-embeddings] Response for {update['id']}: {response}")
+                        logger.info(f"[upsert-embeddings] Response for {valid_id}: {response}")
                         
                         # Count as updated if no error was raised
                         updated_count += 1
-                        logger.info(f"[upsert-embeddings] ✅ Updated row {update['id']}")
+                        logger.info(f"[upsert-embeddings] ✅ Updated row {valid_id}")
                         
                     except Exception as row_error:
-                        logger.error(f"[upsert-embeddings] ❌ Failed to update row {update['id']}: {row_error}", exc_info=True)
+                        logger.error(f"[upsert-embeddings] ❌ Failed to update row: {row_error}", exc_info=True)
                 
                 logger.info(f"[upsert-embeddings] Successfully updated {updated_count}/{len(updates)} rows")
             except Exception as db_error:
@@ -1219,33 +1249,37 @@ async def chat_endpoint(request: ChatRequest):
         ml_scores = {"relevance": 0.65, "specificity": 0.60, "certainty": 0.55}
         
         # ============ SEMANTIC SEARCH + ML MATCHING ============
+        # Use the actual Supabase RPC functions for semantic search
         if not response and request.daw_context and supabase_client:
             try:
-                # Use embeddings for semantic search
+                # Generate embedding for the user message
                 msg_embedding = generate_simple_embedding(request.message)
                 track_name = request.daw_context.get('selected_track', {}).get('name', '')
                 
                 logger.info(f"[ML] Semantic search for: '{request.message[:50]}...' in track: {track_name}")
                 
                 try:
+                    # Use the actual Supabase RPC function: get_music_suggestions
                     search_result = supabase_client.rpc(
-                        'match_embeddings',
+                        'get_music_suggestions',
                         {
-                            'query_embedding': msg_embedding,
-                            'match_threshold': 0.5,
-                            'match_count': 3
+                            'query': request.message,
+                            'limit': 3
                         }
                     ).execute()
                     
                     if search_result.data and len(search_result.data) > 0:
+                        # Get the first matching suggestion
                         semantic_match = search_result.data[0]
-                        response = semantic_match.get('content', '')
-                        confidence = 0.82
-                        response_source = "semantic_search"
-                        ml_scores = {"relevance": 0.82, "specificity": 0.80, "certainty": 0.78}
-                        logger.info(f"[ML] Semantic match found: {response[:60]}...")
+                        response = semantic_match.get('content', '') or semantic_match.get('suggestion', '')
+                        if response:
+                            confidence = 0.82
+                            response_source = "semantic_search"
+                            ml_scores = {"relevance": 0.82, "specificity": 0.80, "certainty": 0.78}
+                            logger.info(f"[ML] Semantic match found: {response[:60]}...")
                 except Exception as e:
-                    logger.debug(f"[ML] Semantic search error: {e}")
+                    logger.debug(f"[ML] Semantic search error (trying get_music_suggestions): {e}")
+                    # Silently fall through to next response type
             except Exception as e:
                 logger.debug(f"[ML] Semantic setup error: {e}")
         

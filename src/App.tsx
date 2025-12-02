@@ -8,10 +8,10 @@ import TrackList from './components/TrackList';
 import Timeline from './components/Timeline';
 import Mixer from './components/Mixer';
 import Sidebar from './components/Sidebar';
+import { CodettePanel } from './components/CodettePanel';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
 import CommandPalette from './components/CommandPalette';
 import CodetteMasterPanel from './components/CodetteMasterPanel';
-import CodetteControlCenter from './components/CodetteControlCenter';
 import { initializeActions } from './lib/actions/initializeActions';
 
 function AppContent() {
@@ -136,7 +136,7 @@ function AppContent() {
             {/* Tab Content */}
             <div className="flex-1 overflow-auto pb-20">
               {rightSidebarTab === 'files' && <Sidebar />}
-              {rightSidebarTab === 'control' && <CodetteControlCenter />}
+              {rightSidebarTab === 'control' && <CodettePanel isVisible={true} />}
             </div>
           </div>
         </div>

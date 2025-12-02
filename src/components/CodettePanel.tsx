@@ -706,6 +706,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   placeholder="Ask Codette..."
                   disabled={isLoading || !isConnected}
                   autoComplete="off"
+                  aria-label="Message input for Codette AI"
                   className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
                 />
                 <button
