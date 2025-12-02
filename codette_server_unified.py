@@ -1611,9 +1611,9 @@ What would you like to learn?"""
             "certainty": 0.65
         }
         
-        if advice_source == "daw_template":
+        if response_source == "daw_template":
             ml_scores = {"relevance": 0.88, "specificity": 0.92, "certainty": 0.85}
-        elif advice_source == "semantic_search":
+        elif response_source == "semantic_search":
             ml_scores = {"relevance": 0.82, "specificity": 0.88, "certainty": 0.80}
         elif response:  # Codette engine response
             ml_scores = {"relevance": 0.70, "specificity": 0.65, "certainty": 0.60}
