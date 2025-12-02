@@ -43,11 +43,13 @@ export interface UseCodetteControlReturn {
 /**
  * Hook for managing Codette Control Center state
  * Handles permissions, activity logging, and settings
+ * 
+ * Note: Skips loading when Supabase tables don't exist to prevent console errors
  */
 export function useCodetteControl(userId: string): UseCodetteControlReturn {
   // Permissions state
   const [permissions, setPermissionsState] = useState<Record<string, PermissionLevel>>({});
-  const [permLoading, setPermLoading] = useState(true);
+  const [permLoading, setPermLoading] = useState(false);
   const [permError, setPermError] = useState<string | null>(null);
 
   // Activity state
@@ -63,22 +65,32 @@ export function useCodetteControl(userId: string): UseCodetteControlReturn {
     includeInBackups: true,
     clearHistoryOnClose: false,
   });
-  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  // Load permissions on mount
+  // Skip loading Codette Control tables if they don't exist
+  // This prevents 404 errors in demo mode
+  const shouldSkipLoading = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  // Load permissions on mount (skip in demo mode)
   useEffect(() => {
-    loadPermissions();
+    if (!shouldSkipLoading) {
+      loadPermissions();
+    }
   }, [userId]);
 
-  // Load settings on mount
+  // Load settings on mount (skip in demo mode)
   useEffect(() => {
-    loadSettings();
+    if (!shouldSkipLoading) {
+      loadSettings();
+    }
   }, [userId]);
 
-  // Load activity on mount
+  // Load activity on mount (skip in demo mode)
   useEffect(() => {
-    loadActivity();
+    if (!shouldSkipLoading) {
+      loadActivity();
+    }
   }, [userId]);
 
   const loadPermissions = useCallback(async () => {
@@ -140,6 +152,15 @@ export function useCodetteControl(userId: string): UseCodetteControlReturn {
 
   const setPermission = useCallback(
     async (actionType: string, level: PermissionLevel) => {
+      // Skip in demo mode
+      if (shouldSkipLoading) {
+        setPermissionsState((prev) => ({
+          ...prev,
+          [actionType]: level,
+        }));
+        return true;
+      }
+
       try {
         const result = await updatePermission(userId, actionType, level);
 
@@ -159,7 +180,7 @@ export function useCodetteControl(userId: string): UseCodetteControlReturn {
         return false;
       }
     },
-    [userId]
+    [userId, shouldSkipLoading]
   );
 
   const checkAction = useCallback(
@@ -171,6 +192,11 @@ export function useCodetteControl(userId: string): UseCodetteControlReturn {
 
   const addActivity = useCallback(
     async (source: 'codette' | 'user' | 'system', action: string, details?: Record<string, unknown>) => {
+      // Skip logging in demo mode
+      if (shouldSkipLoading) {
+        return true;
+      }
+
       try {
         setActivityError(null);
 
@@ -193,15 +219,27 @@ export function useCodetteControl(userId: string): UseCodetteControlReturn {
         return false;
       }
     },
-    [userId]
+    [userId, shouldSkipLoading]
   );
 
   const refreshActivity = useCallback(async () => {
-    await loadActivity();
-  }, [loadActivity]);
+    // Skip in demo mode
+    if (!shouldSkipLoading) {
+      await loadActivity();
+    }
+  }, [loadActivity, shouldSkipLoading]);
 
   const updateSettings = useCallback(
     async (updates: Partial<CodetteControlState>) => {
+      // Skip in demo mode
+      if (shouldSkipLoading) {
+        setSettingsState((prev) => ({
+          ...prev,
+          ...updates,
+        }));
+        return true;
+      }
+
       try {
         setSettingsError(null);
         const result = await updateControlSettings(userId, updates);
@@ -222,10 +260,16 @@ export function useCodetteControl(userId: string): UseCodetteControlReturn {
         return false;
       }
     },
-    [userId]
+    [userId, shouldSkipLoading]
   );
 
   const clearLogs = useCallback(async () => {
+    // Skip in demo mode
+    if (shouldSkipLoading) {
+      setActivityLogs([]);
+      return true;
+    }
+
     try {
       const result = await clearActivityLogs(userId);
 
@@ -241,7 +285,7 @@ export function useCodetteControl(userId: string): UseCodetteControlReturn {
       setActivityError(msg);
       return false;
     }
-  }, [userId]);
+  }, [userId, shouldSkipLoading]);
 
   return {
     // Permissions
