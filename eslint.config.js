@@ -5,13 +5,29 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist'] },
+  {
+    ignores: [
+      'dist',
+      'node_modules',
+      'Codette/**',
+      'ashesinthedawn-main/**',
+      'doc/**',
+      '.venv/**',
+      'venv/**',
+      '**/*.env',
+      '**/*.env.*',
+      'build/**',
+      '.git/**',
+      'backfill_embeddings.js',
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', '**/*.config.{ts,js}'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+      sourceType: 'module',
     },
     plugins: {
       'react-hooks': reactHooks,
@@ -26,6 +42,39 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-expressions': [
         'error',
         { allowShortCircuit: true, allowTernary: true },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'prefer-const': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+  {
+    files: ['electron/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.node,
+      sourceType: 'commonjs',
+    },
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
       ],
     },
   }
