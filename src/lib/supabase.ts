@@ -143,7 +143,7 @@ const createLocalSupabaseClient = () => ({
         writeTable(table, [...rows, ...inserts]);
         return { data: inserts, error: null };
       },
-      upsert: async (payload: LocalRow | LocalRow[]) => {
+      upsert: async (payload: LocalRow | LocalRow[], _options?: { onConflict?: string }) => {
         const rows = readTable(table);
         const upserts = (Array.isArray(payload) ? payload : [payload]).map(ensureId);
         const next = [...rows];
@@ -156,7 +156,10 @@ const createLocalSupabaseClient = () => ({
           }
         });
         writeTable(table, next);
-        return { data: Array.isArray(payload) ? upserts : upserts[0], error: null };
+        return { 
+          data: Array.isArray(payload) ? upserts : upserts[0], 
+          error: null 
+        };
       },
       update: async (payload: LocalRow, match?: Partial<LocalRow>) => {
         const rows = readTable(table);
@@ -189,7 +192,7 @@ const createLocalSupabaseClient = () => ({
     getUser: async () => ({
       data: {
         user: {
-          id: 'local-demo-user',
+          id: 'demo-user',
           email: 'demo@corelogic.local',
         },
       },
@@ -200,19 +203,29 @@ const createLocalSupabaseClient = () => ({
 
 let supabase: SupabaseClient<any, any, any>;
 
-try {
-  if (supabaseUrl && supabaseAnonKey) {
+// Detect if we're in demo/offline mode
+const isDemoMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+console.log(
+  `[Supabase] ${isDemoMode ? '📱 Demo Mode' : '☁️  Production Mode'} - User ID: demo-user`
+);
+
+if (!isDemoMode) {
+  try {
     supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
       },
     });
-  } else {
-    throw new Error('Supabase credentials not configured');
+    console.log('[Supabase] Connected to remote Supabase instance');
+  } catch (error) {
+    console.warn('[Supabase] Failed to connect to remote Supabase, using local storage:', error);
+    supabase = createLocalSupabaseClient() as unknown as SupabaseClient<any, any, any>;
   }
-} catch (error) {
-  console.warn('[Supabase] Falling back to local storage client:', error);
+} else {
+  // Demo mode - always use local storage
+  console.log('[Supabase] Using local storage client (demo mode)');
   supabase = createLocalSupabaseClient() as unknown as SupabaseClient<any, any, any>;
 }
 

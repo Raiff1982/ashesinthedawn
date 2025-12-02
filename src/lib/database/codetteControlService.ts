@@ -3,6 +3,9 @@ import { supabase } from '../supabase';
 /**
  * Codette Control Center Service
  * Manages activity logs, permissions, and AI operation controls
+ * 
+ * NOTE: This service uses Supabase with automatic fallback to local storage
+ * if tables don't exist or RLS policies are not configured.
  */
 
 export type PermissionLevel = 'allow' | 'ask' | 'deny';
