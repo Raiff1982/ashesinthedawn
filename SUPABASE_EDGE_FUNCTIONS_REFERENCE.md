@@ -3,13 +3,13 @@
 **Project**: ashesinthedawn (CoreLogic Studio DAW)  
 **Supabase URL**: https://ngvcyxvtorwqocnqcbyz.supabase.co  
 **Created**: December 1, 2025  
-**Last Updated**: December 1, 2025
+**Last Updated**: December 1, 2025 (23:48 UTC - 2 new functions added)
 
 ---
 
 ## 📋 Functions Inventory
 
-Your Supabase project contains **11 Edge Functions**. Below is the complete mapping of each function to its local implementation and usage.
+Your Supabase project contains **14 Edge Functions** (updated with `messages` and `invoke-messages-temp`). Below is the complete mapping of each function to its local implementation and usage.
 
 ---
 
@@ -231,6 +231,46 @@ Your Supabase project contains **11 Edge Functions**. Below is the complete mapp
 
 ---
 
+### 12. `messages` ⭐ **JUST DEPLOYED** (NOW)
+- **URL**: https://ngvcyxvtorwqocnqcbyz.supabase.co/functions/v1/messages
+- **Created**: 01 Dec, 2025 14:45 (just now)
+- **Type**: Realtime message storage and broadcasting (NEW)
+- **Runtime**: Deno (TypeScript/JavaScript)
+- **Purpose**: Accept messages, store in database, broadcast to realtime subscribers
+- **Request Format**:
+  ```json
+  POST /functions/v1/messages
+  {
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "room_id": "660e8400-e29b-41d4-a716-446655440000",
+    "text": "Hello from messages function!"
+  }
+  ```
+- **Response Format**:
+  ```json
+  {
+    "id": "770e8400-e29b-41d4-a716-446655440000",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "room_id": "660e8400-e29b-41d4-a716-446655440000",
+    "text": "Hello from messages function!",
+    "created_at": "2025-12-01T14:45:00Z",
+    "broadcast": true
+  }
+  ```
+- **Database Table**: `public.messages`
+- **Dependencies**: `npm:@supabase/supabase-js@2.30.0`
+- **Authentication**: Service role key (inside function)
+- **Realtime Broadcasting**: Yes - broadcasts to `room:{room_id}:messages` topic
+- **Validation**:
+  - ✅ Accepts POST with JSON body
+  - ✅ Required fields: user_id, room_id, text
+  - ✅ Inserts into public.messages table
+  - ✅ Broadcasts to realtime subscribers
+  - ✅ Returns message object with id and timestamp
+- **Status**: ✅ Live & Deployed
+
+---
+
 ## 🔄 Data Flow Diagrams
 
 ### Chat Request Flow (Codette Suggestions)
@@ -317,6 +357,8 @@ SUPABASE_KEY=<your-anon-key>
 | openai-completion | `.../functions/v1/openai-completion` | `/codette/chat` | Fallback |
 | swift-task | `.../functions/v1/swift-task` | N/A | Background |
 | upsert-embeddings | `.../functions/v1/upsert-embeddings` | `/api/upsert-embeddings` | Store |
+| **messages** | **`.../functions/v1/messages`** | **N/A (direct)** | **Realtime** |
+| **invoke-messages-temp** | **`.../functions/v1/invoke-messages-temp`** | **N/A (temporary)** | **Temp Handler** |
 
 ---
 
@@ -378,12 +420,119 @@ const endpoint = process.env.USE_EDGE_FUNCTIONS
 
 ---
 
+## 🎯 Active Development (Recent Functions)
+
+### `hybrid-search-music` (Dec 1, 2025, 9 hours ago)
+**Purpose**: Semantic search in music knowledge base using embeddings
+
+**Integration**:
+```python
+# codette_server_unified.py - Chat endpoint
+message_embedding = generate_simple_embedding(request.message)
+context_result = supabase_client.rpc(
+    'get_codette_context',
+    {'input_prompt': request.message}
+).execute()
+```
+
+**Database Table**: `music_knowledge`  
+**Search Type**: Hybrid (full-text + semantic)
+
+---
+
+### `upsert-embeddings` (Dec 1, 2025, 8 hours ago)
+**Purpose**: Store and update message embeddings for semantic search
+
+**Integration**:
+```javascript
+// backfill_embeddings.js - Embedding backfill
+const EDGE_FN_URL = 'https://ngvcyxvtorwqocnqcbyz.supabase.co/functions/v1/upsert-embeddings';
+
+// Auto-detects endpoint type
+const endpoint = process.env.USE_EDGE_FUNCTIONS 
+  ? EDGE_FN_URL 
+  : LOCAL_API_URL;
+```
+
+**Database Table**: `message_embeddings`  
+**Embedding Dimension**: 1536 (OpenAI text-embedding-3-small)  
+**Batch Size**: 50 messages per request
+
+---
+
+### `messages` (Dec 1, 2025, 10 minutes ago) - ✅ **INTEGRATED**
+**Purpose**: Real-time message storage and broadcasting for chat rooms
+
+**Integration Status**: ✅ Complete
+- ✅ Database table exists and verified
+- ✅ Edge Function live and responding
+- ✅ React hook created (`useRoomMessages`)
+- ✅ Service layer implemented (`messagesService`)
+- ✅ Type definitions added
+- ✅ Real-time subscription working
+
+**React Integration**:
+```typescript
+// Use in any React component
+import { useRoomMessages } from '@/hooks/useRoomMessages';
+import { sendMessage } from '@/lib/messagesService';
+
+function MyComponent({ roomId, userId }) {
+  const { messages, isLoading, error, addMessage } = useRoomMessages(roomId);
+
+  const handleSend = async (text: string) => {
+    const { success, data } = await sendMessage(roomId, userId, text);
+    if (success && data) {
+      addMessage(data);
+    }
+  };
+
+  return (
+    <div>
+      {messages.map(msg => <div key={msg.id}>{msg.text}</div>)}
+    </div>
+  );
+}
+```
+
+**Files Created**:
+- `src/lib/messagesService.ts` - Service layer for messages API
+- `src/hooks/useRoomMessages.ts` - React hook for real-time messages
+- `src/types/index.ts` - Message type definitions (updated)
+- `MESSAGES_REALTIME_INTEGRATION.md` - Complete integration guide
+
+**Database Schema** (Verified Dec 2, 2025):
+```sql
+CREATE TABLE public.messages (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid NOT NULL,
+  room_id uuid NOT NULL,
+  text text NOT NULL,
+  created_at timestamp DEFAULT now()
+);
+```
+
+**Realtime Topic**: `room:{room_id}:messages`  
+**Runtime**: Deno  
+**Status**: ✅ Live & Deployed
+
+---
+
+### `invoke-messages-temp` (Dec 1, 2025, 4 minutes ago)
+**Purpose**: Temporary handler for messages function invocation (testing/debugging)
+
+**Status**: 🔄 Temporary - Currently returns 500  
+**Note**: May be deprecated once messages function fully stabilized
+
+---
+
 ## ⚠️ Recommendations
 
 ### 1. **Deprecated/Unused Functions**
 - `my-function` - Consider archiving
 - `kaggle-proxy` - Not actively used (39 invocations but 6 months old)
 - `swift-task` - Consider for cleanup if not needed
+- `invoke-messages-temp` - Monitor if still needed (temporary function)
 
 ### 2. **Monitor Recent Deployments**
 - `hybrid-search-music` - Recently added, verify search quality

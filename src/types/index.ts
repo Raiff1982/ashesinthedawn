@@ -363,3 +363,17 @@ export interface MidiRoute {
   targetTrackId: string;
   channel: number;
 }
+
+// Realtime Messaging Types
+export interface Message {
+  id: string;
+  user_id: string;
+  room_id: string;
+  text: string;
+  created_at: string;
+}
+
+export interface RoomMessage extends Message {
+  userName?: string;
+  isOwn?: boolean;
+}
