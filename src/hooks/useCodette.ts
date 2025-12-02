@@ -228,9 +228,12 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            context,
-            track_type: selectedTrack?.type || 'audio',
-            message: `Get ${context} suggestions`,
+            context: {
+              type: context,
+              track_type: selectedTrack?.type || 'audio',
+              track_name: selectedTrack?.name || 'Unknown',
+            },
+            limit: 5,
           }),
         });
 
