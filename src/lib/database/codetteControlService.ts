@@ -52,7 +52,21 @@ export async function getOrCreateDefaultPermissions(
       .eq('user_id', userId);
 
     if (fetchError) {
-      console.error('[CodetteControlService] Fetch error:', fetchError);
+      // 404 means table doesn't exist - silently return defaults
+      if (fetchError.code === '404' || fetchError.message?.includes('404') || fetchError.message?.includes('not found')) {
+        const defaultPerms = {
+          LoadPlugin: 'ask' as PermissionLevel,
+          CreateTrack: 'allow' as PermissionLevel,
+          RenderMixdown: 'ask' as PermissionLevel,
+          AdjustParameters: 'ask' as PermissionLevel,
+          SaveProject: 'allow' as PermissionLevel,
+        };
+        return { success: true, data: defaultPerms };
+      }
+      // Only log non-404 errors
+      if (fetchError.message && !fetchError.message.includes('404')) {
+        console.error('[CodetteControlService] Fetch error:', fetchError);
+      }
       return { success: false, error: fetchError.message };
     }
 
@@ -112,6 +126,10 @@ export async function updatePermission(
       .eq('action_type', actionType);
 
     if (error) {
+      // 404 means table doesn't exist - return success silently (not critical)
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true };
+      }
       console.error('[CodetteControlService] Update error:', error);
       return { success: false, error: error.message };
     }
@@ -151,6 +169,10 @@ export async function logActivity(
       .single();
 
     if (error) {
+      // 404 means table doesn't exist - return success silently (not critical)
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true, data: undefined };
+      }
       console.error('[CodetteControlService] Log error:', error);
       return { success: false, error: error.message };
     }
@@ -180,6 +202,10 @@ export async function getActivityLogs(
       .limit(limit);
 
     if (error) {
+      // 404 means table doesn't exist - return empty array silently
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true, data: [] };
+      }
       console.error('[CodetteControlService] Fetch logs error:', error);
       return { success: false, error: error.message };
     }
@@ -206,6 +232,19 @@ export async function getControlSettings(
       .maybeSingle();
 
     if (error) {
+      // 404 means table doesn't exist - return defaults silently
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return {
+          success: true,
+          data: {
+            enabled: true,
+            logActivity: true,
+            autoRender: false,
+            includeInBackups: true,
+            clearHistoryOnClose: false,
+          },
+        };
+      }
       console.error('[CodetteControlService] Fetch settings error:', error);
       return { success: false, error: error.message };
     }
@@ -252,6 +291,10 @@ export async function updateControlSettings(
       );
 
     if (error) {
+      // 404 means table doesn't exist - return success silently (not critical)
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true };
+      }
       console.error('[CodetteControlService] Update settings error:', error);
       return { success: false, error: error.message };
     }
@@ -291,6 +334,10 @@ export async function clearActivityLogs(userId: string): Promise<{ success: bool
       .eq('user_id', userId);
 
     if (error) {
+      // 404 means table doesn't exist - return success silently (not critical)
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true };
+      }
       console.error('[CodetteControlService] Clear logs error:', error);
       return { success: false, error: error.message };
     }
