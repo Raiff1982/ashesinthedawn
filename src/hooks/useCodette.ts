@@ -179,6 +179,21 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
       setError(null);
 
       try {
+        // Validate that we have audio data
+        if (!_audioData || (_audioData instanceof Float32Array && _audioData.length === 0)) {
+          const noAudioResult: AnalysisResult = {
+            trackId: selectedTrack?.id || 'unknown',
+            analysisType: _contentType,
+            score: 0,
+            findings: ['No audio data provided'],
+            recommendations: ['Upload audio data to analyze', 'Or record/generate audio on this track'],
+            reasoning: 'Analysis requires audio content to examine',
+            metrics: { samples: 0, duration: 0 },
+          };
+          setAnalysis(noAudioResult);
+          return noAudioResult;
+        }
+
         const response = await fetch(`${apiUrl}/codette/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -1,102 +1,44 @@
 /**
  * Codette Control Center
  * Centralized control panel for AI activity, permissions, logs, and settings
+ * Connected to database-backed state management
  */
 
-import { useState, useEffect } from 'react';
-import { RotateCcw, Download, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Download, Trash2 } from 'lucide-react';
+import { useCodetteControl } from '../hooks/useCodetteControl';
 
-interface ActivityLog {
-  time: string;
-  source: 'Codette2.0' | 'User';
-  action: string;
+interface CodetteControlCenterProps {
+  userId?: string;
 }
 
-interface PermissionSetting {
-  [key: string]: 'allow' | 'ask' | 'deny';
-}
-
-interface LiveStatus {
-  message: string;
-  active: boolean;
-  actions: number;
-}
-
-export default function CodetteControlCenter() {
+export default function CodetteControlCenter({ userId = 'demo-user' }: CodetteControlCenterProps) {
   const [tab, setTab] = useState<'log' | 'permissions' | 'stats' | 'settings'>('log');
-  const [permissions, setPermissions] = useState<PermissionSetting>({
-    LoadPlugin: 'ask',
-    CreateTrack: 'allow',
-    RenderMixdown: 'ask',
-    AdjustParameters: 'ask',
-    SaveProject: 'allow',
-  });
-
-  const [activity, setActivity] = useState<ActivityLog[]>([
-    { time: '18:42:01', source: 'Codette2.0', action: 'Adjusted EQ on Bass (+1.5 dB)' },
-    { time: '18:42:07', source: 'Codette2.0', action: 'Created track: Lead Synth' },
-    { time: '18:42:10', source: 'User', action: 'Denied render request' },
-  ]);
-
-  const [liveStatus, setLiveStatus] = useState<LiveStatus>({
-    message: 'Initializing...',
-    active: true,
-    actions: 0,
-  });
-
-  const [settings, setSettings] = useState({
-    enableCodette: true,
-    logActivity: true,
-    autoRender: false,
-    includeLogsInBackup: true,
-    clearHistoryOnClose: false,
-  });
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const events = [
-        'Analyzing spectral balance...',
-        'Boosting clarity in vocals...',
-        'Monitoring loudness levels...',
-        'Synchronizing tempo map...',
-        'Optimizing plugin chain...',
-        'Analyzing harmonic content...',
-      ];
-      const event = events[Math.floor(Math.random() * events.length)];
-      setLiveStatus((prev) => ({
-        ...prev,
-        message: event,
-        actions: prev.actions + 1,
-      }));
-      setActivity((prev) => [
-        {
-          time: new Date().toLocaleTimeString(),
-          source: 'Codette2.0',
-          action: event,
-        },
-        ...prev.slice(0, 50),
-      ]);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, []);
+  
+  // Use the real control center hook
+  const {
+    permissions,
+    setPermission,
+    activityLogs,
+    settings,
+    updateSettings,
+    clearLogs,
+    loading,
+    error,
+  } = useCodetteControl(userId);
 
   const handlePermissionChange = (key: string, value: 'allow' | 'ask' | 'deny') => {
-    setPermissions({ ...permissions, [key]: value });
+    setPermission(key, value);
   };
 
-  const handleSettingToggle = (key: keyof typeof settings) => {
-    setSettings({ ...settings, [key]: !settings[key] });
-  };
-
-  const handleUndoLastAction = () => {
-    if (activity.length > 0) {
-      setActivity((prev) => prev.slice(1));
-    }
+  const handleSettingToggle = (key: string) => {
+    const currentValue = settings[key as keyof typeof settings];
+    updateSettings({ [key]: !currentValue });
   };
 
   const handleExportLog = () => {
-    const csv = activity
-      .map((a) => `"${a.time}","${a.source}","${a.action}"`)
+    const csv = activityLogs
+      .map((a) => `"${new Date(a.timestamp).toLocaleTimeString()}","${a.source}","${a.action}"`)
       .join('\n');
     const header = '"Time","Source","Action"\n';
     const blob = new Blob([header + csv], { type: 'text/csv' });
@@ -109,19 +51,16 @@ export default function CodetteControlCenter() {
 
   const handleClearHistory = () => {
     if (confirm('Are you sure you want to clear all AI history? This cannot be undone.')) {
-      setActivity([]);
-      setLiveStatus({ ...liveStatus, actions: 0 });
+      clearLogs();
     }
   };
 
   const handleResetPermissions = () => {
-    setPermissions({
-      LoadPlugin: 'ask',
-      CreateTrack: 'allow',
-      RenderMixdown: 'ask',
-      AdjustParameters: 'ask',
-      SaveProject: 'allow',
-    });
+    setPermission('LoadPlugin', 'ask');
+    setPermission('CreateTrack', 'allow');
+    setPermission('RenderMixdown', 'ask');
+    setPermission('AdjustParameters', 'ask');
+    setPermission('SaveProject', 'allow');
   };
 
   return (
@@ -129,13 +68,20 @@ export default function CodetteControlCenter() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-800">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></div>
+          <div className={`w-3 h-3 rounded-full ${loading ? 'bg-yellow-400' : 'bg-cyan-400'} animate-pulse`}></div>
           <h2 className="text-2xl font-bold text-white">Codette Control Center</h2>
         </div>
         <span className="text-sm text-gray-400">
-          AI {liveStatus.active ? 'Active' : 'Inactive'} • CPU 2.3%
+          {loading ? 'Loading...' : 'Active'} • AI Enabled
         </span>
       </div>
+
+      {/* Error display */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-900/20 border border-red-800 rounded text-red-300 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="flex gap-2 mb-6 border-b border-gray-800">
@@ -166,45 +112,57 @@ export default function CodetteControlCenter() {
                     <th className="text-left py-2 px-4 text-gray-400 font-medium">Time</th>
                     <th className="text-left py-2 px-4 text-gray-400 font-medium">Source</th>
                     <th className="text-left py-2 px-4 text-gray-400 font-medium">Action</th>
+                    <th className="text-left py-2 px-4 text-gray-400 font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {activity.map((a, i) => (
+                  {activityLogs.map((a, i) => (
                     <tr key={i} className="border-b border-gray-900 hover:bg-gray-900/50 transition">
-                      <td className="py-2 px-4 text-gray-300 font-mono text-xs">{a.time}</td>
+                      <td className="py-2 px-4 text-gray-300 font-mono text-xs">
+                        {new Date(a.timestamp).toLocaleTimeString()}
+                      </td>
                       <td className="py-2 px-4">
                         <span
                           className={`px-2 py-1 rounded text-xs font-medium ${
-                            a.source === 'Codette2.0'
+                            a.source === 'codette'
                               ? 'bg-blue-900/40 text-blue-300'
-                              : 'bg-green-900/40 text-green-300'
+                              : a.source === 'user'
+                              ? 'bg-green-900/40 text-green-300'
+                              : 'bg-purple-900/40 text-purple-300'
                           }`}
                         >
-                          {a.source}
+                          {a.source.charAt(0).toUpperCase() + a.source.slice(1)}
                         </span>
                       </td>
                       <td className="py-2 px-4 text-gray-300">{a.action}</td>
+                      <td className="py-2 px-4">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            a.status === 'completed'
+                              ? 'bg-green-900/40 text-green-300'
+                              : a.status === 'pending'
+                              ? 'bg-yellow-900/40 text-yellow-300'
+                              : 'bg-red-900/40 text-red-300'
+                          }`}
+                        >
+                          {a.status.charAt(0).toUpperCase() + a.status.slice(1)}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {activity.length === 0 && (
+            {activityLogs.length === 0 && (
               <div className="text-center py-8 text-gray-500">No activity recorded yet</div>
             )}
 
             <div className="flex gap-2 justify-end mt-4">
               <button
-                onClick={handleUndoLastAction}
-                disabled={activity.length === 0}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium flex items-center gap-2 transition"
-              >
-                <RotateCcw size={16} /> Undo
-              </button>
-              <button
                 onClick={handleExportLog}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-sm font-medium flex items-center gap-2 transition"
+                disabled={activityLogs.length === 0}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium flex items-center gap-2 transition"
               >
                 <Download size={16} /> Export Log
               </button>
@@ -254,9 +212,6 @@ export default function CodetteControlCenter() {
               >
                 Reset
               </button>
-              <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded text-sm font-medium transition text-white">
-                Save
-              </button>
             </div>
           </div>
         )}
@@ -266,29 +221,35 @@ export default function CodetteControlCenter() {
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-gray-900 rounded p-4">
-                <p className="text-gray-400 text-sm mb-1">Actions Performed</p>
-                <p className="text-3xl font-bold text-cyan-400">{liveStatus.actions}</p>
+                <p className="text-gray-400 text-sm mb-1">Total Actions</p>
+                <p className="text-3xl font-bold text-cyan-400">{activityLogs.length}</p>
               </div>
               <div className="bg-gray-900 rounded p-4">
-                <p className="text-gray-400 text-sm mb-1">Parameters Changed</p>
-                <p className="text-3xl font-bold text-cyan-400">142</p>
+                <p className="text-gray-400 text-sm mb-1">Codette Actions</p>
+                <p className="text-3xl font-bold text-cyan-400">
+                  {activityLogs.filter((a) => a.source === 'codette').length}
+                </p>
               </div>
               <div className="bg-gray-900 rounded p-4">
-                <p className="text-gray-400 text-sm mb-1">User Approvals</p>
-                <p className="text-3xl font-bold text-green-400">18</p>
+                <p className="text-gray-400 text-sm mb-1">Completed</p>
+                <p className="text-3xl font-bold text-green-400">
+                  {activityLogs.filter((a) => a.status === 'completed').length}
+                </p>
               </div>
               <div className="bg-gray-900 rounded p-4">
-                <p className="text-gray-400 text-sm mb-1">Denied Actions</p>
-                <p className="text-3xl font-bold text-red-400">4</p>
+                <p className="text-gray-400 text-sm mb-1">Pending/Denied</p>
+                <p className="text-3xl font-bold text-red-400">
+                  {activityLogs.filter((a) => a.status === 'pending' || a.status === 'denied').length}
+                </p>
               </div>
             </div>
 
             <div>
-              <p className="text-sm text-gray-400 mb-2">AI Activity This Session</p>
+              <p className="text-sm text-gray-400 mb-2">AI Activity Distribution</p>
               <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
                 <div
                   className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full transition-all"
-                  style={{ width: `${Math.min(100, liveStatus.actions * 2)}%` }}
+                  style={{ width: `${Math.min(100, Math.max(10, activityLogs.length * 2))}%` }}
                 ></div>
               </div>
             </div>
@@ -299,16 +260,16 @@ export default function CodetteControlCenter() {
         {tab === 'settings' && (
           <div className="space-y-4">
             {[
-              { key: 'enableCodette', label: 'Enable Codette 2.0 in this project' },
+              { key: 'enabled', label: 'Enable Codette AI in this project' },
               { key: 'logActivity', label: 'Log AI activity' },
               { key: 'autoRender', label: 'Allow Codette to render automatically' },
-              { key: 'includeLogsInBackup', label: 'Include AI logs in backups' },
+              { key: 'includeInBackups', label: 'Include AI logs in backups' },
               { key: 'clearHistoryOnClose', label: 'Clear AI history on project close' },
             ].map(({ key, label }) => (
               <div key={key} className="flex items-center justify-between p-3 bg-gray-900 rounded">
                 <label className="text-sm text-gray-300 cursor-pointer">{label}</label>
                 <button
-                  onClick={() => handleSettingToggle(key as keyof typeof settings)}
+                  onClick={() => handleSettingToggle(key)}
                   className={`relative w-10 h-6 rounded-full transition-colors ${
                     settings[key as keyof typeof settings]
                       ? 'bg-cyan-600'
@@ -334,15 +295,6 @@ export default function CodetteControlCenter() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Live Status Bar */}
-      <div className="fixed bottom-0 left-0 w-full bg-gray-900 border-t border-gray-800 px-6 py-3 flex justify-between items-center">
-        <div className="flex items-center gap-2 text-cyan-400 text-sm">
-          <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
-          <span>{liveStatus.message}</span>
-        </div>
-        <span className="text-xs text-gray-500">Actions: {liveStatus.actions}</span>
       </div>
     </div>
   );

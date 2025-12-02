@@ -37,22 +37,6 @@ export interface CodetteControlState {
 }
 
 /**
- * Get current authenticated user
- */
-async function getCurrentUser() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    throw new Error('Not authenticated');
-  }
-
-  return user;
-}
-
-/**
  * Get or create default permissions for a user
  */
 export async function getOrCreateDefaultPermissions(

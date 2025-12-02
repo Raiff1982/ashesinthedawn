@@ -10,6 +10,7 @@ import { useDAW } from '../contexts/DAWContext';
 import { useChatHistory } from '../hooks/useChatHistory';
 import { useAudioAnalysis } from '../hooks/useAudioAnalysis';
 import { usePaginatedFiles } from '../hooks/usePaginatedFiles';
+import { useCodetteControl } from '../hooks/useCodetteControl';
 import { Plugin } from '../types';
 import {
   MessageCircle,
@@ -23,7 +24,9 @@ import {
   ChevronUp,
   Minimize2,
   FileText,
+  Settings,
 } from 'lucide-react';
+import CodetteControlCenter from './CodetteControlCenter';
 
 export interface CodettePanelProps {
   isVisible?: boolean;
@@ -65,10 +68,13 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
   const { saveAnalysis: saveAnalysisToDb } = useAudioAnalysis();
 
   const [inputValue, setInputValue] = useState('');
-  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions' | 'files'>('suggestions');
+  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions' | 'files' | 'control'>('suggestions');
   const [selectedContext, setSelectedContext] = useState('general');
   const [expanded, setExpanded] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Codette Control Center for activity logging and permissions
+  const { addActivity } = useCodetteControl(userId);
 
   // Save chat messages to database when chat history changes
   useEffect(() => {
@@ -181,6 +187,14 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
         timestamp: Date.now(),
       });
     }
+
+    // Log the interaction to activity logs
+    await addActivity('user', 'Asked Codette AI a question', {
+      message: message.substring(0, 100), // First 100 chars
+      context: selectedContext,
+      trackId: selectedTrack?.id,
+      responseLength: response?.length || 0,
+    });
   };
 
   const handleLoadSuggestions = async (context: string) => {
@@ -190,6 +204,23 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     } else {
       await getSuggestions(context);
     }
+    
+    // Log suggestion retrieval activity
+    await addActivity('codette', `Generated ${context} suggestions`, {
+      context,
+      trackId: selectedTrack?.id,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  // Helper function to log analysis operations
+  const logAnalysisActivity = async (analysisType: string, trackName: string) => {
+    await addActivity('codette', `Performed ${analysisType} analysis`, {
+      analysisType,
+      trackName,
+      trackId: selectedTrack?.id,
+      timestamp: new Date().toISOString(),
+    });
   };
 
   if (!isVisible) return null;
@@ -295,6 +326,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             >
               <FileText className="w-3 h-3" />
               Files
+            </button>
+            <button
+              onClick={() => setActiveTab('control')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                activeTab === 'control'
+                  ? 'border-b-2 border-blue-400 text-blue-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              <Settings className="w-3 h-3" />
+              Control
             </button>
           </div>
 
@@ -438,6 +480,12 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       <div className="text-xs text-gray-500 mt-0.5">Type: {selectedTrack.type}</div>
                     </div>
 
+                    {/* Audio Upload Guidance */}
+                    <div className="p-2 bg-blue-900/20 border border-blue-700/50 rounded text-xs text-blue-200">
+                      <p className="font-medium mb-1">💡 Tip: Upload audio to analyze</p>
+                      <p>Go to the <span className="font-semibold">Files</span> tab to upload audio for deeper analysis</p>
+                    </div>
+
                     {/* Analysis Function Selector */}
                     <div>
                       <h4 className="text-xs font-semibold text-gray-300 mb-1.5">Analysis Functions</h4>
@@ -451,28 +499,28 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             console.log('[Analysis] Starting health check for:', selectedTrack.id);
                             const audioData = getAudioBufferData(selectedTrack.id);
                             console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
-                            if (audioData) {
-                              const result = await analyzeAudio(audioData, 'health-check');
-                              // Save analysis to database
-                              if (result && analysis) {
-                                // Convert findings and recommendations to strings
-                                const findings = (analysis.findings || []).map(f => 
-                                  typeof f === 'string' ? f : JSON.stringify(f)
-                                );
-                                const recommendations = (analysis.recommendations || []).map(r => 
-                                  typeof r === 'string' ? r : JSON.stringify(r)
-                                );
-                                await saveAnalysisToDb(
-                                  selectedTrack.id,
-                                  'health-check',
-                                  analysis.score || 50,
-                                  findings,
-                                  recommendations
-                                );
-                                console.log('[Analysis] Saved health check results to database');
-                              }
-                            } else {
-                              alert('No audio data available for this track. Try uploading audio first.');
+                            
+                            // Run analysis (will return no-audio guidance if needed)
+                            const result = await analyzeAudio(audioData || new Float32Array(0), 'health-check');
+                            
+                            // Save analysis to database
+                            if (result) {
+                              // Convert findings and recommendations to strings
+                              const findings = (result.findings || []).map(f => 
+                                typeof f === 'string' ? f : JSON.stringify(f)
+                              );
+                              const recommendations = (result.recommendations || []).map(r => 
+                                typeof r === 'string' ? r : JSON.stringify(r)
+                              );
+                              await saveAnalysisToDb(
+                                selectedTrack.id,
+                                'health-check',
+                                result.score || 50,
+                                findings,
+                                recommendations
+                              );
+                              console.log('[Analysis] Saved health check results to database');
+                              await logAnalysisActivity('Session Health Check', selectedTrack.name);
                             }
                           }}
                           disabled={isLoading || !selectedTrack}
@@ -490,28 +538,28 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             console.log('[Analysis] Starting spectrum analysis for:', selectedTrack.id);
                             const audioData = getAudioBufferData(selectedTrack.id);
                             console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
-                            if (audioData) {
-                              const result = await analyzeAudio(audioData, 'spectrum');
-                              // Save analysis to database
-                              if (result && analysis) {
-                                // Convert findings and recommendations to strings
-                                const findings = (analysis.findings || []).map(f => 
-                                  typeof f === 'string' ? f : JSON.stringify(f)
-                                );
-                                const recommendations = (analysis.recommendations || []).map(r => 
-                                  typeof r === 'string' ? r : JSON.stringify(r)
-                                );
-                                await saveAnalysisToDb(
-                                  selectedTrack.id,
-                                  'spectrum',
-                                  analysis.score || 50,
-                                  findings,
-                                  recommendations
-                                );
-                                console.log('[Analysis] Saved spectrum analysis to database');
-                              }
-                            } else {
-                              alert('No audio data available for this track. Try uploading audio first.');
+                            
+                            // Run analysis (will return no-audio guidance if needed)
+                            const result = await analyzeAudio(audioData || new Float32Array(0), 'spectrum');
+                            
+                            // Save analysis to database
+                            if (result) {
+                              // Convert findings and recommendations to strings
+                              const findings = (result.findings || []).map(f => 
+                                typeof f === 'string' ? f : JSON.stringify(f)
+                              );
+                              const recommendations = (result.recommendations || []).map(r => 
+                                typeof r === 'string' ? r : JSON.stringify(r)
+                              );
+                              await saveAnalysisToDb(
+                                selectedTrack.id,
+                                'spectrum',
+                                result.score || 50,
+                                findings,
+                                recommendations
+                              );
+                              console.log('[Analysis] Saved spectrum analysis to database');
+                              await logAnalysisActivity('Audio Spectrum Analysis', selectedTrack.name);
                             }
                           }}
                           disabled={isLoading || !selectedTrack}
@@ -529,28 +577,28 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             console.log('[Analysis] Starting metering for:', selectedTrack.id);
                             const audioData = getAudioBufferData(selectedTrack.id);
                             console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
-                            if (audioData) {
-                              const result = await analyzeAudio(audioData, 'metering');
-                              // Save analysis to database
-                              if (result && analysis) {
-                                // Convert findings and recommendations to strings
-                                const findings = (analysis.findings || []).map(f => 
-                                  typeof f === 'string' ? f : JSON.stringify(f)
-                                );
-                                const recommendations = (analysis.recommendations || []).map(r => 
-                                  typeof r === 'string' ? r : JSON.stringify(r)
-                                );
-                                await saveAnalysisToDb(
-                                  selectedTrack.id,
-                                  'metering',
-                                  analysis.score || 50,
-                                  findings,
-                                  recommendations
-                                );
-                                console.log('[Analysis] Saved metering analysis to database');
-                              }
-                            } else {
-                              alert('No audio data available for this track. Try uploading audio first.');
+                            
+                            // Run analysis (will return no-audio guidance if needed)
+                            const result = await analyzeAudio(audioData || new Float32Array(0), 'metering');
+                            
+                            // Save analysis to database
+                            if (result) {
+                              // Convert findings and recommendations to strings
+                              const findings = (result.findings || []).map(f => 
+                                typeof f === 'string' ? f : JSON.stringify(f)
+                              );
+                              const recommendations = (result.recommendations || []).map(r => 
+                                typeof r === 'string' ? r : JSON.stringify(r)
+                              );
+                              await saveAnalysisToDb(
+                                selectedTrack.id,
+                                'metering',
+                                result.score || 50,
+                                findings,
+                                recommendations
+                              );
+                              console.log('[Analysis] Saved metering analysis to database');
+                              await logAnalysisActivity('Level Metering', selectedTrack.name);
                             }
                           }}
                           disabled={isLoading || !selectedTrack}
@@ -568,28 +616,28 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             console.log('[Analysis] Starting phase correlation for:', selectedTrack.id);
                             const audioData = getAudioBufferData(selectedTrack.id);
                             console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
-                            if (audioData) {
-                              const result = await analyzeAudio(audioData, 'phase');
-                              // Save analysis to database
-                              if (result && analysis) {
-                                // Convert findings and recommendations to strings
-                                const findings = (analysis.findings || []).map(f => 
-                                  typeof f === 'string' ? f : JSON.stringify(f)
-                                );
-                                const recommendations = (analysis.recommendations || []).map(r => 
-                                  typeof r === 'string' ? r : JSON.stringify(r)
-                                );
-                                await saveAnalysisToDb(
-                                  selectedTrack.id,
-                                  'phase',
-                                  analysis.score || 50,
-                                  findings,
-                                  recommendations
-                                );
-                                console.log('[Analysis] Saved phase analysis to database');
-                              }
-                            } else {
-                              alert('No audio data available for this track. Try uploading audio first.');
+                            
+                            // Run analysis (will return no-audio guidance if needed)
+                            const result = await analyzeAudio(audioData || new Float32Array(0), 'phase');
+                            
+                            // Save analysis to database
+                            if (result) {
+                              // Convert findings and recommendations to strings
+                              const findings = (result.findings || []).map(f => 
+                                typeof f === 'string' ? f : JSON.stringify(f)
+                              );
+                              const recommendations = (result.recommendations || []).map(r => 
+                                typeof r === 'string' ? r : JSON.stringify(r)
+                              );
+                              await saveAnalysisToDb(
+                                selectedTrack.id,
+                                'phase',
+                                result.score || 50,
+                                findings,
+                                recommendations
+                              );
+                              console.log('[Analysis] Saved phase analysis to database');
+                              await logAnalysisActivity('Phase Correlation Analysis', selectedTrack.name);
                             }
                           }}
                           disabled={isLoading || !selectedTrack}
@@ -868,6 +916,12 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             {/* Files Tab */}
             {activeTab === 'files' && (
               <FilesTabContent />
+            )}
+
+            {activeTab === 'control' && (
+              <div className="overflow-auto flex-1 bg-gray-900 rounded-lg">
+                <CodetteControlCenter userId={userId} />
+              </div>
             )}
           </div>
 
