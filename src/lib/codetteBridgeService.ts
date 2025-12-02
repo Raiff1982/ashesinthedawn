@@ -122,6 +122,95 @@ class CodetteBridgeService {
   }
 
   /**
+   * Transform backend analysis response into action items
+   */
+  private transformToActionItems(analysis: any): Array<{
+    action: string;
+    parameter: string;
+    value: number | string;
+    priority: 'high' | 'medium' | 'low';
+  }> {
+    const actionItems: Array<{
+      action: string;
+      parameter: string;
+      value: number | string;
+      priority: 'high' | 'medium' | 'low';
+    }> = [];
+
+    if (!analysis) return actionItems;
+
+    // Parse recommendations to extract action items
+    const recommendations = analysis.recommendations || [];
+    const findings = analysis.findings || [];
+
+    // Check for specific conditions and generate actions
+    if (findings.some((f: string) => f.toLowerCase().includes('clipping'))) {
+      actionItems.push({
+        action: 'fix_clipping',
+        parameter: 'all_tracks',
+        value: -3,
+        priority: 'high',
+      });
+    }
+
+    if (findings.some((f: string) => f.toLowerCase().includes('low level'))) {
+      actionItems.push({
+        action: 'boost_level',
+        parameter: 'gain',
+        value: 6,
+        priority: 'medium',
+      });
+    }
+
+    if (recommendations.some((r: string) => r.toLowerCase().includes('eq'))) {
+      actionItems.push({
+        action: 'add_effect',
+        parameter: 'eq',
+        value: 'EQ',
+        priority: 'medium',
+      });
+    }
+
+    if (recommendations.some((r: string) => r.toLowerCase().includes('compress'))) {
+      actionItems.push({
+        action: 'add_effect',
+        parameter: 'compressor',
+        value: 'Compressor',
+        priority: 'medium',
+      });
+    }
+
+    if (recommendations.some((r: string) => r.toLowerCase().includes('aux'))) {
+      actionItems.push({
+        action: 'create_aux_track',
+        parameter: 'routing',
+        value: 'Aux Bus',
+        priority: 'low',
+      });
+    }
+
+    return actionItems;
+  }
+
+  /**
+   * Transform analysis data into prediction format
+   */
+  private transformAnalysisToPrediction(data: any, type: string, timestamp: number): CodettePrediction {
+    const analysis = data.analysis || data;
+    const recommendations = analysis.recommendations || [];
+    
+    return {
+      id: `${type}_${timestamp}`,
+      type: type as any,
+      prediction: recommendations.join(' ') || analysis.findings?.join(' ') || 'Analysis complete',
+      confidence: analysis.quality_score || 0.7,
+      actionItems: this.transformToActionItems(analysis),
+      reasoning: `${type} analysis of DAW state`,
+      timestamp,
+    };
+  }
+
+  /**
    * Analyze session with Codette backend
    */
   async analyzeSession(context: {
@@ -147,16 +236,8 @@ class CodetteBridgeService {
 
     const response = await this.makeRequest('POST', '/codette/analyze', context);
     if (response.success && response.data) {
-      const data = response.data as any;
-      const prediction: CodettePrediction = {
-        id: `session_${Date.now()}`,
-        type: 'session',
-        prediction: data.prediction,
-        confidence: data.confidence,
-        actionItems: data.actionItems || [],
-        reasoning: 'Full session analysis',
-        timestamp: Date.now(),
-      };
+      const timestamp = Date.now();
+      const prediction = this.transformAnalysisToPrediction(response.data, 'session', timestamp);
       this.analysisCache.set(cacheKey, prediction);
       return prediction;
     }
@@ -176,17 +257,8 @@ class CodetteBridgeService {
       metrics,
     });
     if (response.success && response.data) {
-      // Transform flat response into CodettePrediction format
-      const data = response.data as any;
-      return {
-        id: `mixing_${Date.now()}`,
-        type: 'mixing',
-        prediction: data.prediction,
-        confidence: data.confidence,
-        actionItems: data.actionItems || [],
-        reasoning: `Analysis for ${trackType} track`,
-        timestamp: Date.now(),
-      };
+      const timestamp = Date.now();
+      return this.transformAnalysisToPrediction(response.data, 'mixing', timestamp);
     }
     throw new Error(response.error || 'Mixing analysis failed');
   }
@@ -201,16 +273,8 @@ class CodetteBridgeService {
   }): Promise<CodettePrediction> {
     const response = await this.makeRequest('POST', '/codette/analyze', context);
     if (response.success && response.data) {
-      const data = response.data as any;
-      return {
-        id: `routing_${Date.now()}`,
-        type: 'routing',
-        prediction: data.prediction,
-        confidence: data.confidence,
-        actionItems: data.actionItems || [],
-        reasoning: 'Routing analysis',
-        timestamp: Date.now(),
-      };
+      const timestamp = Date.now();
+      return this.transformAnalysisToPrediction(response.data, 'routing', timestamp);
     }
     throw new Error(response.error || 'Routing analysis failed');
   }

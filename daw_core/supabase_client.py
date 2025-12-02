@@ -376,3 +376,56 @@ def get_supabase_client() -> Optional[Client]:
 def is_supabase_available() -> bool:
     """Check if Supabase is available"""
     return supabase is not None and SUPABASE_AVAILABLE
+
+
+# ============================================================================
+# OPERATION GROUPS (for compatibility with frontend imports)
+# ============================================================================
+
+# Create operation group objects for easier organization
+class ChatHistoryOps:
+    @staticmethod
+    async def getOrCreate(user_id: str):
+        return await get_or_create_chat_history(user_id)
+    
+    @staticmethod
+    async def addMessage(user_id: str, chat_id: str, role: str, content: str, tokens_used: int = 0):
+        return await add_chat_message(user_id, chat_id, role, content, tokens_used)
+    
+    @staticmethod
+    async def clear(chat_id: str):
+        return await clear_chat_history(chat_id)
+
+class MusicKnowledgeOps:
+    @staticmethod
+    async def searchByText(query: str, category: Optional[str] = None, limit: int = 10):
+        return await search_music_knowledge_by_text(query, category, limit)
+    
+    @staticmethod
+    async def searchBySimilarity(embedding: list, limit: int = 5):
+        return await search_music_knowledge_by_similarity(embedding, limit)
+    
+    @staticmethod
+    async def getByCategory(category: str):
+        return await search_music_knowledge_by_text("", category, 10)
+    
+    @staticmethod
+    async def add(user_id: str, title: str, content: str, category: str, embedding=None, tags=None, is_public=True):
+        return await add_music_knowledge(user_id, title, content, category, embedding, tags, is_public)
+
+class FeedbackOps:
+    @staticmethod
+    async def submit(feedback_data):
+        if hasattr(feedback_data, 'user_id'):
+            return await submit_user_feedback(
+                feedback_data.user_id,
+                feedback_data.rating,
+                feedback_data.feedback_text,
+                getattr(feedback_data, 'category', 'general')
+            )
+        return None, "Invalid feedback data"
+
+# Export operation groups
+chatHistoryOps = ChatHistoryOps()
+musicKnowledgeOps = MusicKnowledgeOps()
+feedbackOps = FeedbackOps()

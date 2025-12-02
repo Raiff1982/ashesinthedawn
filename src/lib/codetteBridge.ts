@@ -131,6 +131,13 @@ class CodetteBridge {
   private requestQueue: Map<string, QueuedRequest> = new Map();
   private listeners: Map<string, Set<Function>> = new Map();
 
+  // Reconnection settings
+  private maxReconnectAttempts: number = 10;
+  private baseReconnectDelay: number = 1000; // 1 second
+  private maxReconnectDelay: number = 30000; // 30 seconds
+  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private healthCheckInterval: NodeJS.Timeout | null = null;
+
   constructor() {
     try {
       this.initHealthCheck();
@@ -148,7 +155,12 @@ class CodetteBridge {
    * Initialize periodic health checks
    */
   private initHealthCheck(): void {
-    setInterval(() => {
+    // Clear existing interval if any
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    this.healthCheckInterval = setInterval(() => {
       this.healthCheck().catch((err) => {
         console.debug("[CodetteBridge] Health check failed:", err.message);
       });
@@ -156,26 +168,149 @@ class CodetteBridge {
   }
 
   /**
-   * Check backend health
+   * Check backend health with retry logic
    */
   async healthCheck(): Promise<boolean> {
     try {
       const response = await fetch(`${CODETTE_API_BASE}/health`, {
         method: "GET",
+        signal: AbortSignal.timeout(5000), // 5 second timeout
       });
 
       if (response.ok) {
-        await response.json();
+        const data = await response.json();
         this.connectionState.connected = true;
-        this.emit("connected");
+        
+        // Reset reconnect count on successful connection
+        if (this.connectionState.reconnectCount > 0) {
+          console.debug(
+            `[CodetteBridge] ✅ Reconnected after ${this.connectionState.reconnectCount} attempts`
+          );
+          this.connectionState.reconnectCount = 0;
+        }
+        
+        this.emit("connected", data);
+        
+        // Process queued requests on reconnect
+        if (this.requestQueue.size > 0) {
+          console.debug(
+            `[CodetteBridge] Processing ${this.requestQueue.size} queued requests`
+          );
+          this.processQueuedRequests().catch((err) =>
+            console.warn("[CodetteBridge] Queue processing error:", err)
+          );
+        }
+        
         return true;
       }
     } catch (error) {
       this.connectionState.connected = false;
       this.emit("disconnected");
+      
+      // Attempt reconnection if not already reconnecting
+      if (!this.connectionState.isReconnecting) {
+        this.attemptReconnect();
+      }
     }
 
     return false;
+  }
+
+  /**
+   * Attempt to reconnect with exponential backoff
+   */
+  private async attemptReconnect(): Promise<void> {
+    if (this.connectionState.isReconnecting) {
+      return;
+    }
+
+    if (this.connectionState.reconnectCount >= this.maxReconnectAttempts) {
+      console.error(
+        `[CodetteBridge] ❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached`
+      );
+      this.emit("max_reconnect_attempts_reached", {
+        attempts: this.maxReconnectAttempts,
+      });
+      return;
+    }
+
+    this.connectionState.isReconnecting = true;
+    this.connectionState.reconnectCount++;
+
+    // Calculate exponential backoff delay
+    const delay = Math.min(
+      this.baseReconnectDelay * Math.pow(2, this.connectionState.reconnectCount - 1),
+      this.maxReconnectDelay
+    );
+
+    console.debug(
+      `[CodetteBridge] 🔄 Reconnection attempt ${this.connectionState.reconnectCount}/${this.maxReconnectAttempts} in ${delay}ms`
+    );
+
+    // Clear existing timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    this.reconnectTimeout = setTimeout(async () => {
+      try {
+        this.connectionState.lastConnectAttempt = Date.now();
+        
+        // Try health check
+        const healthy = await this.healthCheck();
+        
+        if (healthy) {
+          this.connectionState.isReconnecting = false;
+          console.debug("[CodetteBridge] ✅ Reconnection successful");
+          this.emit("reconnected", {
+            attempts: this.connectionState.reconnectCount,
+          });
+        } else {
+          // Continue attempting to reconnect
+          this.connectionState.isReconnecting = false;
+          await this.attemptReconnect();
+        }
+      } catch (error) {
+        this.connectionState.isReconnecting = false;
+        console.warn("[CodetteBridge] Reconnection attempt failed:", error);
+        // Continue attempting to reconnect
+        await this.attemptReconnect();
+      }
+    }, delay);
+  }
+
+  /**
+   * Manually force reconnection
+   */
+  async forceReconnect(): Promise<boolean> {
+    console.debug("[CodetteBridge] 🔄 Force reconnect initiated");
+    this.connectionState.reconnectCount = 0;
+    
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+    
+    return this.healthCheck();
+  }
+
+  /**
+   * Get connection status with details
+   */
+  getConnectionStatus(): {
+    connected: boolean;
+    reconnectAttempts: number;
+    isReconnecting: boolean;
+    lastAttempt: number;
+    timeSinceLastAttempt: number;
+  } {
+    const now = Date.now();
+    return {
+      connected: this.connectionState.connected,
+      reconnectAttempts: this.connectionState.reconnectCount,
+      isReconnecting: this.connectionState.isReconnecting,
+      lastAttempt: this.connectionState.lastConnectAttempt,
+      timeSinceLastAttempt: now - this.connectionState.lastConnectAttempt,
+    };
   }
 
   /**
@@ -439,19 +574,29 @@ class CodetteBridge {
   }
 
   /**
-   * Core request handler with error handling and queuing
+   * Core request handler with error handling, retries, and reconnection
    */
   private async makeRequest<T = any>(
     method: "chat" | "suggest" | "analyze" | "process",
     endpoint: string,
-    data: any
+    data: any,
+    retryCount: number = 0
   ): Promise<T> {
     const requestId = `${method}-${Date.now()}-${Math.random()}`;
+    const maxRetries = 3;
 
     try {
-      // Check connection first
+      // Check connection first, with retry
       if (!this.connectionState.connected) {
-        await this.healthCheck();
+        const healthy = await this.healthCheck();
+        if (!healthy && retryCount === 0) {
+          // Attempt one immediate reconnect
+          console.debug("[CodetteBridge] Connection check failed, attempting reconnect...");
+          await this.attemptReconnect();
+          
+          // Wait a bit for reconnection attempt to start
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
       }
 
       const response = await fetch(`${CODETTE_API_BASE}${endpoint}`, {
@@ -460,10 +605,22 @@ class CodetteBridge {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(data),
+        signal: AbortSignal.timeout(10000), // 10 second timeout
       });
 
       if (!response.ok) {
-        // Queue request for retry
+        // Retry on 5xx errors (server error)
+        if (response.status >= 500 && retryCount < maxRetries) {
+          const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
+          console.debug(
+            `[CodetteBridge] Server error (${response.status}), retry ${retryCount + 1}/${maxRetries} after ${delay}ms`
+          );
+          
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return this.makeRequest(method, endpoint, data, retryCount + 1);
+        }
+
+        // Queue request for later retry
         this.queueRequest(requestId, method, data);
 
         throw new Error(
@@ -472,18 +629,40 @@ class CodetteBridge {
       }
 
       const result: T = await response.json();
-      this.connectionState.connected = true;
-      this.emit("connected");
+      
+      // Mark connection as healthy
+      if (!this.connectionState.connected) {
+        this.connectionState.connected = true;
+        this.emit("connected", { restored: true });
+      }
 
       return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Only queue if it's a network error, not a timeout
+      if (
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("ERR_CONNECTION_REFUSED")
+      ) {
+        // Queue request for retry
+        this.queueRequest(requestId, method, data);
+        
+        // Trigger reconnection attempt
+        if (!this.connectionState.isReconnecting) {
+          this.attemptReconnect().catch((err) =>
+            console.warn("[CodetteBridge] Reconnect attempt error:", err)
+          );
+        }
+      }
+
       this.connectionState.connected = false;
       this.emit("disconnected");
 
-      // Queue failed request
-      this.queueRequest(requestId, method, data);
-
-      console.error(`[CodetteBridge] ${method} request failed:`, error);
+      console.error(
+        `[CodetteBridge] ${method} request failed (retry: ${retryCount}/${maxRetries}):`,
+        errorMessage
+      );
       throw error;
     }
   }
@@ -570,21 +749,22 @@ class CodetteBridge {
   private wsReconnectDelay: number = 1000;
 
   /**
-   * Initialize WebSocket connection for real-time updates
+   * Initialize WebSocket connection for real-time updates with enhanced reconnection
    */
   initializeWebSocket(): Promise<boolean> {
     return new Promise((resolve) => {
       try {
         const wsUrl = (CODETTE_API_BASE.replace("http", "ws")) + "/ws";
-        console.debug("[CodetteBridge] Connecting to WebSocket:", wsUrl);
+        console.debug("[CodetteBridge] 🔌 Connecting to WebSocket:", wsUrl);
 
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
-          console.debug("[CodetteBridge] WebSocket connected");
+          console.debug("[CodetteBridge] ✅ WebSocket connected successfully");
           this.wsConnected = true;
           this.wsReconnectAttempts = 0;
           this.emit("ws_connected", true);
+          this.emit("ws_ready", { status: "connected" });
           resolve(true);
         };
 
@@ -627,31 +807,41 @@ class CodetteBridge {
         };
 
         this.ws.onerror = (error) => {
-          console.error("[CodetteBridge] WebSocket error:", error);
+          console.error("[CodetteBridge] ❌ WebSocket error:", error);
+          this.wsConnected = false;
           this.emit("ws_error", error);
         };
 
         this.ws.onclose = () => {
-          console.debug("[CodetteBridge] WebSocket disconnected");
+          console.debug("[CodetteBridge] WebSocket disconnected (attempt " + (this.wsReconnectAttempts + 1) + "/" + this.maxWsReconnectAttempts + ")");
           this.wsConnected = false;
           this.emit("ws_connected", false);
 
-          // Attempt reconnection
+          // Attempt reconnection with exponential backoff
           if (this.wsReconnectAttempts < this.maxWsReconnectAttempts) {
             this.wsReconnectAttempts++;
-            const delay =
-              this.wsReconnectDelay * Math.pow(2, this.wsReconnectAttempts - 1);
+            const delay = Math.min(
+              this.wsReconnectDelay * Math.pow(2, this.wsReconnectAttempts - 1),
+              30000 // Max 30 seconds
+            );
             console.debug(
-              `[CodetteBridge] WebSocket reconnecting in ${delay}ms (attempt ${this.wsReconnectAttempts})`
+              `[CodetteBridge] 🔄 WebSocket reconnecting in ${delay}ms (attempt ${this.wsReconnectAttempts}/${this.maxWsReconnectAttempts})`
             );
             setTimeout(() => this.initializeWebSocket(), delay);
+          } else {
+            console.warn(
+              `[CodetteBridge] ❌ WebSocket max reconnection attempts (${this.maxWsReconnectAttempts}) reached`
+            );
+            this.emit("ws_max_retries", {
+              attempts: this.maxWsReconnectAttempts,
+            });
           }
         };
 
         // Timeout if connection takes too long
         setTimeout(() => {
-          if (!this.wsConnected) {
-            console.warn("[CodetteBridge] WebSocket connection timeout");
+          if (!this.wsConnected && this.ws) {
+            console.warn("[CodetteBridge] ⏱️ WebSocket connection timeout after 5s");
             this.ws?.close();
             resolve(false);
           }
@@ -661,6 +851,20 @@ class CodetteBridge {
         resolve(false);
       }
     });
+  }
+
+  /**
+   * Force WebSocket reconnection
+   */
+  async forceWebSocketReconnect(): Promise<boolean> {
+    console.debug("[CodetteBridge] 🔄 Force WebSocket reconnect initiated");
+    this.wsReconnectAttempts = 0;
+    
+    if (this.ws) {
+      this.ws.close();
+    }
+    
+    return this.initializeWebSocket();
   }
 
   /**
@@ -684,7 +888,7 @@ class CodetteBridge {
   }
 
   /**
-   * Close WebSocket connection
+   * Close WebSocket connection and cleanup
    */
   closeWebSocket(): void {
     if (this.ws) {
@@ -695,16 +899,45 @@ class CodetteBridge {
   }
 
   /**
-   * Get WebSocket connection status
+   * Get WebSocket connection status with details
    */
   getWebSocketStatus(): {
     connected: boolean;
     reconnectAttempts: number;
+    maxAttempts: number;
+    url: string;
   } {
     return {
       connected: this.wsConnected,
       reconnectAttempts: this.wsReconnectAttempts,
+      maxAttempts: this.maxWsReconnectAttempts,
+      url: (CODETTE_API_BASE.replace("http", "ws")) + "/ws",
     };
+  }
+
+  /**
+   * Cleanup and destroy the bridge (for page unload)
+   */
+  destroy(): void {
+    console.debug("[CodetteBridge] Destroying bridge instance");
+    
+    // Clear intervals
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+    
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+    
+    // Close WebSocket
+    this.closeWebSocket();
+    
+    // Clear listeners
+    this.listeners.clear();
+    
+    // Clear queue
+    this.requestQueue.clear();
   }
 
   /**

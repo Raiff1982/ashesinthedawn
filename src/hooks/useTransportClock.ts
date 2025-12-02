@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { getCodetteBridge } from "../lib/codetteBridge";
 
 interface TransportState {
   playing: boolean;
@@ -13,12 +14,10 @@ interface TransportState {
 
 /**
  * Hook for connecting to WebSocket transport clock
- * Handles connection lifecycle, reconnection, and state updates
- * Note: WebSocket endpoints currently not implemented on Codette server
+ * Uses CodetteBridge's main WebSocket connection
+ * Listens for transport_state messages
  */
-export function useTransportClock(
-  wsUrl: string = "ws://localhost:8000/ws/transport/clock"
-) {
+export function useTransportClock() {
   const [state, setState] = useState<TransportState>({
     playing: false,
     time_seconds: 0,
@@ -32,98 +31,81 @@ export function useTransportClock(
 
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
-  const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 3; // Reduced from 10 to fail faster
+  const bridgeRef = useRef(getCodetteBridge());
+  const handlersRef = useRef<Array<{ event: string; handler: Function }>>([]);
 
-  // Connect to WebSocket
+  // Connect to CodetteBridge WebSocket
   useEffect(() => {
-    const connect = () => {
-      try {
-        const ws = new WebSocket(wsUrl);
-        // Set a timeout for connection attempt
-        const connectionTimeout = setTimeout(() => {
-          if (ws.readyState === WebSocket.CONNECTING) {
-            ws.close();
-            setError("WebSocket connection timeout");
-          }
-        }, 5000);
+    const bridge = bridgeRef.current;
 
-        ws.onopen = () => {
-          clearTimeout(connectionTimeout);
-          setConnected(true);
-          setError(null);
-          reconnectAttemptsRef.current = 0;
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            setState({
-              playing: data.playing ?? false,
-              time_seconds: data.time_seconds ?? 0,
-              sample_pos: data.sample_pos ?? 0,
-              bpm: data.bpm ?? 120,
-              beat_pos: data.beat_pos ?? 0,
-            });
-          } catch (err) {
-            console.error("Failed to parse transport message:", err);
-          }
-        };
-
-        ws.onerror = () => {
-          clearTimeout(connectionTimeout);
-          // Suppress verbose WebSocket error logging in console
-          // Connection failures are handled by onclose event
-          setError("WebSocket connection failed");
-          setConnected(false);
-        };
-
-        ws.onclose = () => {
-          clearTimeout(connectionTimeout);
-          setConnected(false);
-          wsRef.current = null;
-
-          // Attempt reconnection with reduced attempts
-          if (reconnectAttemptsRef.current < maxReconnectAttempts) {
-            const delay = Math.min(
-              1000 * Math.pow(1.5, reconnectAttemptsRef.current),
-              10000
-            );
-            reconnectTimeoutRef.current = setTimeout(() => {
-              reconnectAttemptsRef.current++;
-              connect();
-            }, delay);
-          } else {
-            setError("Transport clock WebSocket unavailable");
-          }
-        };
-
-        wsRef.current = ws;
-      } catch (err) {
-        console.error("Failed to create WebSocket:", err);
-        setError("WebSocket creation failed");
+    // Handler for transport state updates
+    const handleTransportChanged = (data: any) => {
+      if (data) {
+        setState((prev) => ({
+          ...prev,
+          playing: data.is_playing ?? prev.playing,
+          time_seconds: data.current_time ?? prev.time_seconds,
+          bpm: data.bpm ?? prev.bpm,
+          loop_enabled: data.loop_enabled ?? prev.loop_enabled,
+          loop_start_seconds: data.loop_start ?? prev.loop_start_seconds,
+          loop_end_seconds: data.loop_end ?? prev.loop_end_seconds,
+        }));
       }
     };
 
-    connect();
+    // Handler for connection status
+    const handleConnected = () => {
+      setConnected(true);
+      setError(null);
+      console.debug("[useTransportClock] Connected to WebSocket");
+    };
 
+    const handleDisconnected = () => {
+      setConnected(false);
+      console.debug("[useTransportClock] Disconnected from WebSocket");
+    };
+
+    const handleWebSocketError = (err: any) => {
+      setError("WebSocket connection error");
+      console.debug("[useTransportClock] WebSocket error:", err);
+    };
+
+    // Register handlers
+    bridge.on("transport_changed", handleTransportChanged);
+    bridge.on("ws_connected", handleConnected);
+    bridge.on("ws_connected", (connected: any) => {
+      if (!connected) handleDisconnected();
+    });
+    bridge.on("ws_error", handleWebSocketError);
+
+    // Store handlers for cleanup
+    handlersRef.current = [
+      { event: "transport_changed", handler: handleTransportChanged },
+      { event: "ws_connected", handler: handleConnected },
+      { event: "ws_error", handler: handleWebSocketError },
+    ];
+
+    // Check initial WebSocket status
+    const wsStatus = bridge.getWebSocketStatus();
+    setConnected(wsStatus.connected);
+
+    // Cleanup
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      handlersRef.current.forEach(({ event, handler }) => {
+        bridge.off(event, handler);
+      });
     };
-  }, [wsUrl]);
+  }, []);
 
   const send = useCallback((command: Record<string, unknown>) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(command));
+    const bridge = bridgeRef.current;
+    const wsStatus = bridge.getWebSocketStatus();
+    
+    if (wsStatus.connected) {
+      bridge.sendWebSocketMessage(command);
     } else {
-      console.warn("WebSocket not connected, cannot send command");
+      console.warn("[useTransportClock] WebSocket not connected, cannot send command");
+      setError("WebSocket not connected");
     }
   }, []);
 

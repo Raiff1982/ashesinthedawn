@@ -159,18 +159,65 @@ export default function TopBar() {
   };
 
   const suggestMixingChain = async () => {
-    if (!selectedTrack) return;
+    console.log('🎯 suggestMixingChain called');
+    console.log('   selectedTrack:', selectedTrack?.name || 'NONE');
+    
+    if (!selectedTrack) {
+      console.warn('⚠️ No track selected - creating new audio track');
+      addTrack('audio');
+      return;
+    }
+    
     setCodetteLoading(true);
     try {
       const bridge = getCodetteBridge();
+      console.log('🌉 Bridge instance:', bridge);
+      
       const analysis = await bridge.getMixingIntelligence(selectedTrack.type, {
         level: selectedTrack.volume || -60,
         peak: (selectedTrack.volume || -60) + 3,
         plugins: (selectedTrack.inserts || []).map((p: any) => typeof p === 'string' ? p : 'Unknown'),
       });
+      
+      console.log('📥 Backend response:', analysis);
       setCodetteResult(analysis.prediction);
       setCodetteBackendConnected(true);
+      
+      // Execute action items returned by Codette
+      if (analysis.actionItems && Array.isArray(analysis.actionItems)) {
+        console.log('🤖 Executing Codette mixing suggestions:', analysis.actionItems);
+        for (const item of analysis.actionItems) {
+          try {
+            console.log(`   Processing action: ${item.action}(${item.parameter}) = ${item.value}`);
+            
+            if (item.action === 'set_level' && item.parameter) {
+              const levelType = item.parameter as 'volume' | 'pan' | 'input_gain' | 'stereo_width';
+              const value = typeof item.value === 'number' ? item.value : parseFloat(String(item.value));
+              updateTrack(selectedTrack.id, { [levelType]: value });
+              console.log(`✅ Set ${item.parameter} to ${value}`);
+            } else if (item.action === 'add_effect' && item.parameter) {
+              const effectType = String(item.parameter).toLowerCase();
+              const newPlugin = {
+                id: `${effectType}-${Date.now()}`,
+                name: effectType.charAt(0).toUpperCase() + effectType.slice(1),
+                type: effectType,
+                enabled: true,
+                parameters: {},
+              };
+              updateTrack(selectedTrack.id, {
+                inserts: [...(selectedTrack.inserts || []), newPlugin],
+              });
+              console.log(`✅ Added ${effectType} effect`);
+            }
+          } catch (actionError) {
+            console.warn(`⚠️ Failed to execute action ${item.action}:`, actionError);
+          }
+        }
+      } else {
+        console.log('ℹ️ No actionItems in response');
+      }
     } catch (error) {
+      console.error('❌ Mixing analysis error:', error);
       setCodetteResult(`Error: ${error instanceof Error ? error.message : 'Analysis failed'}`);
       setCodetteBackendConnected(false);
     } finally {
@@ -179,20 +226,49 @@ export default function TopBar() {
   };
 
   const suggestRouting = async () => {
+    console.log('🎛️ suggestRouting called');
+    
     setCodetteLoading(true);
     try {
       const bridge = getCodetteBridge();
       const trackTypes = tracks.map((t: any) => t.type);
       const hasAux = tracks.some((t: any) => t.type === 'aux');
 
+      console.log('   Routing context:', { trackCount: tracks.length, trackTypes, hasAux });
+
       const analysis = await bridge.getRoutingIntelligence({
         trackCount: tracks.length,
         trackTypes,
         hasAux,
       });
+      
+      console.log('📥 Routing response:', analysis);
       setCodetteResult(analysis.prediction);
       setCodetteBackendConnected(true);
+      
+      // Execute routing action items
+      if (analysis.actionItems && Array.isArray(analysis.actionItems)) {
+        console.log('🤖 Executing Codette routing suggestions:', analysis.actionItems);
+        for (const item of analysis.actionItems) {
+          try {
+            console.log(`   Processing action: ${item.action}(${item.parameter}) = ${item.value}`);
+            
+            if (item.action === 'create_aux_track' && !hasAux) {
+              addTrack('aux', `Aux ${tracks.filter((t: any) => t.type === 'aux').length + 1}`);
+              console.log('✅ Created auxiliary track');
+            } else if (item.action === 'route_track' && item.parameter && selectedTrack) {
+              updateTrack(selectedTrack.id, { routing: String(item.value) });
+              console.log(`✅ Routed ${selectedTrack.name} to ${item.value}`);
+            }
+          } catch (actionError) {
+            console.warn(`⚠️ Failed to execute routing action ${item.action}:`, actionError);
+          }
+        }
+      } else {
+        console.log('ℹ️ No actionItems in response');
+      }
     } catch (error) {
+      console.error('❌ Routing analysis error:', error);
       setCodetteResult(`Error: ${error instanceof Error ? error.message : 'Analysis failed'}`);
       setCodetteBackendConnected(false);
     } finally {
@@ -201,6 +277,8 @@ export default function TopBar() {
   };
 
   const analyzeSessionWithBackend = async () => {
+    console.log('🔍 analyzeSessionWithBackend called');
+    
     setCodetteLoading(true);
     try {
       const bridge = getCodetteBridge();
@@ -228,9 +306,42 @@ export default function TopBar() {
         hasClipping,
       };
 
+      console.log('   Context:', context);
+      console.log('🌉 Bridge instance:', bridge);
+
       const prediction = await bridge.analyzeSession(context);
+      console.log('📥 Analysis response:', prediction);
+      
       setCodetteResult(prediction.prediction);
       setCodetteBackendConnected(true);
+      
+      // Execute analysis-based action items (e.g., fix clipping, normalize levels)
+      if (prediction.actionItems && Array.isArray(prediction.actionItems)) {
+        console.log('🤖 Executing Codette analysis suggestions:', prediction.actionItems);
+        for (const item of prediction.actionItems) {
+          try {
+            console.log(`   Processing action: ${item.action}(${item.parameter}) = ${item.value}`);
+            if (item.action === 'reduce_level' && item.parameter) {
+              const targetTrackId = item.parameter;
+              const targetTrack = tracks.find((t: any) => t.id === targetTrackId);
+              if (targetTrack) {
+                const reduction = typeof item.value === 'number' ? item.value : -3;
+                updateTrack(targetTrackId, { volume: Math.max(-60, (targetTrack.volume || -60) + reduction) });
+                console.log(`✅ Reduced ${targetTrack.name} level by ${reduction}dB`);
+              }
+            } else if (item.action === 'fix_clipping') {
+              // Find and reduce all clipping tracks
+              const clippingTracks = tracks.filter((t: any) => (t.volume || -60) > -1);
+              for (const track of clippingTracks) {
+                updateTrack(track.id, { volume: -3 });
+                console.log(`✅ Fixed clipping on ${track.name}`);
+              }
+            }
+          } catch (actionError) {
+            console.warn(`⚠️ Failed to execute analysis action ${item.action}:`, actionError);
+          }
+        }
+      }
     } catch (error) {
       setCodetteResult(`Error: ${error instanceof Error ? error.message : 'Analysis failed'}`);
       setCodetteBackendConnected(false);
@@ -240,17 +351,25 @@ export default function TopBar() {
   };
 
   const handleCodetteAction = async () => {
-    switch (codetteActiveTab) {
-      case 'suggestions':
-        await suggestMixingChain();
-        break;
-      case 'analysis':
-        await analyzeSessionWithBackend();
-        break;
-      case 'control':
-        // Use routing suggestions for control tab
-        await suggestRouting();
-        break;
+    console.log('🤖 Codette Action Started:', codetteActiveTab);
+    try {
+      switch (codetteActiveTab) {
+        case 'suggestions':
+          console.log('📊 Running mixing suggestions...');
+          await suggestMixingChain();
+          break;
+        case 'analysis':
+          console.log('📈 Running session analysis...');
+          await analyzeSessionWithBackend();
+          break;
+        case 'control':
+          console.log('🎛️ Running routing suggestions...');
+          await suggestRouting();
+          break;
+      }
+      console.log('✅ Codette action complete');
+    } catch (error) {
+      console.error('❌ Codette action failed:', error);
     }
   };
 
