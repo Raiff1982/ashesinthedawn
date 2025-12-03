@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 Codette Server - Simple wrapper
@@ -17,14 +17,13 @@ if __name__ == "__main__":
     
     while True:
         try:
-            # Run uvicorn with UNIFIED server
+            # Run uvicorn
             result = subprocess.run([
                 sys.executable, "-m", "uvicorn",
-                "codette_server_unified:app",
+                "codette_server:app",
                 "--host", "0.0.0.0",
                 "--port", "8000",
                 "--log-level", "info",
-                "--reload"
             ])
             
             if result.returncode != 0:

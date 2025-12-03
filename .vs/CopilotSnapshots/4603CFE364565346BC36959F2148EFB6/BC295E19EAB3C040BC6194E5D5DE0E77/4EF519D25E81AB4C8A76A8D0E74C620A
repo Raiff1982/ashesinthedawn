@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Codette AI Unified Server
 Combined FastAPI server for CoreLogic Studio DAW integration
@@ -1370,19 +1370,27 @@ async def chat_endpoint(request: ChatRequest):
 async def get_delay_sync(bpm: float = 120.0):
     """Calculate delay sync times for all note divisions"""
     try:
-        divisions = {
-            "Whole Note": (60000 / bpm) * 4,
-            "Half Note": (60000 / bpm) * 2,
-            "Quarter Note": 60000 / bpm,
-            "Eighth Note": 30000 / bpm,
-            "16th Note": 15000 / bpm,
-            "Triplet Quarter": (60000 / bpm) * (2/3),
-            "Triplet Eighth": (30000 / bpm) * (2/3),
-            "Dotted Quarter": (60000 / bpm) * 1.5,
-            "Dotted Eighth": (30000 / bpm) * 1.5,
-        }
+        if not TRAINING_AVAILABLE or not analyzer:
+            return {
+                "status": "fallback",
+                "bpm": bpm,
+                "divisions": {
+                    "Whole Note": (60000 / bpm) * 4,
+                    "Half Note": (60000 / bpm) * 2,
+                    "Quarter Note": 60000 / bpm,
+                    "Eighth Note": 30000 / bpm,
+                    "16th Note": 15000 / bpm,
+                    "Triplet Quarter": (60000 / bpm) * (2/3),
+                    "Triplet Eighth": (30000 / bpm) * (2/3),
+                    "Dotted Quarter": (60000 / bpm) * 1.5,
+                    "Dotted Eighth": (30000 / bpm) * 1.5,
+                }
+            }
+        
+        # Use analyzer if available
+        result = analyzer.get_delay_sync_times(bpm)
         logger.info(f"Delay sync calculated for {bpm} BPM")
-        return {"status": "success", "bpm": bpm, "divisions": divisions}
+        return {"status": "success", "bpm": bpm, "divisions": result}
     except Exception as e:
         logger.error(f"ERROR in /api/analysis/delay-sync: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1392,23 +1400,19 @@ async def get_delay_sync(bpm: float = 120.0):
 async def detect_genre(request: Dict[str, Any]):
     """Detect music genre based on project metadata"""
     try:
-        metadata = request.get("metadata", {})
-        
-        if GENRE_TEMPLATES_AVAILABLE:
-            genres = get_available_genres()
+        if not TRAINING_AVAILABLE or not analyzer:
             return {
-                "status": "success",
-                "detected_genre": genres[0] if genres else "Unknown",
-                "confidence": 0.75,
-                "candidates": genres[:3] if genres else []
+                "status": "fallback",
+                "detected_genre": "Unknown",
+                "confidence": 0.0,
+                "candidates": []
             }
         
-        return {
-            "status": "fallback",
-            "detected_genre": "Unknown",
-            "confidence": 0.0,
-            "candidates": []
-        }
+        # Use analyzer if available
+        metadata = request.get("metadata", {})
+        result = analyzer.detect_genre_realtime(metadata)
+        logger.info(f"Genre detection: {result.get('detected_genre')}")
+        return {"status": "success", **result}
     except Exception as e:
         logger.error(f"ERROR in /api/analysis/detect-genre: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1418,26 +1422,18 @@ async def detect_genre(request: Dict[str, Any]):
 async def get_ear_training(exercise_type: str = "interval", difficulty: str = "beginner"):
     """Get ear training exercise data"""
     try:
-        exercises = {
-            "interval": [
-                {"name": "Perfect Unison", "semitones": 0, "difficulty": "beginner"},
-                {"name": "Minor Second", "semitones": 1, "difficulty": "beginner"},
-                {"name": "Major Second", "semitones": 2, "difficulty": "beginner"},
-                {"name": "Minor Third", "semitones": 3, "difficulty": "beginner"},
-                {"name": "Major Third", "semitones": 4, "difficulty": "beginner"},
-            ],
-            "chord": [
-                {"name": "Major Triad", "intervals": [0, 4, 7], "difficulty": "beginner"},
-                {"name": "Minor Triad", "intervals": [0, 3, 7], "difficulty": "beginner"},
-                {"name": "Dominant 7", "intervals": [0, 4, 7, 10], "difficulty": "intermediate"},
-            ]
-        }
+        if not TRAINING_AVAILABLE or not analyzer:
+            return {
+                "status": "fallback",
+                "exercise_type": exercise_type,
+                "difficulty": difficulty,
+                "data": []
+            }
         
-        result = exercises.get(exercise_type, exercises["interval"])
-        filtered = [e for e in result if e.get("difficulty") == difficulty or difficulty == "all"]
-        
+        # Use analyzer if available
+        result = analyzer.get_ear_training_visual(exercise_type, difficulty)
         logger.info(f"Ear training data generated: {exercise_type} ({difficulty})")
-        return {"status": "success", "exercise_type": exercise_type, "difficulty": difficulty, "exercises": filtered}
+        return {"status": "success", "exercise_type": exercise_type, "difficulty": difficulty, **result}
     except Exception as e:
         logger.error(f"ERROR in /api/analysis/ear-training: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1447,28 +1443,17 @@ async def get_ear_training(exercise_type: str = "interval", difficulty: str = "b
 async def get_production_checklist(stage: str = "mixing"):
     """Get production workflow checklist for a given stage"""
     try:
-        checklists = {
-            "mixing": {
-                "Gain Staging": ["Set input levels to -6dB to -3dB on peaks", "Monitor clipping", "Check headroom"],
-                "EQ": ["High-pass unnecessary low-end", "Balance frequency spectrum", "Use reference tracks"],
-                "Compression": ["Set appropriate ratio", "Adjust attack and release", "Avoid over-compression"],
-                "Reverb": ["Choose appropriate algorithm", "Set pre-delay", "Control decay time"],
-            },
-            "mastering": {
-                "Analysis": ["Check loudness (target -14 LUFS)", "Analyze frequency balance", "Check for clipping"],
-                "Processing": ["Apply light EQ", "Use multiband compression", "Add limiting for safety"],
-                "Quality": ["Test on multiple systems", "Check mono compatibility", "Verify metadata"],
-            },
-            "recording": {
-                "Setup": ["Configure input levels", "Check microphone placement", "Test monitoring"],
-                "Recording": ["Record at proper levels", "Monitor clipping", "Save multiple takes"],
-                "Review": ["Check timing", "Verify quality", "Re-record if needed"],
+        if not TRAINING_AVAILABLE or not analyzer:
+            return {
+                "status": "fallback",
+                "stage": stage,
+                "sections": {}
             }
-        }
         
-        result = checklists.get(stage, checklists["mixing"])
+        # Use analyzer if available
+        result = analyzer.get_production_workflow(stage)
         logger.info(f"Production checklist for {stage} stage")
-        return {"status": "success", "stage": stage, "sections": result}
+        return {"status": "success", "stage": stage, **result}
     except Exception as e:
         logger.error(f"ERROR in /api/analysis/production-checklist: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1478,312 +1463,789 @@ async def get_production_checklist(stage: str = "mixing"):
 async def get_instrument_info(category: str = "", instrument: str = ""):
     """Get instrument specifications and mixing tips"""
     try:
-        instruments = {
-            "drums": {
-                "kick": {"frequency_range": "20-250Hz", "compression_ratio": "4:1", "tips": "Add punch with saturation"},
-                "snare": {"frequency_range": "100-5kHz", "compression_ratio": "6:1", "tips": "Enhance crack with EQ"},
-                "hat": {"frequency_range": "1-15kHz", "compression_ratio": "2:1", "tips": "Control dynamics lightly"},
-            },
-            "bass": {
-                "bass": {"frequency_range": "40-200Hz", "compression_ratio": "4:1", "tips": "Keep tight and punchy"},
-                "sub": {"frequency_range": "20-60Hz", "compression_ratio": "3:1", "tips": "Use for low-end weight"},
-            },
-            "vocals": {
-                "lead": {"frequency_range": "80-8kHz", "compression_ratio": "4:1", "tips": "Ride the fader for consistency"},
-                "harmony": {"frequency_range": "100-5kHz", "compression_ratio": "3:1", "tips": "Blend with lead vocal"},
+        if not TRAINING_AVAILABLE or not analyzer:
+            return {
+                "status": "fallback",
+                "instrument": instrument,
+                "category": category,
+                "info": {}
             }
-        }
         
-        if category and category in instruments:
-            if instrument and instrument in instruments[category]:
-                result = {category: {instrument: instruments[category][instrument]}}
-                return {"status": "success", "data": result}
-            
-            # Return all instruments in category
-            result = {category: instruments[category]}
-            return {"status": "success", "data": result}
-        
-        # If no category/instrument specified, return general info
-        general_info = {
-            "drums": {"frequency_range": "20-20kHz", "compression_ratio": "4:1", "tips": "Core drums sounds"},
-            "bass": {"frequency_range": "20-250Hz", "compression_ratio": "3:1", "tips": "Bass instruments and subs"},
-            "vocals": {"frequency_range": "80-15kHz", "compression_ratio": "4:1", "tips": "Lead and backing vocals"},
-            "guitar": {"frequency_range": "80-12kHz", "compression_ratio": "4:1", "tips": "Guitar and other stringed instruments"},
-        }
-        
-        return {"status": "success", "data": general_info}
+        # Use analyzer if available
+        result = analyzer.get_instrument_info(category, instrument)
+        logger.info(f"Instrument info: {category}/{instrument}")
+        return {"status": "success", **result}
     except Exception as e:
         logger.error(f"ERROR in /api/analysis/instrument-info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/analyze/session")
-async def analyze_session(request: Dict[str, Any]):
-    """Analyze full session/project"""
+@app.get("/api/analysis/instruments-list")
+async def get_instruments_list():
+    """Get list of all available instruments"""
     try:
-        analysis = {
-            "overall_health": 0.85,
-            "issues": [],
-            "recommendations": [
-                "Good gain staging throughout",
-                "Consider adding more compression to drums",
-                "Vocals could use some reverb for space"
-            ],
-            "metrics": {
-                "peak_level": -3.2,
-                "loudness_lufs": -10.5,
-                "dynamic_range": 14.2
+        if not TRAINING_AVAILABLE or not analyzer:
+            return {
+                "status": "fallback",
+                "instruments": []
             }
-        }
-        return {"status": "success", "analysis": analysis}
+        
+        # Use analyzer if available
+        result = analyzer.get_all_instruments()
+        logger.info(f"Retrieved instruments list")
+        return {"status": "success", "instruments": result}
     except Exception as e:
-        logger.error(f"ERROR in /api/analyze/session: {e}")
+        logger.error(f"ERROR in /api/analysis/instruments-list: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# TRACK CONTROL ENDPOINTS
+# ============================================================================
+
+@app.post("/transport/solo/{track_id}")
+async def set_track_solo(track_id: str, solo: bool = True):
+    """Set solo state for track"""
+    try:
+        logger.info(f"Track {track_id} solo: {solo}")
+        return {
+            "status": "success",
+            "track_id": track_id,
+            "solo": solo,
+            "message": f"Track solo set to {solo}"
+        }
+    except Exception as e:
+        logger.error(f"ERROR in /transport/solo: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/analyze/mixing")
-async def analyze_mixing(request: Dict[str, Any]):
-    """Analyze mixing quality"""
+@app.post("/transport/mute/{track_id}")
+async def set_track_mute(track_id: str, mute: bool = True):
+    """Set mute state for track"""
     try:
-        analysis = {
-            "mix_score": 8.2,
-            "clarity": 0.88,
-            "balance": 0.85,
-            "separation": 0.82,
-            "recommendations": [
-                "Slightly reduce low-mids in guitars (300-500Hz)",
-                "Add compression to bass for consistency",
-                "Increase vocal presence with EQ around 3-5kHz"
-            ]
+        logger.info(f"Track {track_id} mute: {mute}")
+        return {
+            "status": "success",
+            "track_id": track_id,
+            "mute": mute,
+            "message": f"Track mute set to {mute}"
         }
-        return {"status": "success", "analysis": analysis}
     except Exception as e:
-        logger.error(f"ERROR in /api/analyze/mixing: {e}")
+        logger.error(f"ERROR in /transport/mute: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/analyze/routing")
-async def analyze_routing(request: Dict[str, Any]):
-    """Analyze track routing and architecture"""
+@app.post("/transport/arm/{track_id}")
+async def set_track_arm(track_id: str, armed: bool = True):
+    """Set record arm state for track"""
     try:
-        analysis = {
-            "routing_efficiency": 0.88,
-            "bus_usage": {
-                "drums": "All drums routed to drum bus ✓",
-                "vocals": "All vocals routed to vocal bus ✓",
-                "instruments": "Some instruments missing from submix"
-            },
-            "recommendations": [
-                "Group background instruments to submix",
-                "Add master compressor to main out",
-                "Consider parallel compression on drums"
-            ]
+        logger.info(f"Track {track_id} armed: {armed}")
+        return {
+            "status": "success",
+            "track_id": track_id,
+            "armed": armed,
+            "message": f"Track arm set to {armed}"
         }
-        return {"status": "success", "analysis": analysis}
     except Exception as e:
-        logger.error(f"ERROR in /api/analyze/routing: {e}")
+        logger.error(f"ERROR in /transport/arm: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/analyze/mastering")
-async def analyze_mastering(request: Dict[str, Any]):
-    """Analyze mastering readiness"""
+@app.post("/transport/volume/{track_id}")
+async def set_track_volume(track_id: str, volume_db: float = 0.0):
+    """Set volume for track"""
     try:
-        analysis = {
-            "mastering_ready": True,
-            "loudness_lufs": -10.5,
-            "headroom": 3.2,
-            "frequency_balance": {
-                "lows": "Good",
-                "mids": "Good",
-                "highs": "Slightly bright"
-            },
-            "recommendations": [
-                "Reduce high-end by 1-2dB above 8kHz",
-                "Increase overall loudness to -8 LUFS",
-                "Check mono compatibility"
-            ]
+        logger.info(f"Track {track_id} volume: {volume_db} dB")
+        return {
+            "status": "success",
+            "track_id": track_id,
+            "volume_db": volume_db,
+            "message": f"Track volume set to {volume_db} dB"
         }
-        return {"status": "success", "analysis": analysis}
     except Exception as e:
-        logger.error(f"ERROR in /api/analyze/mastering: {e}")
+        logger.error(f"ERROR in /transport/volume: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/analyze/creative")
-async def analyze_creative(request: Dict[str, Any]):
-    """Provide creative suggestions"""
+@app.post("/transport/pan/{track_id}")
+async def set_track_pan(track_id: str, pan: float = 0.0):
+    """Set pan for track (-1.0 to 1.0)"""
     try:
-        analysis = {
-            "creative_score": 0.78,
-            "suggestions": [
-                "Try adding automated filter sweep on synthesizer",
-                "Consider reverse reverb on vocal for impact",
-                "Add stereo width to pad with slight delay",
-                "Try gating drums for tighter feel"
-            ],
-            "references": [
-                "Similar energy to track by Producer X",
-                "Good vibe - consider reference track Y for arrangement"
-            ]
+        pan_clamped = max(-1.0, min(1.0, pan))
+        logger.info(f"Track {track_id} pan: {pan_clamped}")
+        return {
+            "status": "success",
+            "track_id": track_id,
+            "pan": pan_clamped,
+            "message": f"Track pan set to {pan_clamped}"
         }
-        return {"status": "success", "analysis": analysis}
     except Exception as e:
-        logger.error(f"ERROR in /api/analyze/creative: {e}")
+        logger.error(f"ERROR in /transport/pan: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================================
+# METRICS ENDPOINT
+# ============================================================================
 
-@app.post("/api/analyze/gain-staging")
-async def analyze_gain_staging(request: Dict[str, Any]):
-    """Analyze gain staging throughout signal chain"""
+@app.get("/metrics")
+async def get_metrics():
+    """Get system metrics for monitoring and UI display"""
     try:
-        analysis = {
-            "gain_staging_score": 0.92,
-            "issues": [],
-            "by_track": {
-                "drums": {"level": -4.2, "status": "Good"},
-                "bass": {"level": -5.1, "status": "Good"},
-                "vocals": {"level": -3.8, "status": "Excellent"},
-                "guitars": {"level": -6.2, "status": "Good"},
-            },
-            "recommendations": [
-                "All tracks within optimal range",
-                "3.2dB headroom to master limiter",
-                "Good for mastering"
-            ]
-        }
-        return {"status": "success", "analysis": analysis}
-    except Exception as e:
-        logger.error(f"ERROR in /api/analyze/gain-staging: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/analyze/stream")
-async def analyze_stream(request: Dict[str, Any]):
-    """Stream real-time analysis data"""
-    try:
-        # This would be more useful with WebSocket, but returning snapshot for now
-        analysis = {
+        return {
+            "status": "ok",
             "timestamp": get_timestamp(),
-            "peak_level": -2.8,
-            "rms_level": -15.2,
-            "loudness": -9.5,
-            "headroom": 2.5,
-            "frequency_balance": {
-                "sub": -3.2,
-                "low": -1.5,
-                "mid": 0.0,
-                "high": 1.2,
-                "presence": 0.8
+            "transport": transport_manager.get_state().dict(),
+            "cache": context_cache.stats(),
+            "redis": {
+                "enabled": REDIS_ENABLED,
+                "connected": redis_client is not None
+            },
+            "services": {
+                "supabase": SUPABASE_AVAILABLE,
+                "training": TRAINING_AVAILABLE,
+                "analyzer": analyzer is not None,
+                "real_engine": USE_REAL_ENGINE
             }
         }
-        return {"status": "success", "analysis": analysis}
     except Exception as e:
-        logger.error(f"ERROR in /api/analyze/stream: {e}")
+        logger.error(f"ERROR in /metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Response
+# ============================================================================
+# ENDPOINT DISCOVERY (For debugging)
+# ============================================================================
 
-@app.get("/codette/status")
-async def codette_status():
-    """Get Codette transport and system status"""
+@app.get("/api/endpoints")
+async def list_all_endpoints():
+    """List all available endpoints for debugging"""
     try:
-        return transport_manager.get_state().dict()
-    except Exception as e:
-        logger.error(f"ERROR in /codette/status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/codette/suggest")
-async def suggest_endpoint(request: SuggestionRequest):
-    """Get AI suggestions based on context"""
-    try:
-        context = request.context
-        track_type = context.get("track_type", "audio")
-        mixing_goal = context.get("mixing_goal", "general")
+        endpoints = []
+        for route in app.routes:
+            if hasattr(route, 'path') and hasattr(route, 'methods'):
+                endpoints.append({
+                    "path": route.path,
+                    "methods": list(route.methods) if route.methods else ["GET"],
+                    "name": getattr(route, 'name', 'unknown')
+                })
         
-        suggestions = {
-            "drums": [
-                {"type": "eq", "title": "Add Presence Peak", "description": "Boost 5-7kHz for punch", "confidence": 0.88},
-                {"type": "compression", "title": "Tighten Transients", "description": "Ratio 4:1, Attack 5ms", "confidence": 0.85},
-                {"type": "saturation", "title": "Add Warmth", "description": "Light tape saturation", "confidence": 0.82},
-            ],
-            "bass": [
-                {"type": "eq", "title": "Clean Low-End", "description": "High-pass at 40Hz", "confidence": 0.89},
-                {"type": "compression", "title": "Glue Bass", "description": "Ratio 4:1 for cohesion", "confidence": 0.87},
-                {"type": "routing", "title": "Sidechain Kick", "description": "Sync with drum hit", "confidence": 0.80},
-            ],
-            "vocals": [
-                {"type": "eq", "title": "De-Esser", "description": "Reduce sibilance", "confidence": 0.91},
-                {"type": "compression", "title": "Control Dynamics", "description": "Ratio 2:1-4:1", "confidence": 0.89},
-                {"type": "reverb", "title": "Add Space", "description": "10-15% reverb send", "confidence": 0.85},
-            ],
-            "audio": [
-                {"type": "eq", "title": "Balance Spectrum", "description": "Reference track EQ", "confidence": 0.83},
-                {"type": "compression", "title": "Smooth Dynamics", "description": "Light compression", "confidence": 0.80},
-                {"type": "mixing", "title": "Check Levels", "description": "Gain staging review", "confidence": 0.85},
-            ],
+        return {
+            "status": "success",
+            "total_endpoints": len(endpoints),
+            "endpoints": sorted(endpoints, key=lambda x: x['path'])
         }
-        
-        result_suggestions = suggestions.get(track_type, suggestions["audio"])[:request.limit or 5]
-        
-        return SuggestionResponse(
-            suggestions=result_suggestions,
-            confidence=0.85,
-            timestamp=get_timestamp()
+    except Exception as e:
+        logger.error(f"ERROR in /api/endpoints: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# TRANSPORT ENDPOINTS  
+# ============================================================================
+
+@app.post("/transport/play", response_model=TransportCommandResponse)
+async def transport_play():
+    """Start playback"""
+    try:
+        state = transport_manager.play()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback started",
+            state=state
         )
     except Exception as e:
-        logger.error(f"ERROR in /codette/suggest: {e}")
+        logger.error(f"ERROR in /transport/play: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.post("/transport/stop", response_model=TransportCommandResponse)
+async def transport_stop():
+    """Stop playback"""
+    try:
+        state = transport_manager.stop()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback stopped",
+            state=state
+        )
+    except Exception as e:
+        logger.error(f"ERROR in /transport/stop: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.post("/transport/pause", response_model=TransportCommandResponse)
+async def transport_pause():
+    """Pause playback"""
+    try:
+        state = transport_manager.pause()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback paused",
+            state=state
+        )
+    except Exception as e:
+        logger.error(f"ERROR in /transport/pause: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.get("/transport/state", response_model=TransportState)
+async def get_transport_state():
+    """Get current transport state"""
+    try:
+        return transport_manager.get_state()
+    except Exception as e:
+        logger.error(f"ERROR in /transport/state: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# WEBSOCKET ENDPOINTS (FIX FOR 403/404 ERRORS)
+# ============================================================================
+
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time updates"""
+async def websocket_general(websocket: WebSocket):
+    """General WebSocket endpoint for real-time state updates"""
     try:
-        await websocket.accept()
-        logger.info("WebSocket client connected")
-        transport_manager.connected_clients.add(websocket)
-        
+        # Log headers and query params for debugging origin/upgrade issues
         try:
-            while True:
-                # Receive message from client
-                data = await websocket.receive_text()
-                logger.debug(f"WebSocket received: {data}")
-                
-                # Send transport state back
-                state = transport_manager.get_state()
-                await websocket.send_json({
-                    "type": "transport_state",
-                    "data": state.dict()
-                })
+            headers = {k.decode('latin-1'): v.decode('latin-1') for k, v in websocket.scope.get('headers', [])}
+            logger.info(f"[WS] Incoming /ws headers: { {k: headers.get(k) for k in ['origin', 'host', 'sec-websocket-key', 'sec-websocket-version']} }")
+            logger.info(f"[WS] /ws query_string: {websocket.scope.get('query_string', b'').decode('latin-1')}")
         except Exception as e:
-            logger.warning(f"WebSocket error: {e}")
-        finally:
-            transport_manager.connected_clients.discard(websocket)
-            logger.info("WebSocket client disconnected")
+            logger.debug(f"Failed to log initial websocket headers: {e}")
+
+        await websocket.accept()
     except Exception as e:
-        logger.error(f"WebSocket setup error: {e}")
+        logger.error(f"Failed to accept WebSocket on /ws: {e}")
+        return
+
+    transport_manager.connected_clients.add(websocket)
+    logger.info(f"✅ WebSocket client connected to /ws. Total clients: {len(transport_manager.connected_clients)}")
+
+    try:
+        last_send = time.time()
+        send_interval = 1.0 / 60.0  # 60 FPS update rate
+
+        # Send initial state
+        try:
+            state = transport_manager.get_state()
+            await websocket.send_json({
+                "type": "state",
+                "data": state.dict()
+            })
+        except Exception as e:
+            logger.error(f"Failed to send initial state on /ws: {e}")
+            return
+
+        while True:
+            try:
+                # Non-blocking receive with very short timeout
+                try:
+                    data = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=0.001
+                    )
+                    try:
+                        message = json.loads(data)
+
+                        # Handle incoming commands
+                        if message.get("type") == "play":
+                            transport_manager.play()
+                        elif message.get("type") == "stop":
+                            transport_manager.stop()
+                        elif message.get("type") == "pause":
+                            transport_manager.pause()
+                        elif message.get("type") == "resume":
+                            transport_manager.resume()
+                        elif message.get("type") == "seek":
+                            transport_manager.seek(message.get("time_seconds", 0))
+                        elif message.get("type") == "tempo":
+                            transport_manager.set_tempo(message.get("bpm", 120))
+                        elif message.get("type") == "loop":
+                            transport_manager.set_loop(
+                                message.get("enabled", False),
+                                message.get("start_seconds", 0),
+                                message.get("end_seconds", 10)
+                            )
+                    except json.JSONDecodeError:
+                        pass
+
+                except asyncio.TimeoutError:
+                    pass
+
+                # Send state at regular interval
+                current_time = time.time()
+                if current_time - last_send >= send_interval:
+                    try:
+                        state = transport_manager.get_state()
+                        await websocket.send_json({
+                            "type": "state",
+                            "data": state.dict()
+                        })
+                        last_send = current_time
+                    except RuntimeError as e:
+                        logger.error(f"Connection closed on /ws: {e}")
+                        break
+                    except Exception as e:
+                        logger.error(f"Unexpected error in /ws loop: {e}")
+                        break
+
+                # Small sleep to prevent CPU spinning
+                await asyncio.sleep(0.001)
+
+            except WebSocketDisconnect:
+                logger.info("✅ WebSocket /ws disconnected")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error in /ws loop: {e}")
+                break
+
+    finally:
+        try:
+            transport_manager.connected_clients.discard(websocket)
+            logger.info(f"✅ WebSocket cleanup on /ws. Remaining clients: {len(transport_manager.connected_clients)}")
+        except Exception as e:
+            logger.error(f"Error during /ws cleanup: {e}")
+
+
+@app.websocket("/ws/transport/clock")
+async def websocket_transport_clock(websocket: WebSocket):
+    """WebSocket endpoint for DAW transport clock synchronization"""
+    try:
+        # Log headers and query params for debugging origin/upgrade issues
+        try:
+            headers = {k.decode('latin-1'): v.decode('latin-1') for k, v in websocket.scope.get('headers', [])}
+            logger.info(f"[WS] Incoming /ws/transport/clock headers: { {k: headers.get(k) for k in ['origin', 'host', 'sec-websocket-key', 'sec-websocket-version']} }")
+            logger.info(f"[WS] /ws/transport/clock query_string: {websocket.scope.get('query_string', b'').decode('latin-1')}")
+        except Exception as e:
+            logger.debug(f"Failed to log initial websocket headers: {e}")
+
+        await websocket.accept()
+    except Exception as e:
+        logger.error(f"Failed to accept WebSocket on /ws/transport/clock: {e}")
+        return
+
+    transport_manager.connected_clients.add(websocket)
+    logger.info(f"✅ WebSocket client connected to /ws/transport/clock. Total clients: {len(transport_manager.connected_clients)}")
+
+    try:
+        last_send = time.time()
+        send_interval = 1.0 / 60.0  # 60 FPS update rate
+
+        # Send initial state
+        try:
+            state = transport_manager.get_state()
+            await websocket.send_json({
+                "type": "state",
+                "data": state.dict()
+            })
+        except Exception as e:
+            logger.error(f"Failed to send initial state on /ws/transport/clock: {e}")
+            return
+
+        while True:
+            try:
+                # Non-blocking receive with very short timeout
+                try:
+                    data = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=0.001
+                    )
+                    try:
+                        message = json.loads(data)
+
+                        # Handle incoming commands
+                        if message.get("type") == "play":
+                            transport_manager.play()
+                        elif message.get("type") == "stop":
+                            transport_manager.stop()
+                        elif message.get("type") == "pause":
+                            transport_manager.pause()
+                        elif message.get("type") == "resume":
+                            transport_manager.resume()
+                        elif message.get("type") == "seek":
+                            transport_manager.seek(message.get("time_seconds", 0))
+                        elif message.get("type") == "tempo":
+                            transport_manager.set_tempo(message.get("bpm", 120))
+                        elif message.get("type") == "loop":
+                            transport_manager.set_loop(
+                                message.get("enabled", False),
+                                message.get("start_seconds", 0),
+                                message.get("end_seconds", 10)
+                            )
+                    except json.JSONDecodeError:
+                        pass
+
+                except asyncio.TimeoutError:
+                    pass
+
+                # Send state at regular interval
+                current_time = time.time()
+                if current_time - last_send >= send_interval:
+                    try:
+                        state = transport_manager.get_state()
+                        await websocket.send_json({
+                            "type": "state",
+                            "data": state.dict()
+                        })
+                        last_send = current_time
+                    except RuntimeError as e:
+                        logger.error(f"Connection closed on /ws/transport/clock: {e}")
+                        break
+                    except Exception as e:
+                        logger.error(f"Unexpected error in /ws/transport/clock loop: {e}")
+                        break
+
+                # Very minimal sleep
+                await asyncio.sleep(0.001)
+
+            except asyncio.CancelledError:
+                logger.info("✅ WebSocket task cancelled on /ws/transport/clock")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error in /ws/transport/clock: {e}")
+                break
+
+    except WebSocketDisconnect:
+        logger.info("✅ WebSocket client disconnected from /ws/transport/clock (clean disconnect)")
+    except Exception as e:
+        logger.error(f"WebSocket handler error on /ws/transport/clock: {e}")
+    finally:
+        transport_manager.connected_clients.discard(websocket)
+        logger.info(f"✅ WebSocket cleanup on /ws/transport/clock. Remaining clients: {len(transport_manager.connected_clients)}")
+
 
 # ============================================================================
-# MAIN
+# EFFECT PROCESSING ENDPOINTS (Stub - Not Implemented)
 # ============================================================================
 
-if __name__ == "__main__":
-    print("\n" + "="*70)
-    print("🚀 CODETTE AI UNIFIED SERVER - STARTING")
-    print("="*70)
-    print("📡 Server: FastAPI + Uvicorn")
-    print("🔗 URL:    http://0.0.0.0:8000")
-    print("📚 Docs:   http://localhost:8000/docs")
-    print("🧠 AI:     Codette AI Engine")
-    print("💫 CORS:   Enabled for React (localhost:5173, localhost:3000)")
-    print("="*70 + "\n")
-    
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000,
-        log_level="info",
-        reload=False
+@app.post("/process/eq/highpass")
+async def process_eq_highpass():
+    """Highpass filter - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501, 
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
     )
+
+@app.post("/process/eq/lowpass")
+async def process_eq_lowpass():
+    """Lowpass filter - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/eq/peaking")
+async def process_eq_peaking():
+    """Peaking EQ - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/eq/3band")
+async def process_eq_3band():
+    """3-band EQ - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/dynamics/compressor")
+async def process_compressor():
+    """Compressor - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/dynamics/limiter")
+async def process_limiter():
+    """Limiter - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/dynamics/expander")
+async def process_expander():
+    """Expander - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/dynamics/gate")
+async def process_gate():
+    """Gate - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/saturation/saturation")
+async def process_saturation():
+    """Saturation - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/saturation/distortion")
+async def process_distortion():
+    """Distortion - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/saturation/waveshaper")
+async def process_waveshaper():
+    """Wave shaper - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/delay/simple")
+async def process_delay_simple():
+    """Simple delay - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/delay/pingpong")
+async def process_delay_pingpong():
+    """Ping-pong delay - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/delay/multitap")
+async def process_delay_multitap():
+    """Multi-tap delay - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/delay/stereo")
+async def process_delay_stereo():
+    """Stereo delay - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/reverb/freeverb")
+async def process_reverb_freeverb():
+    """Freeverb - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/reverb/hall")
+async def process_reverb_hall():
+    """Hall reverb - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/reverb/plate")
+async def process_reverb_plate():
+    """Plate reverb - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/process/reverb/room")
+async def process_reverb_room():
+    """Room reverb - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+# ============================================================================
+# AUTOMATION ENDPOINTS (Stub - Not Implemented)
+# ============================================================================
+
+@app.post("/automation/curve")
+async def create_automation_curve():
+    """Create automation curve - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Automation processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/automation/lfo")
+async def create_lfo():
+    """Create LFO modulation - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Automation processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/automation/envelope")
+async def create_envelope():
+    """Create ADSR envelope - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Automation processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+# ============================================================================
+# METERING ENDPOINTS (Stub - Not Implemented)
+# ============================================================================
+
+@app.post("/metering/level")
+async def analyze_level():
+    """Analyze audio levels - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Audio analysis not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/metering/spectrum")
+async def analyze_spectrum():
+    """Analyze frequency spectrum - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Audio analysis not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/metering/vu")
+async def analyze_vu():
+    """Analyze VU meter - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Audio analysis not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/metering/correlation")
+async def analyze_correlation():
+    """Analyze stereo correlation - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Audio analysis not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+# ============================================================================
+# ENGINE CONTROL ENDPOINTS (Stub - Not Implemented)
+# ============================================================================
+
+@app.get("/effects")
+async def list_effects():
+    """List available effects - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Effect processing not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.get("/engine/config")
+async def get_engine_config():
+    """Get engine configuration - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Engine control not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/engine/start")
+async def start_engine():
+    """Start audio engine - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Engine control not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+@app.post("/engine/stop")
+async def stop_engine():
+    """Stop audio engine - Not implemented in unified server"""
+    raise HTTPException(
+        status_code=501,
+        detail="Engine control not available in unified server. Use DSP bridge to daw_core backend."
+    )
+
+# ============================================================================
+# STARTUP & SHUTDOWN
+# ============================================================================
+
+# NOTE: @app.on_event is deprecated; we define async handlers and register them
+# using app.add_event_handler below to avoid DeprecationWarning.
+
+async def startup_event():
+    """Startup event"""
+    logger.info("="*80)
+    logger.info("Codette AI Unified Server Starting")
+    logger.info("="*80)
+    logger.info(f"Real Engine: {USE_REAL_ENGINE}")
+    logger.info(f"Training Available: {TRAINING_AVAILABLE}")
+    logger.info(f"Supabase Available: {SUPABASE_AVAILABLE}")
+    logger.info(f"Redis Available: {REDIS_AVAILABLE}")
+    logger.info(f"CORS Allowed Origins: {ALLOWED_ORIGINS}")
+    logger.info("="*80)
+    logger.info(f"🌐 WebSocket: ws://localhost:8000/ws")
+    logger.info(f"🌐 WebSocket: ws://localhost:8000/ws/transport/clock")
+    logger.info(f"📡 API Docs: http://localhost:8000/docs")
+    logger.info("="*80)
+
+
+async def shutdown_event():
+    """Shutdown event"""
+    logger.info("="*80)
+    logger.info("Codette AI Unified Server Shutting Down")
+    logger.info("="*80)
+
+
+# Register event handlers (replacement for deprecated @app.on_event)
+try:
+    app.add_event_handler("startup", startup_event)
+    app.add_event_handler("shutdown", shutdown_event)
+    logger.debug("Registered startup and shutdown event handlers via app.add_event_handler")
+except Exception as e:
+    logger.warning(f"Failed to register lifespan event handlers: {e}")
+    
+@app.get("/codette/status")
+async def get_status():
+    """Get current status - returns transport state for codette bridge compatibility"""
+    state = transport_manager.get_state()
+    return {
+        "status": "running",
+        "version": "2.0.0",
+        "real_engine": USE_REAL_ENGINE,
+        "training_available": TRAINING_AVAILABLE,
+        "codette_available": codette is not None,
+        "perspectives_available": [
+            "neuralnets",
+            "newtonian",
+            "davinci",
+            "quantum",
+        ],
+        "features": [
+            "chat",
+            "audio_analysis",
+            "suggestions",
+            "transport_control",
+            "training_data",
+        ],
+        # Transport state for frontend bridge compatibility
+        "is_playing": state.playing,
+        "current_time": state.time_seconds,
+        "bpm": state.bpm,
+        "time_signature": [4, 4],
+        "loop_enabled": state.loop_enabled,
+        "loop_start": state.loop_start_seconds,
+        "loop_end": state.loop_end_seconds,
+        "timestamp": get_timestamp(),
+    }

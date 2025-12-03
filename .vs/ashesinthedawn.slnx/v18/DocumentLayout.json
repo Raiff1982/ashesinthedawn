@@ -7,11 +7,8 @@
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:codette_server_unified.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-95d5b1ec-685d-4910-b95d-1710593c20d5.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\MISSING_ENDPOINTS_AUDIT.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:MISSING_ENDPOINTS_AUDIT.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\run_server.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:run_server.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     }
   ],
   "DocumentGroupContainers": [
@@ -43,34 +40,23 @@
               "RelativeDocumentMoniker": "codette_server_unified.py",
               "ToolTip": "I:\\ashesinthedawn\\codette_server_unified.py",
               "RelativeToolTip": "codette_server_unified.py",
-              "ViewState": "AgIAAEgFAAAAAAAAAAAhwAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAHwGAAAAAAAAAAAhwB4AAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
               "WhenOpened": "2025-12-03T15:36:13.649Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "MISSING_ENDPOINTS_AUDIT.md",
-              "DocumentMoniker": "I:\\ashesinthedawn\\MISSING_ENDPOINTS_AUDIT.md",
-              "RelativeDocumentMoniker": "MISSING_ENDPOINTS_AUDIT.md",
-              "ToolTip": "I:\\ashesinthedawn\\MISSING_ENDPOINTS_AUDIT.md",
-              "RelativeToolTip": "MISSING_ENDPOINTS_AUDIT.md",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAJ8BAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T16:04:46.529Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "plan-95d5b1ec-685d-4910-b95d-1710593c20d5.md",
-              "DocumentMoniker": "C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-95d5b1ec-685d-4910-b95d-1710593c20d5.md",
-              "ToolTip": "C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-95d5b1ec-685d-4910-b95d-1710593c20d5.md [Read Only]",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAaAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T16:05:48.271Z",
-              "EditorCaption": " [Read Only]"
+              "Title": "run_server.py",
+              "DocumentMoniker": "I:\\ashesinthedawn\\run_server.py",
+              "RelativeDocumentMoniker": "run_server.py",
+              "ToolTip": "I:\\ashesinthedawn\\run_server.py",
+              "RelativeToolTip": "run_server.py",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-03T16:44:35.449Z",
+              "EditorCaption": ""
             }
           ]
         },

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Codette AI Unified Server
 Combined FastAPI server for CoreLogic Studio DAW integration
@@ -1692,50 +1692,6 @@ async def codette_status():
     except Exception as e:
         logger.error(f"ERROR in /codette/status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/codette/suggest")
-async def suggest_endpoint(request: SuggestionRequest):
-    """Get AI suggestions based on context"""
-    try:
-        context = request.context
-        track_type = context.get("track_type", "audio")
-        mixing_goal = context.get("mixing_goal", "general")
-        
-        suggestions = {
-            "drums": [
-                {"type": "eq", "title": "Add Presence Peak", "description": "Boost 5-7kHz for punch", "confidence": 0.88},
-                {"type": "compression", "title": "Tighten Transients", "description": "Ratio 4:1, Attack 5ms", "confidence": 0.85},
-                {"type": "saturation", "title": "Add Warmth", "description": "Light tape saturation", "confidence": 0.82},
-            ],
-            "bass": [
-                {"type": "eq", "title": "Clean Low-End", "description": "High-pass at 40Hz", "confidence": 0.89},
-                {"type": "compression", "title": "Glue Bass", "description": "Ratio 4:1 for cohesion", "confidence": 0.87},
-                {"type": "routing", "title": "Sidechain Kick", "description": "Sync with drum hit", "confidence": 0.80},
-            ],
-            "vocals": [
-                {"type": "eq", "title": "De-Esser", "description": "Reduce sibilance", "confidence": 0.91},
-                {"type": "compression", "title": "Control Dynamics", "description": "Ratio 2:1-4:1", "confidence": 0.89},
-                {"type": "reverb", "title": "Add Space", "description": "10-15% reverb send", "confidence": 0.85},
-            ],
-            "audio": [
-                {"type": "eq", "title": "Balance Spectrum", "description": "Reference track EQ", "confidence": 0.83},
-                {"type": "compression", "title": "Smooth Dynamics", "description": "Light compression", "confidence": 0.80},
-                {"type": "mixing", "title": "Check Levels", "description": "Gain staging review", "confidence": 0.85},
-            ],
-        }
-        
-        result_suggestions = suggestions.get(track_type, suggestions["audio"])[:request.limit or 5]
-        
-        return SuggestionResponse(
-            suggestions=result_suggestions,
-            confidence=0.85,
-            timestamp=get_timestamp()
-        )
-    except Exception as e:
-        logger.error(f"ERROR in /codette/suggest: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

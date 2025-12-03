@@ -3,15 +3,20 @@
   "WorkspaceRootPath": "I:\\ashesinthedawn\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\verify_endpoints.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:verify_endpoints.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\codette_server_unified.py||{8B382828-6202-11D1-8870-0000F87579D2}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:codette_server_unified.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-95d5b1ec-685d-4910-b95d-1710593c20d5.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\FIXES_APPLIED_20241203.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:FIXES_APPLIED_20241203.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\MISSING_ENDPOINTS_AUDIT.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:MISSING_ENDPOINTS_AUDIT.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\BACKEND_FIXES_SUMMARY.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:BACKEND_FIXES_SUMMARY.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
     }
   ],
   "DocumentGroupContainers": [
@@ -21,7 +26,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 3,
+          "SelectedChildIndex": 5,
           "Children": [
             {
               "$type": "Bookmark",
@@ -37,13 +42,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "codette_server_unified.py",
               "DocumentMoniker": "I:\\ashesinthedawn\\codette_server_unified.py",
               "RelativeDocumentMoniker": "codette_server_unified.py",
               "ToolTip": "I:\\ashesinthedawn\\codette_server_unified.py",
               "RelativeToolTip": "codette_server_unified.py",
-              "ViewState": "AgIAAEgFAAAAAAAAAAAhwAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAHkGAAAAAAAAAAAhwB4AAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
               "WhenOpened": "2025-12-03T15:36:13.649Z",
               "EditorCaption": ""
@@ -51,26 +56,41 @@
             {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "MISSING_ENDPOINTS_AUDIT.md",
-              "DocumentMoniker": "I:\\ashesinthedawn\\MISSING_ENDPOINTS_AUDIT.md",
-              "RelativeDocumentMoniker": "MISSING_ENDPOINTS_AUDIT.md",
-              "ToolTip": "I:\\ashesinthedawn\\MISSING_ENDPOINTS_AUDIT.md",
-              "RelativeToolTip": "MISSING_ENDPOINTS_AUDIT.md",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAJ8BAAAAAAAAAAAAAA==",
+              "Title": "FIXES_APPLIED_20241203.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\FIXES_APPLIED_20241203.md",
+              "RelativeDocumentMoniker": "FIXES_APPLIED_20241203.md",
+              "ToolTip": "I:\\ashesinthedawn\\FIXES_APPLIED_20241203.md",
+              "RelativeToolTip": "FIXES_APPLIED_20241203.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAGwBAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T16:04:46.529Z",
+              "WhenOpened": "2025-12-03T16:32:23.83Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "plan-95d5b1ec-685d-4910-b95d-1710593c20d5.md",
-              "DocumentMoniker": "C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-95d5b1ec-685d-4910-b95d-1710593c20d5.md",
-              "ToolTip": "C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-95d5b1ec-685d-4910-b95d-1710593c20d5.md [Read Only]",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAaAAAAAAAAAA==",
+              "DocumentIndex": 0,
+              "Title": "verify_endpoints.py",
+              "DocumentMoniker": "I:\\ashesinthedawn\\verify_endpoints.py",
+              "RelativeDocumentMoniker": "verify_endpoints.py",
+              "ToolTip": "I:\\ashesinthedawn\\verify_endpoints.py",
+              "RelativeToolTip": "verify_endpoints.py",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADIAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
+              "WhenOpened": "2025-12-03T16:32:48.383Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "BACKEND_FIXES_SUMMARY.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\BACKEND_FIXES_SUMMARY.md",
+              "RelativeDocumentMoniker": "BACKEND_FIXES_SUMMARY.md",
+              "ToolTip": "I:\\ashesinthedawn\\BACKEND_FIXES_SUMMARY.md",
+              "RelativeToolTip": "BACKEND_FIXES_SUMMARY.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAJ4BAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T16:05:48.271Z",
-              "EditorCaption": " [Read Only]"
+              "WhenOpened": "2025-12-03T16:33:46.594Z",
+              "EditorCaption": ""
             }
           ]
         },
