@@ -1,5 +1,4 @@
 {
-  "ActiveTargetSystem": "WSL: Ubuntu",
   "DevContainersInfoBarHidden": true,
   "ExpandedNodes": [
     "",
@@ -10,5 +9,6 @@
     "\\Codette\\tests"
   ],
   "SelectedNode": "\\Codette\\tests\\test_cocoon_manager.py",
-  "PreviewInSolutionExplorer": false
+  "PreviewInSolutionExplorer": false,
+  "ActiveTargetSystem": "Local Machine"
 }
