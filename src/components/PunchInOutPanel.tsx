@@ -56,7 +56,11 @@ export function PunchInOutPanel({
           <Clock className="w-4 h-4 text-blue-400" />
           <label className="text-xs font-semibold text-gray-300">Punch In/Out</label>
         </div>
-        <Tooltip content="Auto-record at punch times during playback">
+        <Tooltip content={{ 
+          title: 'Punch In/Out', 
+          description: 'Auto-record at punch times during playback',
+          category: 'transport'
+        }}>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -132,8 +136,12 @@ export function PunchInOutPanel({
       {/* Presets */}
       <div>
         <label className="text-xs text-gray-400 block mb-2">Presets</label>
-        <div className="grid grid-cols-2 gap-2">
-          <Tooltip content="Record from start">
+        <label className="grid grid-cols-2 gap-2">
+          <Tooltip content={{ 
+            title: 'Full Song', 
+            description: 'Record from start',
+            category: 'transport'
+          }}>
             <button
               onClick={() => {
                 onPunchInChange(0);
@@ -144,7 +152,11 @@ export function PunchInOutPanel({
               Full Song
             </button>
           </Tooltip>
-          <Tooltip content="Record first 30 seconds">
+          <Tooltip content={{ 
+            title: '30 Sec', 
+            description: 'Record first 30 seconds',
+            category: 'transport'
+          }}>
             <button
               onClick={() => {
                 onPunchInChange(0);
@@ -155,7 +167,7 @@ export function PunchInOutPanel({
               30 Sec
             </button>
           </Tooltip>
-        </div>
+        </label>
       </div>
 
       {/* Info */}

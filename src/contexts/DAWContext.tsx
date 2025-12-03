@@ -199,15 +199,15 @@ interface DAWContextType {
   cpuUsageDetailed: Record<string, number>;
 
   // Recording state (NEW)
-  recordingTrackId: null;
-  recordingStartTime: 0;
-  recordingTakeCount: 0;
-  recordingMode: 'audio';
-  punchInEnabled: false;
-  punchInTime: 0;
-  punchOutTime: 0;
-  recordingBlob: null;
-  recordingError: null;
+  recordingTrackId: null | string;
+  recordingStartTime: number;
+  recordingTakeCount: number;
+  recordingMode: 'audio' | 'midi' | 'overdub';
+  punchInEnabled: boolean;
+  punchInTime: number;
+  punchOutTime: number;
+  recordingBlob: Blob | null;
+  recordingError: string | null;
   
   // Recording methods (NEW)
   startRecording: (trackId: string) => Promise<boolean>;
@@ -838,11 +838,13 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       ...plugin,
       id: `${plugin.id || "plugin"}-${uniqueId}-${index}`,
       parameters: { ...plugin.parameters },
-    }));
+    }
+    ));
     const cloneSends = sourceTrack.sends.map((send, index) => ({
       ...send,
       id: `${send.id || "send"}-${uniqueId}-${index}`,
-    }));
+    }
+    ));
 
     const clonedTrack: Track = {
       ...sourceTrack,
@@ -2021,7 +2023,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         recordingMode: 'audio',
         punchInEnabled: false,
         punchInTime: 0,
-        punchOutTime: 0,
+        punchOutTime: 30,
         recordingBlob: null,
         recordingError: null,
         // Recording methods
@@ -2029,56 +2031,56 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
           if (isRecording) return false;
           try {
             setIsRecording(true);
-            setSelectedTrack(tracks.find(t => t.id === trackId) || null);
-            setCurrentTime(0);
+            setRecordingTrackId(trackId);
+            setRecordingStartTime(0);
+            setRecordingTakeCount((prev) => prev + 1);
             
-            // Reset recording state
-            setTracks(prev =>
-              prev.map(t =>
-                t.id === trackId
-                  ? { ...t, informs: [], volume: -6, pan: 0 } // Prepare track for recording
-                  : t
-              )
-            );
-            
+            // Reset track state for recording
+            updateTrack(trackId, {
+              armed: true,
+              inputGain: 0,
+              volume: -6,
+            });
+
             // Start audio engine recording
             const success = await audioEngineRef.current.startRecording();
             return success;
           } catch (error) {
             console.error("Recording start error:", error);
             setIsRecording(false);
+            setRecordingError("Failed to start recording");
             return false;
           }
         },
-        stopRecording: () => {
-          return new Promise(async (resolve) => {
-            if (!isRecording) {
-              resolve(null);
-              return;
-            }
+        stopRecording: async () => {
+          if (!isRecording) {
+            return null;
+          }
+          
+          try {
+            const blob = await audioEngineRef.current.stopRecording();
+            setIsRecording(false);
+            setRecordingTrackId(null);
+            setRecordingBlob(blob);
             
-            try {
-              const blob = await audioEngineRef.current.stopRecording();
-              setIsRecording(false);
-              
-              if (blob) {
-                // Create a new audio track from the recording
-                const recordedFile = new File(
-                  [blob],
-                  `Recording-${Date.now()}.webm`,
-                  { type: "audio/webm" }
-                );
-                uploadAudioFile(recordedFile);
-                resolve(blob);
-              } else {
-                resolve(null);
-              }
-            } catch (error) {
-              console.error("Recording stop error:", error);
-              setIsRecording(false);
-              resolve(null);
+            if (blob) {
+              // Create a new audio track from the recording
+              const recordedFile = new File(
+                [blob],
+                `Recording-${Date.now()}.webm`,
+                { type: "audio/webm" }
+              );
+              await uploadAudioFile(recordedFile);
+              return blob;
+            } else {
+              return null;
             }
-          });
+          } catch (error) {
+            console.error("Recording stop error:", error);
+            setIsRecording(false);
+            setRecordingError("Failed to stop recording");
+            return null;
+          }
         },
         pauseRecording: () => {
           if (!isRecording) return false;
@@ -2103,35 +2105,18 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
           }
         },
         setRecordingMode: (mode: 'audio' | 'midi' | 'overdub') => {
-          setTracks(prev =>
-            prev.map(t =>
-              t.id === selectedTrack?.id
-                ? { ...t, recordingMode: mode }
-                : t
-            )
-          );
+          setRecordingModeState(mode);
         },
         setPunchInOut: (punchIn: number, punchOut: number) => {
-          setTracks(prev =>
-            prev.map(t =>
-              t.id === selectedTrack?.id
-                ? { ...t, punchInTime: punchIn, punchOutTime: punchOut }
-                : t
-            )
-          );
+          setPunchInTime(punchIn);
+          setPunchOutTime(punchOut);
         },
         togglePunchIn: () => {
-          setTracks(prev =>
-            prev.map(t =>
-              t.id === selectedTrack?.id
-                ? { ...t, punchInEnabled: !t.punchInEnabled }
-                : t
-            )
-          );
+          setPunchInEnabled((prev) => !prev);
         },
         undoLastRecording: () => {
-          // Placeholder for undoing last recording action
-          console.log("Undo last recording action (not implemented)");
+          console.log("Undo last recording action");
+          setRecordingTakeCount((prev) => Math.max(0, prev - 1));
         },
       };
 

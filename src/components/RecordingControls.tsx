@@ -3,7 +3,6 @@
  * Main recording control interface with arm, record, and mode selection
  */
 
-import { useState } from 'react';
 import { Mic, Square, Radio } from 'lucide-react';
 import { Track } from '../types';
 import { Tooltip } from './TooltipProvider';
@@ -31,8 +30,6 @@ export function RecordingControls({
   recordingMode,
   onModeChange,
 }: RecordingControlsProps) {
-  const [showModeSelector, setShowModeSelector] = useState(false);
-
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -50,6 +47,7 @@ export function RecordingControls({
 
   return (
     <div className={`p-4 space-y-4 border-t-2 transition-colors ${
+
       isRecording
         ? 'bg-red-950 border-red-600 animate-pulse'
         : isArmed
@@ -72,7 +70,11 @@ export function RecordingControls({
       {/* Recording Controls */}
       <div className="flex gap-2">
         {/* Arm Button */}
-        <Tooltip content="Arm track for recording">
+        <Tooltip content={{ 
+          title: 'Arm Track', 
+          description: 'Enable recording on this track',
+          category: 'transport'
+        }}>
           <button
             onClick={() => onArm(!isArmed)}
             disabled={isRecording}
@@ -88,7 +90,11 @@ export function RecordingControls({
         </Tooltip>
 
         {/* Record/Stop Button */}
-        <Tooltip content="Start recording">
+        <Tooltip content={{ 
+          title: 'Record', 
+          description: 'Start recording audio',
+          category: 'transport'
+        }}>
           <button
             onClick={isRecording ? onStop : onRecord}
             disabled={!isArmed && !isRecording}
@@ -146,7 +152,7 @@ export function RecordingControls({
 
       {/* Info */}
       <div className="text-xs text-gray-500 border-t border-gray-700 pt-2">
-        ?? <strong>Tip:</strong> Arm the track, then press Record or Play to start. For MIDI, use the piano roll.
+        ??? <strong>Tip:</strong> Arm the track, then press Record or Play to start. For MIDI, use the piano roll.
       </div>
     </div>
   );

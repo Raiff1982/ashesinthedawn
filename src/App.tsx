@@ -151,11 +151,6 @@ function AppContent() {
         </div>
       )}
 
-      {/* ENHANCEMENT #6: Breadcrumb Navigation */}
-      <div className="fixed top-28 left-0 right-0 px-4 z-20">
-        <BreadcrumbNavigation />
-      </div>
-
       {/* ENHANCEMENT #7: Command Palette (Ctrl+K) */}
       <CommandPalette 
         isOpen={isCommandPaletteOpen}
