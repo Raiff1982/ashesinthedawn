@@ -1,11 +1,12 @@
 import { useDAW } from '../contexts/DAWContext';
-import { Sliders, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Sliders, ChevronDown, ChevronUp, Sparkles, Settings } from 'lucide-react';
 import { useState, useRef, useEffect, memo } from 'react';
 import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
 import MixerOptionsTile from './MixerOptionsTile';
 import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
 import { KeyboardMusic, Volume2, Music2, Zap } from 'lucide-react';
+import { EnhancedMixerPanel } from './EnhancedMixerPanel';
 
 interface DetachedTileState {
   trackId: string;
@@ -41,6 +42,7 @@ const MixerComponent = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showPluginRack, setShowPluginRack] = useState(false); // Show/hide plugin rack panel
+  const [showAdvancedMixer, setShowAdvancedMixer] = useState(false); // Show/hide advanced mixer panel
 
   // MIDI Quick Actions Handler
   const triggerMIDIAction = (actionId: string) => {
@@ -270,6 +272,16 @@ const MixerComponent = () => {
             )}
             
             <button
+              onClick={() => setShowAdvancedMixer(!showAdvancedMixer)}
+              className={`p-0.5 hover:bg-gray-700 rounded transition-colors flex-shrink-0 ${
+                showAdvancedMixer ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+              title="Show advanced mixer controls (Stereo, Automation, Sends, Metering)"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            <button
               onClick={() => setIsMinimized(!isMinimized)}
               className="p-0.5 hover:bg-gray-700 rounded transition-colors flex-shrink-0"
               title={isMinimized ? "Expand mixer" : "Minimize mixer"}
@@ -447,7 +459,8 @@ const MixerComponent = () => {
                         onTogglePluginRack={() => setShowPluginRack(!showPluginRack)}
                       />
                     ))
-                )}
+                )
+                }
               </div>
             </div>
 
@@ -467,15 +480,50 @@ const MixerComponent = () => {
               </div>
             )}
 
-            {/* Codette AI via Master Panel - Use TopBar Codette button */}
-            <div className="flex-1 border-t border-gray-700 bg-gray-800 flex flex-col items-center justify-center text-center p-4">
-              <Sparkles className="w-8 h-8 text-purple-400 mb-2" />
-              <p className="text-sm text-gray-300 mb-2">Codette AI Features</p>
-              <p className="text-xs text-gray-500 mb-4">Use the <span className="text-purple-400 font-semibold">Codette</span> button in the top bar to access AI suggestions, analysis, and controls.</p>
-              <div className="text-xs text-gray-600 bg-gray-700 rounded px-3 py-2 max-w-xs">
-                💡 Tip: Select a track and click the Codette button to get track-specific suggestions
-              </div>
+            {/* Enhanced Mixer Panel */}
+            <div className="flex-shrink-0 border-t border-gray-700 bg-gray-800 p-4">
+              <EnhancedMixerPanel 
+                tracks={tracks}
+                masterFader={masterFader}
+                onMasterFaderChange={setMasterFader}
+                onAddTrack={addTrack}
+                onDeleteTrack={deleteTrack}
+                onSelectTrack={selectTrack}
+                onUpdateTrack={updateTrack}
+                detachedTiles={detachedTiles}
+                onDetachTile={handleDetachTile}
+                onDockTile={handleDockTile}
+                scaleWidth={scaledStripWidth}
+                scaleHeight={stripHeight}
+              />
             </div>
+
+            {/* Advanced Mixer Panel or Default View */}
+            {showAdvancedMixer && selectedTrack ? (
+              <div className="flex-1 border-t border-gray-700 bg-gray-800 overflow-hidden">
+                <EnhancedMixerPanel
+                  track={selectedTrack}
+                  onClose={() => setShowAdvancedMixer(false)}
+                  onTrackUpdate={updateTrack}
+                  availableAuxTracks={tracks
+                    .filter((t) => t.type === 'aux')
+                    .map((t) => ({ id: t.id, name: t.name }))}
+                />
+              </div>
+            ) : (
+              <div className="flex-1 border-t border-gray-700 bg-gray-800 flex flex-col items-center justify-center text-center p-4">
+                <Sparkles className="w-8 h-8 text-purple-400 mb-2" />
+                <p className="text-sm text-gray-300 mb-2">Mixer Controls</p>
+                <p className="text-xs text-gray-500 mb-4">
+                  {selectedTrack
+                    ? 'Click the ⚙️ button above to show advanced mixer controls'
+                    : 'Select a track to view advanced mixer controls'}
+                </p>
+                <div className="text-xs text-gray-600 bg-gray-700 rounded px-3 py-2 max-w-xs">
+                  💡 Tip: Access stereo width, automation, sends, and metering tools
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
