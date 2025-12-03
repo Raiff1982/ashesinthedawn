@@ -1,0 +1,18 @@
+﻿# 🎯 Fix Codette API 404/403 Errors
+**Overview**: Fix Codette API 404/403 Errors
+
+**Progress**: 0% [░░░░░░░░░░]
+
+**Last Updated**: 2025-12-03 14:59:47
+
+## 📝 Plan Steps
+-  **Verify actual registered routes in codette_server.py**
+-  **Check /codette/suggest endpoint registration**
+-  **Check /codette/status endpoint registration**
+-  **Analyze WebSocket endpoint registration and auth**
+-  **Test backend routes with curl/httpie**
+-  **Update codetteBridge.ts to match exact backend URLs**
+-  **Fix WebSocket authentication if needed**
+-  **Validate CORS configuration**
+-  **Test frontend-backend integration**
+
