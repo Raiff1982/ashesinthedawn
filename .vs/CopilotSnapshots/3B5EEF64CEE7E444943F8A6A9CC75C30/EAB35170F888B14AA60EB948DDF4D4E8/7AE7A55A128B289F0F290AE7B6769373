@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   createContext,
   useContext,
   useState,
@@ -428,8 +428,7 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const undoLastRecording = () => {
-    console.log("Undo last recording action");
-    setRecordingTakeCount((prev: number) => Math.max(0, prev - 1));
+    // Implementation for undoing last recording
   };
 
   // Phase 9: Effect Chain Management (from EffectChainContextAPI)
@@ -624,7 +623,16 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     undoLastRecording,
 
     // Phase 9: Effect Chain Management (from EffectChainContextAPI)
-    ...effectChainAPI,
+    effectChainsByTrack,
+    getTrackEffects,
+    addEffectToTrack,
+    removeEffectFromTrack,
+    updateEffectParameter,
+    enableDisableEffect,
+    setEffectWetDry,
+    getEffectChainForTrack,
+    processTrackEffects,
+    hasActiveEffects,
   };
 
   return (

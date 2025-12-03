@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CodetteBridge: Frontend-Backend Communication Layer
  * Bridges React DAWContext with Python Codette AI engine
  * 
@@ -11,7 +11,6 @@
  */
 
 import { Track } from "../types";
-import { supabase } from "./supabase";
 
 // Configuration
 const CODETTE_API_BASE = import.meta.env.VITE_CODETTE_API || "http://localhost:8000";
@@ -572,107 +571,6 @@ class CodetteBridge {
     };
 
     return this.makeRequest("chat", "/codette/chat", requestData) as any;
-  }
-
-  /**
-   * Get Codette context JSON from Supabase RPC function
-   * Retrieves intelligent context for prompt processing
-   * 
-   * @param inputPrompt - The input prompt/query text
-   * @param optionallyFilename - Optional filename filter (nullable)
-   * @returns Promise with context data including snippets, files, and chat history
-   */
-  async getCodetteContextJson(
-    inputPrompt: string,
-    optionallyFilename?: string | null
-  ): Promise<{
-    snippets: Array<{ filename: string; snippet: string }>;
-    file: { id: string; filename: string; file_type: string; storage_path: string; uploaded_at: string } | null;
-    chat_history: Array<{ id: string; user_id: string; messages: Record<string, string>; updated_at: string }>;
-  }> {
-    try {
-      if (!supabase) {
-        console.warn("[CodetteBridge] Supabase not initialized, skipping RPC call");
-        return { snippets: [], file: null, chat_history: [] };
-      }
-
-      console.debug("[CodetteBridge] Calling get_codette_context_json RPC:", {
-        input_prompt: inputPrompt,
-        optionally_filename: optionallyFilename,
-      });
-
-      // Call Supabase RPC function with exact parameter names
-      const result = await supabase.rpc("get_codette_context_json", {
-        input_prompt: inputPrompt,
-        optionally_filename: optionallyFilename || null,
-      });
-
-      if (result.error) {
-        console.error("[CodetteBridge] RPC call error:", result.error);
-        return { snippets: [], file: null, chat_history: [] };
-      }
-
-      const data = result.data;
-      console.debug("[CodetteBridge] RPC response:", {
-        snippets_count: data?.snippets?.length || 0,
-        has_file: !!data?.file,
-        history_count: data?.chat_history?.length || 0,
-      });
-
-      // Normalize response
-      return {
-        snippets: data?.snippets || [],
-        file: data?.file || null,
-        chat_history: data?.chat_history || [],
-      };
-    } catch (error) {
-      console.error("[CodetteBridge] Failed to get Codette context:", error);
-      // Return empty context on failure
-      return { snippets: [], file: null, chat_history: [] };
-    }
-  }
-
-  /**
-   * Enhanced chat with Codette context from Supabase
-   * Combines local context retrieval with chat processing
-   */
-  async chatWithContext(
-    message: string,
-    conversationId: string,
-    perspective?: string
-  ): Promise<CodetteChatResponse> {
-    try {
-      // First, get context from Supabase
-      const context = await this.getCodetteContextJson(message, null);
-      
-      console.debug("[CodetteBridge] Chat context retrieved:", {
-        snippets: context.snippets.length,
-        hasFile: !!context.file,
-      });
-
-      // Build enhanced request with context
-      const request: CodetteChatRequest = {
-        user_message: message,
-        conversation_id: conversationId,
-        perspective: perspective || "general",
-        context: JSON.stringify({
-          source_snippets: context.snippets,
-          file_context: context.file,
-          chat_history: context.chat_history,
-        }),
-      };
-
-      // Send to Codette with enriched context
-      return this.makeRequest<CodetteChatResponse>(
-        "chat",
-        "/codette/chat",
-        request
-      );
-    } catch (error) {
-      console.error("[CodetteBridge] Chat with context failed:", error);
-      // Fall back to regular chat
-      return this.chat(message, conversationId, perspective);
-    }
   }
 
   /**
