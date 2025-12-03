@@ -1125,6 +1125,58 @@ export class AudioEngine {
   }
 
   /**
+   * Get the audio context for direct Web Audio API access
+   * Used for device routing and advanced audio configuration
+   */
+  getAudioContext(): AudioContext | null {
+    return this.audioContext;
+  }
+
+  /**
+   * Get the master gain node
+   * Used for device output routing
+   */
+  getMasterGain(): GainNode | null {
+    return this.masterGain;
+  }
+
+  /**
+   * Get sample rate of the audio context
+   */
+  getSampleRate(): number {
+    return this.audioContext?.sampleRate || this.fallbackSampleRate;
+  }
+
+  /**
+   * Resume audio context if suspended
+   * Required for user interaction before playback
+   */
+  async resumeAudioContext(): Promise<void> {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      try {
+        await this.audioContext.resume();
+        console.log('Audio context resumed');
+      } catch (error) {
+        console.error('Failed to resume audio context:', error);
+      }
+    }
+  }
+
+  /**
+   * Get the current audio context state
+   */
+  getAudioContextState(): AudioContextState | null {
+    return this.audioContext?.state || null;
+  }
+
+  /**
+   * Get analyser node for frequency analysis and visualization
+   */
+  getAnalyserNode(): AnalyserNode | null {
+    return this.analyser;
+  }
+
+  /**
    * Cleanup and close audio context
    */
   dispose(): void {

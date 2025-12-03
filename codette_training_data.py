@@ -4,10 +4,9 @@ Comprehensive training data and context for Codette AI engine
 Enables full system understanding and intelligent decision-making
 """
 
-from typing import Dict, List, Any, Tuple
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
-import json
 
 # ==================== DOMAIN KNOWLEDGE ====================
 
@@ -34,7 +33,7 @@ class TrackType(Enum):
 @dataclass
 class AudioMetrics:
     """Audio analysis metrics"""
-    peak_level: float  # -60 to 0 dB
+    peak_level: float  # -120 to 0 dB
     rms_level: float   # RMS in dB
     crest_factor: float  # Peak/RMS ratio
     loudness_lufs: float  # Loudness standard
@@ -1662,7 +1661,7 @@ class CodetteTrainingData:
             "description": "Unknown interval"
         })
 
-    def get_production_checklist(self, stage: str = None) -> Dict[str, Any]:
+    def get_production_checklist(self, stage: Optional[str] = None) -> Dict[str, Any]:
         """Get production workflow checklist"""
         checklist = self.production_checklist
         

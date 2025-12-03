@@ -102,6 +102,10 @@ from .reverb import (
     PlateReverb,
     RoomReverb,
 )
+from .chorus import (
+    Chorus,
+    create_chorus,
+)
 
 __all__ = [
     # EQ
@@ -128,6 +132,9 @@ __all__ = [
     "PlateReverb",
     "RoomReverb",
     "HallReverb",
+    # Modulation Effects
+    "Chorus",
+    "create_chorus",
     # "LevelMeter",
     # "SpectrumAnalyzer",
     # "Correlometer",

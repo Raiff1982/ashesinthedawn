@@ -4,22 +4,60 @@ import { useDAW } from '../../contexts/DAWContext';
 import { useAudioDevices } from '../../hooks/useAudioDevices';
 
 export default function AudioSettingsModal() {
-  const { showAudioSettingsModal, closeAudioSettingsModal } = useDAW();
+  const { 
+    showAudioSettingsModal, 
+    closeAudioSettingsModal,
+    selectInputDevice,
+    selectOutputDevice
+  } = useDAW();
   const { 
     inputDevices, 
     outputDevices, 
     selectedInputId, 
     selectedOutputId,
-    selectInputDevice,
-    selectOutputDevice,
+    selectInputDevice: selectInputDeviceHook,
+    selectOutputDevice: selectOutputDeviceHook,
     isLoading,
     error
   } = useAudioDevices();
   
   const [selectedBufferSize, setSelectedBufferSize] = useState('8192');
   const [sampleRate, setSampleRate] = useState('48000');
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [applySuccess, setApplySuccess] = useState(false);
 
   if (!showAudioSettingsModal) return null;
+
+  const handleApplySettings = async () => {
+    try {
+      setApplyError(null);
+      setApplySuccess(false);
+
+      // Apply input device if selected
+      if (selectedInputId) {
+        await selectInputDevice(selectedInputId);
+        selectInputDeviceHook(selectedInputId);
+      }
+
+      // Apply output device if selected
+      if (selectedOutputId) {
+        await selectOutputDevice(selectedOutputId);
+        selectOutputDeviceHook(selectedOutputId);
+      }
+
+      setApplySuccess(true);
+      console.log(`✅ Audio settings applied: ${sampleRate}Hz, Buffer: ${selectedBufferSize}, Input: ${selectedInputId}, Output: ${selectedOutputId}`);
+      
+      // Show success briefly then close
+      setTimeout(() => {
+        closeAudioSettingsModal();
+      }, 800);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setApplyError(message);
+      console.error('Failed to apply audio settings:', err);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -47,6 +85,18 @@ export default function AudioSettingsModal() {
                 ⚠️ {error}
               </div>
             )}
+
+            {applyError && (
+              <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded">
+                ❌ Apply Error: {applyError}
+              </div>
+            )}
+
+            {applySuccess && (
+              <div className="text-xs text-green-400 bg-green-900/20 p-2 rounded">
+                ✅ Audio devices applied successfully!
+              </div>
+            )}
             
             {isLoading ? (
               <div className="text-xs text-gray-400">Loading devices...</div>
@@ -57,7 +107,7 @@ export default function AudioSettingsModal() {
                   <label className="text-xs font-medium text-gray-300">Input (Microphone)</label>
                   <select
                     value={selectedInputId || ''}
-                    onChange={(e) => selectInputDevice(e.target.value)}
+                    onChange={(e) => selectInputDeviceHook(e.target.value)}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-xs text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select input device...</option>
@@ -77,7 +127,7 @@ export default function AudioSettingsModal() {
                   <label className="text-xs font-medium text-gray-300">Output (Speaker)</label>
                   <select
                     value={selectedOutputId || ''}
-                    onChange={(e) => selectOutputDevice(e.target.value)}
+                    onChange={(e) => selectOutputDeviceHook(e.target.value)}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-xs text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select output device...</option>
@@ -184,13 +234,15 @@ export default function AudioSettingsModal() {
             Close
           </button>
           <button
-            onClick={() => {
-              console.log(`Audio settings: ${sampleRate}Hz, Buffer: ${selectedBufferSize}`);
-              closeAudioSettingsModal();
-            }}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+            onClick={handleApplySettings}
+            disabled={applySuccess}
+            className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+              applySuccess
+                ? 'bg-green-600 text-white cursor-default'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
           >
-            Apply & Close
+            {applySuccess ? '✅ Applied!' : 'Apply & Close'}
           </button>
         </div>
       </div>
