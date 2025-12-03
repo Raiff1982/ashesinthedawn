@@ -1,6 +1,6 @@
-/**
+﻿/**
  * AUTOMATION CURVE EDITOR
- * Cubic B�zier curve editor for volume, pan, and parameter automation
+ * Cubic Bézier curve editor for volume, pan, and parameter automation
  */
 
 import { useState, useRef, useEffect } from 'react';

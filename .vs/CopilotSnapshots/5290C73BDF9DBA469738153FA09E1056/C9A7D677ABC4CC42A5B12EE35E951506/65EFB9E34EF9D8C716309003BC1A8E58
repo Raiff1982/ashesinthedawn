@@ -1,4 +1,4 @@
-import { useDAW } from '../contexts/DAWContext';
+﻿import { useDAW } from '../contexts/DAWContext';
 import { Sliders, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useState, useRef, useEffect, memo } from 'react';
 import MixerTile from './MixerTile';

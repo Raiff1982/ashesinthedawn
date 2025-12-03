@@ -1,10 +1,11 @@
-/**
+﻿/**
  * AUTOMATION CURVE EDITOR
- * Cubic B�zier curve editor for volume, pan, and parameter automation
+ * Cubic Bézier curve editor for volume, pan, and parameter automation
  */
 
 import { useState, useRef, useEffect } from 'react';
 import { X, Copy, Trash2 } from 'lucide-react';
+import { Tooltip } from './TooltipProvider';
 
 interface CurvePoint {
   x: number; // 0-1
@@ -267,18 +268,21 @@ export function AutomationCurveEditor({
         </div>
       </div>
 
-      <div
-        className="space-y-2"
-        title="Automation Curve
-Draw an automation curve for this parameter. Click to add points, drag to move, right-click to delete.
-Category: mixer
-Related Functions: Volume Envelope, LFO, MIDI Automation
-Performance Tip: Use fewer points for smoother curves and better performance
-
-Examples:
-Fade in/out: Linear curve from low to high
-Swell: Exponential curve for dynamic swells
-Ducking: Inverse curve for automated ducking"
+      <Tooltip
+        content={{
+          title: 'Automation Curve',
+          description:
+            'Draw an automation curve for this parameter. Click to add points, drag to move, right-click to delete.',
+          category: 'mixer',
+          relatedFunctions: ['Volume Envelope', 'LFO', 'MIDI Automation'],
+          performanceTip: 'Use fewer points for smoother curves and better performance',
+          examples: [
+            'Fade in/out: Linear curve from low to high',
+            'Swell: Exponential curve for dynamic swells',
+            'Ducking: Inverse curve for automated ducking',
+          ],
+        }}
+        position="top"
       >
         <div className="space-y-2">
           <canvas
@@ -322,7 +326,7 @@ Ducking: Inverse curve for automated ducking"
             ))}
           </div>
         </div>
-      </div>
+      </Tooltip>
     </div>
   );
 }
