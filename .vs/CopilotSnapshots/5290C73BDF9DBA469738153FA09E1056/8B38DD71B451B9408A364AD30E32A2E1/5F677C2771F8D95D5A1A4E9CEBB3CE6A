@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Codette AI Unified Server
 Combined FastAPI server for CoreLogic Studio DAW integration
@@ -1232,7 +1232,7 @@ async def chat_endpoint(request: ChatRequest):
                     if daw_specific_advice:
                         response = daw_specific_advice
                         response_source = "daw_template"
-                        ml_scores = {"relevance": 0.88, "specification": 0.92, "certainty": 0.85}
+                        ml_scores = {"relevance": 0.88, "specificity": 0.92, "certainty": 0.85}
                         confidence = 0.88  # High confidence for targeted DAW advice
                         logger.info(f"[DAW ADVICE] ✅ Generated {len(daw_specific_advice)} char response for track: {track_name}")
                         
@@ -1250,7 +1250,7 @@ async def chat_endpoint(request: ChatRequest):
                     response += "💡 Tips:\n" + "\n".join([f"  • {tip}" for tip in func_data.get('tips', [])])
                     confidence = 0.92
                     response_source = "daw_functions"
-                    ml_scores = {"relevance": 0.90, "specification": 0.92, "certainty": 0.90}
+                    ml_scores = {"relevance": 0.90, "specificity": 0.92, "certainty": 0.90}
                     break
             if response:
                 break
@@ -1283,7 +1283,7 @@ async def chat_endpoint(request: ChatRequest):
                         if response:
                             confidence = 0.82
                             response_source = "semantic_search"
-                            ml_scores = {"relevance": 0.82, "specification": 0.85, "certainty": 0.80}
+                            ml_scores = {"relevance": 0.82, "specificity": 0.85, "certainty": 0.80}
                             logger.info(f"[ML] Found semantic match: {response[:50]}... (confidence: {confidence})")
                         
                         # Log all matches for debugging
@@ -1315,16 +1315,17 @@ async def chat_endpoint(request: ChatRequest):
                             if any(word in entry_content for word in ['tip', 'advice', 'know', 'consider']):
                                 relevance += 1
                             
-                            if relevance > best_relevance:
-                                best_match = entry
-                                best_relevance = relevance
-                        
-                        if best_match and best_relevance > 0:
-                            response = best_match.get('content', '')
-                            confidence = 0.72
-                            response_source = "heuristic_search"
-                            ml_scores = {"relevance": 0.72, "specification": 0.70, "certainty": 0.65}
-                            logger.info(f"[ML] Found heuristic match: {response[:50]}...")
+
+                    if best_relevance > 0:
+                        best_match = entry
+                        best_relevance = relevance
+                
+                if best_match:
+                    response = best_match.get('content', '')
+                    confidence = 0.72
+                    response_source = "heuristic_search"
+                    ml_scores = {"relevance": 0.72, "specificity": 0.70, "certainty": 0.65}
+                    logger.info(f"[ML] Found heuristic match: {response[:50]}...")
             
             except Exception as e:
                 logger.warning(f"[ML] Error in semantic/heuristic search: {e}")
@@ -1334,7 +1335,7 @@ async def chat_endpoint(request: ChatRequest):
             response = "I'm still learning! Could you provide more context or rephrase your question?"
             response_source = "fallback"
             confidence = 0.50
-            ml_scores = {"relevance": 0.40, "specification": 0.30, "certainty": 0.20}
+            ml_scores = {"relevance": 0.40, "specificity": 0.30, "certainty": 0.20}
         
         # Return response
         return ChatResponse(
@@ -1354,7 +1355,7 @@ async def chat_endpoint(request: ChatRequest):
             confidence=0.0,
             timestamp=get_timestamp(),
             source="error",
-            ml_score={"relevance": 0.0, "specificity": 0.0, "certainty": 0.0}
+            ml_score={"relevance": 0.0, "specifically": 0.0, "certainty": 0.0}
         )
 
 
