@@ -1,6 +1,6 @@
 /**
  * ADVANCED LEVEL METER
- * Peak, RMS, and loudness display with history graph
+ * Peak, RMS, and loudness display with history graph and real audio data
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -26,25 +26,72 @@ export function LevelMeter({
   const [loudness, setLoudness] = useState(-23);
   const [isClipping, setIsClipping] = useState(false);
   const historyRef = useRef<number[]>([]);
+  const peakHoldRef = useRef(0);
+  const peakDecayRef = useRef(-60);
   const animationRef = useRef<number | null>(null);
 
-  // Simulate level data (would come from audio engine in real implementation)
+  // Convert linear (0-1) to dB
+  const linearToDb = (val: number): number => {
+    return val <= 0.00001 ? -60 : 20 * Math.log10(val);
+  };
+
+  // Get real levels from audio engine and update meters
   useEffect(() => {
     const updateMeters = () => {
-      // Simulate random audio levels
-      const basePeak = -12 + Math.sin(Date.now() / 1000) * 8;
-      const baseRms = basePeak - 12 + Math.random() * 3;
-      const baseLoudness = baseRms - 2 + Math.random() * 2;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const engine = (window as any)?.audioEngineRef?.current;
 
-      setPeak(basePeak);
-      setRms(baseRms);
-      setLoudness(baseLoudness);
-      setIsClipping(basePeak > -2);
+      if (engine && typeof engine.getAudioLevels === 'function') {
+        const levels = engine.getAudioLevels();
+        if (levels) {
+          // Calculate RMS from frequency data
+          let sum = 0;
+          for (let i = 0; i < levels.length; i++) {
+            const normalized = levels[i] / 255;
+            sum += normalized * normalized;
+          }
+          const rmsLinear = Math.sqrt(sum / levels.length);
+          const rmsDb = linearToDb(rmsLinear);
 
-      // Add to history for graph
-      historyRef.current.push(baseRms);
-      if (historyRef.current.length > 100) {
-        historyRef.current.shift();
+          // Find peak in frequency data
+          let peakLinear = 0;
+          for (let i = 0; i < levels.length; i++) {
+            peakLinear = Math.max(peakLinear, levels[i] / 255);
+          }
+          const peakDb = linearToDb(peakLinear);
+
+          // Smooth RMS with exponential moving average
+          const smoothedRms = 0.7 * rms + 0.3 * rmsDb;
+          setRms(smoothedRms);
+
+          // Update peak with hold and decay
+          if (peakDb > peakDecayRef.current) {
+            peakDecayRef.current = peakDb;
+            peakHoldRef.current = 60; // Hold for 60 frames (~1 second at 60fps)
+          } else {
+            peakHoldRef.current--;
+            if (peakHoldRef.current <= 0) {
+              // Decay peak slowly
+              peakDecayRef.current = Math.max(
+                peakDb,
+                peakDecayRef.current - 0.5
+              );
+            }
+          }
+
+          setPeak(peakDecayRef.current);
+          setIsClipping(peakDecayRef.current > -2);
+
+          // Calculate loudness (LUFS approximation)
+          const loudnessDb = smoothedRms - 2;
+          setLoudness(loudnessDb);
+
+          // Add to history for graph
+          historyRef.current.push(smoothedRms);
+          if (historyRef.current.length > 100) {
+            historyRef.current.shift();
+          }
+        }
       }
 
       animationRef.current = requestAnimationFrame(updateMeters);
@@ -57,7 +104,7 @@ export function LevelMeter({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, []);
+  }, [rms]);
 
   // Draw meters
   useEffect(() => {
@@ -67,91 +114,128 @@ export function LevelMeter({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear
-    ctx.fillStyle = '#111827';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const draw = () => {
+      // Clear
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const padding = 10;
-    const meterWidth = (canvas.width - padding * 2) / 2;
-    const meterHeight = canvas.height - padding * 2;
+      const padding = 10;
+      const meterWidth = (canvas.width - padding * 2) / 2;
+      const meterHeight = canvas.height - padding * 2;
 
-    // Helper: Draw a meter bar
-    const drawMeter = (x: number, value: number, min: number, max: number, label: string, color: string) => {
-      // Background
+      // Helper: Draw a smooth meter bar with animation
+      const drawMeter = (
+        x: number,
+        value: number,
+        min: number,
+        max: number,
+        label: string,
+        color: string
+      ) => {
+        // Background
+        ctx.fillStyle = '#1f2937';
+        ctx.fillRect(x, padding, meterWidth, meterHeight);
+
+        // Border
+        ctx.strokeStyle = '#374151';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, padding, meterWidth, meterHeight);
+
+        // Smooth bar fill with gradient
+        const normalizedValue = Math.max(0, Math.min(1, (value - min) / (max - min)));
+        const fillHeight = meterHeight * normalizedValue;
+
+        const gradient = ctx.createLinearGradient(
+          0,
+          meterHeight - fillHeight + padding,
+          0,
+          meterHeight + padding
+        );
+        gradient.addColorStop(0, color);
+        gradient.addColorStop(1, '#' + (parseInt(color.slice(1), 16) >> 1).toString(16));
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x + 2, padding + 2 + meterHeight - fillHeight, meterWidth - 4, fillHeight - 4);
+
+        // Labels with smooth font rendering
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, x + meterWidth / 2, canvas.height - 2);
+        ctx.fillText(value.toFixed(1), x + meterWidth / 2, padding + 12);
+      };
+
+      // Peak meter (red if clipping)
+      drawMeter(
+        padding,
+        peak,
+        -60,
+        6,
+        'PEAK',
+        isClipping ? '#ef4444' : '#fbbf24'
+      );
+
+      // RMS meter (green)
+      drawMeter(
+        padding + meterWidth + 2,
+        rms,
+        -60,
+        6,
+        'RMS',
+        '#4ade80'
+      );
+
+      // Draw smoothly animated history graph at bottom
       ctx.fillStyle = '#1f2937';
-      ctx.fillRect(x, padding, meterWidth, meterHeight);
+      ctx.fillRect(padding, canvas.height - 30, canvas.width - padding * 2, 28);
 
-      // Border
       ctx.strokeStyle = '#374151';
       ctx.lineWidth = 1;
-      ctx.strokeRect(x, padding, meterWidth, meterHeight);
+      ctx.strokeRect(padding, canvas.height - 30, canvas.width - padding * 2, 28);
 
-      // Gradient fill
-      const normalizedValue = Math.max(0, Math.min(1, (value - min) / (max - min)));
-      const fillHeight = meterHeight * normalizedValue;
+      // Plot history with smooth curve
+      const graphWidth = canvas.width - padding * 2;
+      const graphHeight = 26;
+      const pointSpacing = graphWidth / (historyRef.current.length || 1);
 
-      const gradient = ctx.createLinearGradient(0, meterHeight - fillHeight + padding, 0, meterHeight + padding);
-      gradient.addColorStop(0, color);
-      gradient.addColorStop(1, '#' + (parseInt(color.slice(1), 16) >> 1).toString(16));
+      ctx.strokeStyle = '#60a5fa';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
 
-      ctx.fillStyle = gradient;
-      ctx.fillRect(x + 2, padding + 2 + meterHeight - fillHeight, meterWidth - 4, fillHeight - 4);
+      historyRef.current.forEach((value, idx) => {
+        const x = padding + idx * pointSpacing;
+        const normalizedValue = (value + 60) / 66;
+        const y = canvas.height - 30 + graphHeight * (1 - normalizedValue);
 
-      // Labels
-      ctx.fillStyle = '#9ca3af';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(label, x + meterWidth / 2, canvas.height - 2);
-      ctx.fillText(value.toFixed(1), x + meterWidth / 2, padding + 12);
+        if (idx === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+
+      // Subtle grid lines for reference
+      ctx.strokeStyle = '#1f293760';
+      ctx.lineWidth = 0.5;
+      for (let i = -60; i <= 6; i += 12) {
+        const normalizedValue = (i + 60) / 66;
+        const y = canvas.height - 30 + graphHeight * (1 - normalizedValue);
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(canvas.width - padding, y);
+        ctx.stroke();
+      }
     };
 
-    // Peak meter (red if clipping)
-    drawMeter(padding, peak, -60, 6, 'PEAK', isClipping ? '#ef4444' : '#fbbf24');
+    // Continuous animation
+    const animFrame = setInterval(() => {
+      draw();
+    }, 16); // ~60fps
 
-    // RMS meter (green)
-    drawMeter(padding + meterWidth + 2, rms, -60, 6, 'RMS', '#4ade80');
-
-    // Draw history graph at bottom
-    ctx.fillStyle = '#1f2937';
-    ctx.fillRect(padding, canvas.height - 30, canvas.width - padding * 2, 28);
-
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(padding, canvas.height - 30, canvas.width - padding * 2, 28);
-
-    // Plot history
-    const graphWidth = canvas.width - padding * 2;
-    const graphHeight = 26;
-    const pointSpacing = graphWidth / (historyRef.current.length || 1);
-
-    ctx.strokeStyle = '#60a5fa';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-
-    historyRef.current.forEach((value, idx) => {
-      const x = padding + idx * pointSpacing;
-      const normalizedValue = (value + 60) / 66;
-      const y = canvas.height - 30 + graphHeight * (1 - normalizedValue);
-
-      if (idx === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-    ctx.stroke();
-
-    // Grid lines on history
-    ctx.strokeStyle = '#1f293760';
-    ctx.lineWidth = 0.5;
-    for (let i = -60; i <= 6; i += 12) {
-      const normalizedValue = (i + 60) / 66;
-      const y = canvas.height - 30 + graphHeight * (1 - normalizedValue);
-      ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(canvas.width - padding, y);
-      ctx.stroke();
-    }
+    return () => {
+      clearInterval(animFrame);
+    };
   }, [peak, rms, loudness, isClipping]);
 
   return (

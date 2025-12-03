@@ -21,103 +21,85 @@ export function SpectrumAnalyzer({
   fftSize = 2048,
 }: SpectrumAnalyzerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   const peaksRef = useRef<number[]>([]);
-  const animationRef = useRef<number | null>(null);
+  const frequencyDataRef = useRef<Uint8Array>(new Uint8Array(128));
 
+  // Main render loop with real audio data
   useEffect(() => {
-    // Initialize analyser from audio context
-    // This will be connected to the track's output in real implementation
-    const initializeAnalyser = () => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const engine = (window as any)?.audioEngineRef?.current;
-        if (engine?.audioContext) {
-          const analyser = engine.audioContext.createAnalyser();
-          analyser.fftSize = fftSize;
-          analyserRef.current = analyser;
-          dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
-          peaksRef.current = new Array(analyser.frequencyBinCount).fill(0);
-        }
-      } catch (err) {
-        console.error('Failed to initialize spectrum analyzer:', err);
-      }
-    };
+    if (!canvasRef.current) return;
 
-    initializeAnalyser();
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [fftSize]);
-
-  // Draw spectrum
-  useEffect(() => {
     const draw = () => {
-      if (!canvasRef.current || !analyserRef.current || !dataArrayRef.current) {
-        animationRef.current = requestAnimationFrame(draw);
-        return;
+      // Get real frequency data from audio engine
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const engine = (window as any)?.audioEngineRef?.current;
+      if (engine && typeof engine.getAudioLevels === 'function') {
+        const levels = engine.getAudioLevels();
+        if (levels) {
+          frequencyDataRef.current = levels;
+        }
       }
 
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        animationRef.current = requestAnimationFrame(draw);
-        return;
-      }
-
-      analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-
-      // Clear canvas
+      // Clear canvas with dark background
       ctx.fillStyle = '#111827';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const bins = dataArrayRef.current.length;
+      const data = frequencyDataRef.current;
+      const bins = Math.min(data.length, canvas.width);
       const barWidth = canvas.width / bins;
 
-      // Update peaks (slow decay)
+      // Update and draw peaks with decay
       for (let i = 0; i < bins; i++) {
-        peaksRef.current[i] = Math.max(
-          dataArrayRef.current[i],
-          peaksRef.current[i] * 0.95
-        );
+        const value = data[i] || 0;
+
+        // Initialize or update peak
+        if (!peaksRef.current[i]) {
+          peaksRef.current[i] = value;
+        } else {
+          // Peaks decay smoothly (0.92 = slow decay)
+          peaksRef.current[i] = Math.max(value, peaksRef.current[i] * 0.92);
+        }
       }
 
-      // Draw frequency bars with gradient
+      // Draw frequency bars with smooth animation
       for (let i = 0; i < bins; i++) {
-        const value = dataArrayRef.current[i];
-        const peak = peaksRef.current[i];
+        const value = frequencyDataRef.current[i] || 0;
+        const peak = peaksRef.current[i] || 0;
         const barHeight = (value / 255) * canvas.height;
         const peakHeight = (peak / 255) * canvas.height;
 
         const x = i * barWidth;
 
-        // Color gradient: green ? yellow ? red
+        // Color gradient based on frequency: green (bass) ? yellow (mids) ? red (treble)
         let hue;
-        if (i < bins * 0.3) {
-          hue = 120; // Green (low frequencies)
-        } else if (i < bins * 0.7) {
-          hue = 60; // Yellow (mid frequencies)
+        const freqRatio = i / bins;
+        if (freqRatio < 0.2) {
+          hue = 120; // Green (20-1600Hz for 20kHz audio)
+        } else if (freqRatio < 0.5) {
+          hue = 60; // Yellow (1600-8000Hz)
+        } else if (freqRatio < 0.8) {
+          hue = 30; // Orange (8000-16000Hz)
         } else {
-          hue = 0; // Red (high frequencies)
+          hue = 0; // Red (16000-20000Hz+)
         }
 
-        // Bar
+        // Draw bar with gradient
         const gradient = ctx.createLinearGradient(0, barHeight, 0, canvas.height);
         gradient.addColorStop(0, `hsl(${hue}, 100%, 45%)`);
         gradient.addColorStop(1, `hsl(${hue}, 100%, 25%)`);
         ctx.fillStyle = gradient;
         ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
 
-        // Peak line
+        // Draw smooth peak hold line
         ctx.fillStyle = `hsl(${hue}, 100%, 70%)`;
         ctx.fillRect(x, canvas.height - peakHeight, barWidth - 1, 2);
       }
 
-      // Draw frequency labels
+      // Draw frequency reference labels
       ctx.fillStyle = '#6b7280';
       ctx.font = '10px monospace';
       ctx.textAlign = 'center';
@@ -130,14 +112,14 @@ export function SpectrumAnalyzer({
         ctx.fillText(frequencies[idx], x, canvas.height - 2);
       });
 
-      animationRef.current = requestAnimationFrame(draw);
+      animationFrameRef.current = requestAnimationFrame(draw);
     };
 
-    animationRef.current = requestAnimationFrame(draw);
+    animationFrameRef.current = requestAnimationFrame(draw);
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
   }, []);
