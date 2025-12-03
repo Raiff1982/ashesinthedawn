@@ -905,7 +905,7 @@ async def chat_endpoint(request: ChatRequest):
         confidence = 0.75
         perspective_source = "fallback"
         response_source = "fallback"  # Track where response comes from: "daw_template", "semantic_search", "codette_engine", etc.
-        ml_scores = {"relevance": 0.65, "specificity": 0.60, "certainty": 0.55}  # Default ML confidence scores
+        ml_scores = {"relevance": 0.65, "specification": 0.60, "certainty": 0.55}  # Default ML confidence scores
         
         # Get Supabase context (code snippets, files, chat history)
         supabase_context = None
@@ -1235,7 +1235,7 @@ async def chat_endpoint(request: ChatRequest):
                         ml_scores = {"relevance": 0.88, "specification": 0.92, "certainty": 0.85}
                         confidence = 0.88  # High confidence for targeted DAW advice
                         logger.info(f"[DAW ADVICE] ✅ Generated {len(daw_specific_advice)} char response for track: {track_name}")
-            
+                        
             except Exception as e:
                 logger.warning(f"[DAW ADVICE] ❌ Error generating advice: {e}")
         # ============ END DAW-SPECIFIC ADVICE (PRIORITY) ============
@@ -1427,154 +1427,204 @@ async def get_transport_state():
 
 
 # ============================================================================
-# WEBSOCKET ENDPOINTS (Real-Time Transport & Communication)
+# WEBSOCKET ENDPOINTS (FIX FOR 403/404 ERRORS)
 # ============================================================================
 
 @app.websocket("/ws")
-async def websocket_general(ws: WebSocket):
-    """General WebSocket endpoint for real-time communication"""
-    await ws.accept()
-    logger.info("✅ WebSocket client connected to /ws")
-    transport_manager.connected_clients.add(ws)
-
+async def websocket_general(websocket: WebSocket):
+    """General WebSocket endpoint for real-time state updates"""
     try:
-        while True:
-            # Broadcast transport state every 33ms (30 Hz)
-            await asyncio.sleep(0.033)
-
-            state = transport_manager.get_state()
-            try:
-                await ws.send_json({
-                    "type": "state",
-                    "data": {
-                        "playing": state.playing,
-                        "time_seconds": state.time_seconds,
-                        "sample_pos": state.sample_pos,
-                        "bpm": state.bpm,
-                        "beat_pos": state.beat_pos,
-                        "timestamp_ms": time.time() * 1000
-                    }
-                })
-            except Exception as send_err:
-                logger.warning(f"Failed to send WebSocket state: {send_err}")
-                break
-
-    except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected from /ws")
-        transport_manager.connected_clients.discard(ws)
+        await websocket.accept()
     except Exception as e:
-        logger.error(f"WebSocket error on /ws: {e}")
-        transport_manager.connected_clients.discard(ws)
-
-
-@app.websocket("/ws/transport")
-async def websocket_transport(ws: WebSocket):
-    """Transport control WebSocket endpoint - broadcast + command handling"""
-    await ws.accept()
-    logger.info("✅ WebSocket client connected to /ws/transport")
-    transport_manager.connected_clients.add(ws)
-
+        logger.error(f"Failed to accept WebSocket on /ws: {e}")
+        return
+    
+    transport_manager.connected_clients.add(websocket)
+    logger.info(f"✅ WebSocket client connected to /ws. Total clients: {len(transport_manager.connected_clients)}")
+    
     try:
-        # Start broadcast task
-        async def broadcast_state():
-            while True:
-                await asyncio.sleep(0.033)  # 30 Hz
-                state = transport_manager.get_state()
-                try:
-                    await ws.send_json({
-                        "type": "state",
-                        "data": {
-                            "playing": state.playing,
-                            "time_seconds": state.time_seconds,
-                            "sample_pos": state.sample_pos,
-                            "bpm": state.bpm,
-                            "beat_pos": state.beat_pos,
-                        }
-                    })
-                except:
-                    break
-
-        # Start broadcast in background
-        broadcast_task = asyncio.create_task(broadcast_state())
-
-        # Handle incoming commands
-        while True:
-            try:
-                data = await ws.receive_json()
-                command = data.get("type")
-                
-                if command == "play":
-                    transport_manager.play()
-                    logger.debug("Transport: PLAY")
-                elif command == "stop":
-                    transport_manager.stop()
-                    logger.debug("Transport: STOP")
-                elif command == "pause":
-                    transport_manager.pause()
-                    logger.debug("Transport: PAUSE")
-                elif command == "resume":
-                    transport_manager.resume()
-                    logger.debug("Transport: RESUME")
-                elif command == "seek":
-                    time_seconds = data.get("time_seconds", 0)
-                    transport_manager.seek(time_seconds)
-                    logger.debug(f"Transport: SEEK to {time_seconds}s")
-                elif command == "tempo":
-                    bpm = data.get("bpm", 120)
-                    transport_manager.set_tempo(bpm)
-                    logger.debug(f"Transport: SET TEMPO to {bpm} BPM")
-                    
-            except Exception as recv_err:
-                logger.debug(f"WebSocket receive error: {recv_err}")
-                break
-
-    except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected from /ws/transport")
-        transport_manager.connected_clients.discard(ws)
+        last_send = time.time()
+        send_interval = 1.0 / 60.0  # 60 FPS update rate
+        
+        # Send initial state
         try:
-            broadcast_task.cancel()
-        except:
-            pass
-    except Exception as e:
-        logger.error(f"WebSocket error on /ws/transport: {e}")
-        transport_manager.connected_clients.discard(ws)
+            state = transport_manager.get_state()
+            await websocket.send_json({
+                "type": "state",
+                "data": state.dict()
+            })
+        except Exception as e:
+            logger.error(f"Failed to send initial state on /ws: {e}")
+            return
+        
+        while True:
+            try:
+                # Non-blocking receive with very short timeout
+                try:
+                    data = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=0.001
+                    )
+                    try:
+                        message = json.loads(data)
+                        
+                        # Handle incoming commands
+                        if message.get("type") == "play":
+                            transport_manager.play()
+                        elif message.get("type") == "stop":
+                            transport_manager.stop()
+                        elif message.get("type") == "pause":
+                            transport_manager.pause()
+                        elif message.get("type") == "resume":
+                            transport_manager.resume()
+                        elif message.get("type") == "seek":
+                            transport_manager.seek(message.get("time_seconds", 0))
+                        elif message.get("type") == "tempo":
+                            transport_manager.set_tempo(message.get("bpm", 120))
+                        elif message.get("type") == "loop":
+                            transport_manager.set_loop(
+                                message.get("enabled", False),
+                                message.get("start_seconds", 0),
+                                message.get("end_seconds", 10)
+                            )
+                    except json.JSONDecodeError:
+                        pass
+                    
+                except asyncio.TimeoutError:
+                    pass
+                
+                # Send state at regular interval
+                current_time = time.time()
+                if current_time - last_send >= send_interval:
+                    try:
+                        state = transport_manager.get_state()
+                        await websocket.send_json({
+                            "type": "state",
+                            "data": state.dict()
+                        })
+                        last_send = current_time
+                    except RuntimeError as e:
+                        logger.error(f"Connection closed on /ws: {e}")
+                        break
+                    except Exception as e:
+                        logger.error(f"Unexpected error in /ws loop: {e}")
+                        break
+                
+                # Small sleep to prevent CPU spinning
+                await asyncio.sleep(0.001)
+                
+            except WebSocketDisconnect:
+                logger.info("✅ WebSocket /ws disconnected")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error in /ws loop: {e}")
+                break
+    
+    finally:
+        try:
+            transport_manager.connected_clients.discard(websocket)
+            logger.info(f"✅ WebSocket cleanup on /ws. Remaining clients: {len(transport_manager.connected_clients)}")
+        except Exception as e:
+            logger.error(f"Error during /ws cleanup: {e}")
 
 
 @app.websocket("/ws/transport/clock")
-async def websocket_transport_clock(ws: WebSocket):
-    """Transport clock sync endpoint (30 Hz playhead updates)"""
-    await ws.accept()
-    logger.info("✅ WebSocket client connected to /ws/transport/clock")
-    transport_manager.connected_clients.add(ws)
-
+async def websocket_transport_clock(websocket: WebSocket):
+    """WebSocket endpoint for DAW transport clock synchronization"""
     try:
-        while True:
-            # Broadcast playhead state every 33ms (30 Hz)
-            await asyncio.sleep(0.033)
-
-            state = transport_manager.get_state()
-            try:
-                await ws.send_json({
-                    "playing": state.playing,
-                    "time_seconds": state.time_seconds,
-                    "sample_pos": state.sample_pos,
-                    "bpm": state.bpm,
-                    "beat_pos": state.beat_pos,
-                    "loop_enabled": state.loop_enabled,
-                    "loop_start_seconds": state.loop_start_seconds,
-                    "loop_end_seconds": state.loop_end_seconds,
-                    "timestamp_ms": time.time() * 1000
-                })
-            except Exception as send_err:
-                logger.debug(f"Failed to broadcast clock state: {send_err}")
-                break
-
-    except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected from /ws/transport/clock")
-        transport_manager.connected_clients.discard(ws)
+        await websocket.accept()
     except Exception as e:
-        logger.error(f"WebSocket error on /ws/transport/clock: {e}")
-        transport_manager.connected_clients.discard(ws)
+        logger.error(f"Failed to accept WebSocket on /ws/transport/clock: {e}")
+        return
+    
+    transport_manager.connected_clients.add(websocket)
+    logger.info(f"✅ WebSocket client connected to /ws/transport/clock. Total clients: {len(transport_manager.connected_clients)}")
+    
+    try:
+        last_send = time.time()
+        send_interval = 1.0 / 60.0  # 60 FPS update rate
+        
+        # Send initial state
+        try:
+            state = transport_manager.get_state()
+            await websocket.send_json({
+                "type": "state",
+                "data": state.dict()
+            })
+        except Exception as e:
+            logger.error(f"Failed to send initial state on /ws/transport/clock: {e}")
+            return
+        
+        while True:
+            try:
+                # Non-blocking receive with very short timeout
+                try:
+                    data = await asyncio.wait_for(
+                        websocket.receive_text(),
+                        timeout=0.001
+                    )
+                    try:
+                        message = json.loads(data)
+                        
+                        # Handle incoming commands
+                        if message.get("type") == "play":
+                            transport_manager.play()
+                        elif message.get("type") == "stop":
+                            transport_manager.stop()
+                        elif message.get("type") == "pause":
+                            transport_manager.pause()
+                        elif message.get("type") == "resume":
+                            transport_manager.resume()
+                        elif message.get("type") == "seek":
+                            transport_manager.seek(message.get("time_seconds", 0))
+                        elif message.get("type") == "tempo":
+                            transport_manager.set_tempo(message.get("bpm", 120))
+                        elif message.get("type") == "loop":
+                            transport_manager.set_loop(
+                                message.get("enabled", False),
+                                message.get("start_seconds", 0),
+                                message.get("end_seconds", 10)
+                            )
+                    except json.JSONDecodeError:
+                        pass
+                    
+                except asyncio.TimeoutError:
+                    pass
+                
+                # Send state at regular interval
+                current_time = time.time()
+                if current_time - last_send >= send_interval:
+                    try:
+                        state = transport_manager.get_state()
+                        await websocket.send_json({
+                            "type": "state",
+                            "data": state.dict()
+                        })
+                        last_send = current_time
+                    except RuntimeError as e:
+                        logger.error(f"Connection closed on /ws/transport/clock: {e}")
+                        break
+                    except Exception as e:
+                        logger.error(f"Unexpected error in /ws/transport/clock loop: {e}")
+                        break
+                
+                # Very minimal sleep
+                await asyncio.sleep(0.001)
+            
+            except asyncio.CancelledError:
+                logger.info("✅ WebSocket task cancelled on /ws/transport/clock")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error in /ws/transport/clock: {e}")
+                break
+    
+    except WebSocketDisconnect:
+        logger.info("✅ WebSocket client disconnected from /ws/transport/clock (clean disconnect)")
+    except Exception as e:
+        logger.error(f"WebSocket handler error on /ws/transport/clock: {e}")
+    finally:
+        transport_manager.connected_clients.discard(websocket)
+        logger.info(f"✅ WebSocket cleanup on /ws/transport/clock. Remaining clients: {len(transport_manager.connected_clients)}")
 
 
 # ============================================================================
@@ -1591,6 +1641,11 @@ async def startup_event():
     logger.info(f"Training Available: {TRAINING_AVAILABLE}")
     logger.info(f"Supabase Available: {SUPABASE_AVAILABLE}")
     logger.info(f"Redis Available: {REDIS_AVAILABLE}")
+    logger.info("="*80)
+    logger.info(f"🌐 WebSocket: ws://localhost:8000/ws")
+    logger.info(f"🌐 WebSocket: ws://localhost:8000/ws/transport/clock")
+    logger.info(f"📡 API Docs: http://localhost:8000/docs")
+    logger.info("="*80)
 
 
 @app.on_event("shutdown")
@@ -1599,23 +1654,3 @@ async def shutdown_event():
     logger.info("="*80)
     logger.info("Codette AI Unified Server Shutting Down")
     logger.info("="*80)
-
-
-# ============================================================================
-# MAIN
-# ============================================================================
-
-if __name__ == "__main__":
-    import uvicorn
-    
-    host = os.getenv('CODETTE_HOST', '0.0.0.0')
-    port = int(os.getenv('CODETTE_PORT', 8000))
-    
-    logger.info(f"Starting Codette AI Unified Server on {host}:{port}")
-    
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level="info"
-    )
