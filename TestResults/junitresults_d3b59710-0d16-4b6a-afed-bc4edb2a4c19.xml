@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="6" failures="0" skipped="0" tests="6" time="1.145" timestamp="2025-12-03T07:39:56.998520-06:00" hostname="DESKTOP-KRECVD1"><testcase classname="" name="ashesinthedawn-main.Codette.tests.test_auth" file="ashesinthedawn-main/Codette/tests/test_auth.py" time="0.000"><error message="collection failure">ImportError while importing test module 'I:\ashesinthedawn\ashesinthedawn-main\Codette\tests\test_auth.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.2544.0_x64__qbz5n2kfra8p0\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ashesinthedawn-main\Codette\tests\test_auth.py:1: in &lt;module&gt;
+    from cognitive_auth import CognitiveAuthManager
+E   ModuleNotFoundError: No module named 'cognitive_auth'</error></testcase><testcase classname="" name="Codette.tests.test_cocoon_manager" file="Codette/tests/test_cocoon_manager.py" time="0.000"><error message="collection failure">ImportError while importing test module 'I:\ashesinthedawn\Codette\tests\test_cocoon_manager.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.2544.0_x64__qbz5n2kfra8p0\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Codette\tests\test_cocoon_manager.py:6: in &lt;module&gt;
+    from utils.cocoon_manager import CocoonManager
+E   ModuleNotFoundError: No module named 'utils'</error></testcase><testcase classname="" name="Codette.tests.test_grounding_truth" file="Codette/tests/test_grounding_truth.py" time="0.000"><error message="collection failure">ImportError while importing test module 'I:\ashesinthedawn\Codette\tests\test_grounding_truth.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.2544.0_x64__qbz5n2kfra8p0\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Codette\tests\test_grounding_truth.py:2: in &lt;module&gt;
+    from knowledge_base.grounding_truth import GroundingTruth
+E   ModuleNotFoundError: No module named 'knowledge_base'</error></testcase><testcase classname="" name="Codette.tests.test_response_processor" file="Codette/tests/test_response_processor.py" time="0.000"><error message="collection failure">ImportError while importing test module 'I:\ashesinthedawn\Codette\tests\test_response_processor.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.2544.0_x64__qbz5n2kfra8p0\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Codette\tests\test_response_processor.py:3: in &lt;module&gt;
+    from utils.response_processor import ResponseProcessor
+E   ModuleNotFoundError: No module named 'utils'</error></testcase><testcase classname="" name="Codette.tests.test_response_verifier" file="Codette/tests/test_response_verifier.py" time="0.000"><error message="collection failure">ImportError while importing test module 'I:\ashesinthedawn\Codette\tests\test_response_verifier.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.2544.0_x64__qbz5n2kfra8p0\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Codette\tests\test_response_verifier.py:3: in &lt;module&gt;
+    from utils.response_verifier import ResponseVerifier
+E   ModuleNotFoundError: No module named 'utils'</error></testcase><testcase classname="" name="" file="" time="0.000"><error message="collection failure">C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\Extensions\Microsoft\Python\Core\testlauncher.py:159: in collectwapper
+    arg_zero = exc[0] if isinstance(exc, list) else exc.args[0]
+               ^^^^^^
+E   IndexError: list index out of range</error></testcase></testsuite></testsuites>
