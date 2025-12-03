@@ -3,8 +3,15 @@
   "DevContainersInfoBarHidden": true,
   "ExpandedNodes": [
     "",
-    "\\src",
-    "\\src\\components"
+    "\\.bolt",
+    "\\.github",
+    "\\ashesinthedawn-main",
+    "\\ashesinthedawn-main\\Codette",
+    "\\ashesinthedawn-main\\Codette\\core",
+    "\\ashesinthedawn-main\\Codette\\src",
+    "\\ashesinthedawn-main\\Codette\\src\\tests",
+    "\\ashesinthedawn-main\\Codette\\src\\tests\\verification",
+    "\\daw_core"
   ],
   "PreviewInSolutionExplorer": false
 }
