@@ -1,8 +1,6 @@
-import os
-import json
 import logging
-from typing import Optional, Dict, Any
 import torch
+from typing import Optional, Tuple
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
@@ -51,21 +49,10 @@ class ModelManager:
                 logger.warning(f"Failed to load {model_id}: {e}")
                 continue
         
+        logger.error("No language model could be loaded")
         return False
-                torch_dtype=getattr(torch, self.config.get('torch_dtype', 'float32'))
-            )
             
-            self.current_model.eval()
-            self.current_model_name = model_name
-            
-            logger.info(f"Successfully loaded model {model_name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error loading model {model_name}: {e}")
-            return False
-            
-    def get_current_model(self) -> tuple:
+    def get_current_model(self) -> Tuple[Optional[AutoModelForCausalLM], Optional[AutoTokenizer]]:
         """Get currently loaded model and tokenizer."""
         return self.current_model, self.current_tokenizer
         
