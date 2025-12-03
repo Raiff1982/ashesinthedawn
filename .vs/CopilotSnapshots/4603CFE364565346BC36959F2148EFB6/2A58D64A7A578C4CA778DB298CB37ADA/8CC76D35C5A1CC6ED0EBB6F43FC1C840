@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Codette AI Unified Server
 Combined FastAPI server for CoreLogic Studio DAW integration
@@ -944,7 +944,7 @@ async def chat_endpoint(request: ChatRequest):
                 if not context_cached:
                     logger.info(f"Retrieving fresh context from Supabase for: {request.message[:50]}...")
                     context_result = supabase_client.rpc(
-                        'public.get_codette_context_json',
+                        'get_codette_context',
                         {
                             'input_prompt': request.message,
                             'optionally_filename': None

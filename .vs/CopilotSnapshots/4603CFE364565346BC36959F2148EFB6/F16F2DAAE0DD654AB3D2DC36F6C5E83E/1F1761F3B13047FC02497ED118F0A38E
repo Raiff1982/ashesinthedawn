@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Codette AI Unified Server
 Combined FastAPI server for CoreLogic Studio DAW integration
@@ -944,35 +944,14 @@ async def chat_endpoint(request: ChatRequest):
                 if not context_cached:
                     logger.info(f"Retrieving fresh context from Supabase for: {request.message[:50]}...")
                     context_result = supabase_client.rpc(
-                        'public.get_codette_context_json',
+                        'get_codette_context',
                         {
                             'input_prompt': request.message,
                             'optionally_filename': None
                         }
                     ).execute()
                     
-                    # Normalize RPC result to handle different response shapes
-                    raw = context_result.data
-                    logger.debug(f"get_codette_context raw (type={type(raw)}): {repr(raw)[:1000]}")
-                    
-                    # Normalize to a dict for downstream code
-                    if isinstance(raw, dict):
-                        supabase_context = raw
-                    elif isinstance(raw, list):
-                        if len(raw) == 0:
-                            supabase_context = {}
-                        else:
-                            # If RPC returns a list of dicts, prefer the first element
-                            first = raw[0]
-                            if isinstance(first, dict):
-                                supabase_context = first
-                            else:
-                                # If elements are primitives, wrap them under a key
-                                supabase_context = {"items": raw}
-                    else:
-                        supabase_context = {}
-                    
-                    logger.info(f"Normalized context (type={type(supabase_context)}): {repr(supabase_context)[:500]}")
+                    supabase_context = context_result.data
                     
                     # Cache the result in both memory and Redis
                     if supabase_context:
