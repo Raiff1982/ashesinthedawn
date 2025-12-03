@@ -4,6 +4,7 @@ import { Trash2, Maximize2, Plus, X, Minimize } from "lucide-react";
 import { Tooltip } from "./TooltipProvider";
 import VolumeFader from "./VolumeFader";
 import TrackMeter from "./TrackMeter";
+import { AdvancedMixerControls } from "./AdvancedMixerControls";
 
 interface MixerTileProps {
   track: Track;
@@ -49,7 +50,7 @@ export default function MixerTile({
     width: 0,
     height: 0,
   });
-  const [activeTab, setActiveTab] = useState<"controls" | "plugins">(
+  const [activeTab, setActiveTab] = useState<"controls" | "plugins" | "advanced">(
     "controls"
   );
   const [showPluginMenu, setShowPluginMenu] = useState(false);
@@ -346,6 +347,16 @@ export default function MixerTile({
             Vol
           </button>
           <button
+            onClick={() => setActiveTab("advanced")}
+            className={`flex-1 py-1 text-xs rounded font-semibold transition ${
+              activeTab === "advanced"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+            }`}
+          >
+            Adv
+          </button>
+          <button
             onClick={() => {
               setActiveTab("plugins");
               onTogglePluginRack?.();
@@ -423,6 +434,12 @@ export default function MixerTile({
                 showValue={true}
               />
             </div>
+          ) : activeTab === "advanced" ? (
+            // ADVANCED TAB: STEREO WIDTH, PHASE, AUTOMATION, SENDS, ROUTING
+            <AdvancedMixerControls
+              track={track}
+              onUpdate={onUpdate}
+            />
           ) : (
             // PLUGINS TAB: PLUGIN LIST
             <div className="flex-1 overflow-y-auto flex flex-col gap-2 w-full">
