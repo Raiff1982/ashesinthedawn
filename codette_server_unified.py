@@ -1235,7 +1235,7 @@ async def chat_endpoint(request: ChatRequest):
                         ml_scores = {"relevance": 0.88, "specification": 0.92, "certainty": 0.85}
                         confidence = 0.88  # High confidence for targeted DAW advice
                         logger.info(f"[DAW ADVICE] ✅ Generated {len(daw_specific_advice)} char response for track: {track_name}")
-                        
+            
             except Exception as e:
                 logger.warning(f"[DAW ADVICE] ❌ Error generating advice: {e}")
         # ============ END DAW-SPECIFIC ADVICE (PRIORITY) ============
@@ -1354,7 +1354,7 @@ async def chat_endpoint(request: ChatRequest):
             confidence=0.0,
             timestamp=get_timestamp(),
             source="error",
-            ml_score={"relevance": 0.0, "specificity": 0.0, "certainty": 0.0}
+            ml_score={"relevance": 0.0, "specification": 0.0, "certainty": 0.0}
         )
 
 
@@ -1424,6 +1424,157 @@ async def get_transport_state():
     except Exception as e:
         logger.error(f"ERROR in /transport/state: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# WEBSOCKET ENDPOINTS (Real-Time Transport & Communication)
+# ============================================================================
+
+@app.websocket("/ws")
+async def websocket_general(ws: WebSocket):
+    """General WebSocket endpoint for real-time communication"""
+    await ws.accept()
+    logger.info("✅ WebSocket client connected to /ws")
+    transport_manager.connected_clients.add(ws)
+
+    try:
+        while True:
+            # Broadcast transport state every 33ms (30 Hz)
+            await asyncio.sleep(0.033)
+
+            state = transport_manager.get_state()
+            try:
+                await ws.send_json({
+                    "type": "state",
+                    "data": {
+                        "playing": state.playing,
+                        "time_seconds": state.time_seconds,
+                        "sample_pos": state.sample_pos,
+                        "bpm": state.bpm,
+                        "beat_pos": state.beat_pos,
+                        "timestamp_ms": time.time() * 1000
+                    }
+                })
+            except Exception as send_err:
+                logger.warning(f"Failed to send WebSocket state: {send_err}")
+                break
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected from /ws")
+        transport_manager.connected_clients.discard(ws)
+    except Exception as e:
+        logger.error(f"WebSocket error on /ws: {e}")
+        transport_manager.connected_clients.discard(ws)
+
+
+@app.websocket("/ws/transport")
+async def websocket_transport(ws: WebSocket):
+    """Transport control WebSocket endpoint - broadcast + command handling"""
+    await ws.accept()
+    logger.info("✅ WebSocket client connected to /ws/transport")
+    transport_manager.connected_clients.add(ws)
+
+    try:
+        # Start broadcast task
+        async def broadcast_state():
+            while True:
+                await asyncio.sleep(0.033)  # 30 Hz
+                state = transport_manager.get_state()
+                try:
+                    await ws.send_json({
+                        "type": "state",
+                        "data": {
+                            "playing": state.playing,
+                            "time_seconds": state.time_seconds,
+                            "sample_pos": state.sample_pos,
+                            "bpm": state.bpm,
+                            "beat_pos": state.beat_pos,
+                        }
+                    })
+                except:
+                    break
+
+        # Start broadcast in background
+        broadcast_task = asyncio.create_task(broadcast_state())
+
+        # Handle incoming commands
+        while True:
+            try:
+                data = await ws.receive_json()
+                command = data.get("type")
+                
+                if command == "play":
+                    transport_manager.play()
+                    logger.debug("Transport: PLAY")
+                elif command == "stop":
+                    transport_manager.stop()
+                    logger.debug("Transport: STOP")
+                elif command == "pause":
+                    transport_manager.pause()
+                    logger.debug("Transport: PAUSE")
+                elif command == "resume":
+                    transport_manager.resume()
+                    logger.debug("Transport: RESUME")
+                elif command == "seek":
+                    time_seconds = data.get("time_seconds", 0)
+                    transport_manager.seek(time_seconds)
+                    logger.debug(f"Transport: SEEK to {time_seconds}s")
+                elif command == "tempo":
+                    bpm = data.get("bpm", 120)
+                    transport_manager.set_tempo(bpm)
+                    logger.debug(f"Transport: SET TEMPO to {bpm} BPM")
+                    
+            except Exception as recv_err:
+                logger.debug(f"WebSocket receive error: {recv_err}")
+                break
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected from /ws/transport")
+        transport_manager.connected_clients.discard(ws)
+        try:
+            broadcast_task.cancel()
+        except:
+            pass
+    except Exception as e:
+        logger.error(f"WebSocket error on /ws/transport: {e}")
+        transport_manager.connected_clients.discard(ws)
+
+
+@app.websocket("/ws/transport/clock")
+async def websocket_transport_clock(ws: WebSocket):
+    """Transport clock sync endpoint (30 Hz playhead updates)"""
+    await ws.accept()
+    logger.info("✅ WebSocket client connected to /ws/transport/clock")
+    transport_manager.connected_clients.add(ws)
+
+    try:
+        while True:
+            # Broadcast playhead state every 33ms (30 Hz)
+            await asyncio.sleep(0.033)
+
+            state = transport_manager.get_state()
+            try:
+                await ws.send_json({
+                    "playing": state.playing,
+                    "time_seconds": state.time_seconds,
+                    "sample_pos": state.sample_pos,
+                    "bpm": state.bpm,
+                    "beat_pos": state.beat_pos,
+                    "loop_enabled": state.loop_enabled,
+                    "loop_start_seconds": state.loop_start_seconds,
+                    "loop_end_seconds": state.loop_end_seconds,
+                    "timestamp_ms": time.time() * 1000
+                })
+            except Exception as send_err:
+                logger.debug(f"Failed to broadcast clock state: {send_err}")
+                break
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected from /ws/transport/clock")
+        transport_manager.connected_clients.discard(ws)
+    except Exception as e:
+        logger.error(f"WebSocket error on /ws/transport/clock: {e}")
+        transport_manager.connected_clients.discard(ws)
 
 
 # ============================================================================
