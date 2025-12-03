@@ -1,14 +1,10 @@
 {
   "DevContainersInfoBarHidden": true,
+  "ActiveTargetSystem": "Local Machine",
   "ExpandedNodes": [
     "",
-    "\\ashesinthedawn-main",
-    "\\ashesinthedawn-main\\Codette",
-    "\\ashesinthedawn-main\\Codette\\tests",
     "\\Codette",
     "\\Codette\\tests"
   ],
-  "SelectedNode": "\\Codette\\tests\\test_cocoon_manager.py",
-  "PreviewInSolutionExplorer": false,
-  "ActiveTargetSystem": "Local Machine"
+  "PreviewInSolutionExplorer": false
 }

@@ -51,13 +51,6 @@ interface DAWContextType {
   selectOutputDevice: (deviceId: string) => Promise<void>
   getAudioContextStatus: () => AudioContextState | string;
   setCurrentProject: (project: Project | null) => void;
-  addTrack: (type: Track["type"]) => void;
-  selectTrack: (trackId: string) => void;
-  updateTrack: (trackId: string, updates: Partial<Track>) => void;
-  deleteTrack: (trackId: string) => void; // Soft delete to trash
-  duplicateTrack: (trackId: string) => Promise<Track | null>;
-  restoreTrack: (trackId: string) => void; // Restore from trash
-  permanentlyDeleteTrack: (trackId: string) => void; // Hard delete
   togglePlay: () => void;
   toggleRecord: () => void;
   stop: () => void;
@@ -66,8 +59,8 @@ interface DAWContextType {
   saveProject: () => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
   uploadAudioFile: (file: File) => Promise<boolean>;
-  getWaveformData: (trackId: string) => number[];
-  getAudioDuration: (trackId: string) => number;
+  getWaveformData: (_trackId: string) => number[];
+  getAudioDuration: (_trackId: string) => number;
   getAudioBufferData: (trackId: string) => Float32Array | null;
   getAudioLevels: () => Uint8Array | null;
   seek: (timeSeconds: number) => void;
@@ -282,6 +275,13 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     reconnectAttempts: 0,
   });
 
+  // Unique ID counter to prevent React key collisions
+  const trackIdCounterRef = React.useRef<number>(0);
+  const markerIdCounterRef = React.useRef<number>(0);
+
+  const getUniqueTrackId = () => `track-${++trackIdCounterRef.current}`;
+  const getUniqueMarkerId = () => `marker-${Date.now()}-${++markerIdCounterRef.current}`;
+
   // Simple playback timer
   const playTimerRef = React.useRef<number | null>(null);
   const lastTickRef = React.useRef<number | null>(null);
@@ -464,9 +464,28 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     selectOutputDevice: async (deviceId: string) => { _setSelectedOutputDeviceId(deviceId); },
     getAudioContextStatus,
     setCurrentProject,
+    togglePlay,
+    toggleRecord,
+    stop,
+    setLogicCoreMode: (mode: LogicCoreMode) => setLogicCoreMode(mode),
+    toggleVoiceControl,
+    saveProject,
+    loadProject,
+    uploadAudioFile: async () => false,
+    getWaveformData: (_trackId: string) => [],
+    getAudioDuration: (_trackId: string) => 0,
+    getAudioBufferData: () => null,
+    getAudioLevels: () => null,
+    seek: () => {},
+    setTrackInputGain: () => {},
+    addPluginToTrack: () => {},
+    removePluginFromTrack: () => {},
+    togglePluginEnabled: () => {},
+    undo,
+    redo,
     addTrack: (type: Track["type"]) => {
       const t: Track = {
-        id: `track-${Date.now()}`,
+        id: getUniqueTrackId(),
         name: `${type} ${tracks.length + 1}`,
         type,
         color: '#888',
@@ -502,7 +521,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     duplicateTrack: async (trackId: string) => {
       const source = tracks.find((t) => t.id === trackId);
       if (!source) return null;
-      const copy: Track = { ...source, id: `track-${Date.now()}` };
+      const copy: Track = { ...source, id: getUniqueTrackId() };
       setTracks((prev) => [...prev, copy]);
       // copy cached data
       const wf = waveformCacheRef.current.get(source.id);
@@ -512,48 +531,16 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       return copy;
     },
     restoreTrack: (trackId: string) => {
-      _setDeletedTracks((prev) => {
-        const idx = prev.findIndex((t) => t.id === trackId);
-        if (idx === -1) return prev;
-        const track = prev[idx];
-        setTracks((tracksPrev) => [...tracksPrev, track]);
-        const next = [...prev];
-        next.splice(idx, 1);
-        return next;
-      });
+      const t = deletedTracks.find((tr) => tr.id === trackId);
+      if (!t) return;
+      setTracks((prev) => [...prev, { ...t, deleted: false }]);
+      _setDeletedTracks((prev) => prev.filter((tr) => tr.id !== trackId));
     },
-    permanentlyDeleteTrack: async () => {},
-    togglePlay,
-    toggleRecord,
-    stop,
-    setLogicCoreMode,
-    toggleVoiceControl,
-    saveProject,
-    loadProject,
-    uploadAudioFile: async () => false,
-    // Stable getters to avoid infinite re-render loops
-    getWaveformData: (trackId: string) => {
-      ensureDemoDataForTrack(trackId);
-      return waveformCacheRef.current.get(trackId) as number[];
+    permanentlyDeleteTrack: (trackId: string) => {
+      _setDeletedTracks((prev) => prev.filter((tr) => tr.id !== trackId));
     },
-    getAudioDuration: (trackId: string) => {
-      ensureDemoDataForTrack(trackId);
-      return durationCacheRef.current.get(trackId) as number;
-    },
-    getAudioBufferData: () => null,
-    getAudioLevels: () => null,
-    seek: (timeSeconds: number) => {
-      setCurrentTime(Math.max(0, timeSeconds));
-    },
-    setTrackInputGain: () => {},
-    addPluginToTrack: () => {},
-    removePluginFromTrack: () => {},
-    togglePluginEnabled: () => {},
-    undo,
-    redo,
-    // Phase 3: Markers
     addMarker: (time: number, name: string) => {
-      const marker: Marker = { id: `marker-${Date.now()}`, name, time, color: '#fff', locked: false };
+      const marker: Marker = { id: getUniqueMarkerId(), name, time, color: '#fff', locked: false };
       _setMarkers((prev) => [...prev, marker]);
     },
     deleteMarker: (markerId: string) => {
@@ -562,91 +549,79 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     updateMarker: (markerId: string, updates: Partial<Marker>) => {
       _setMarkers((prev) => prev.map((m) => (m.id === markerId ? { ...m, ...updates } : m)));
     },
-    // Phase 3: Looping
     setLoopRegion: (startTime: number, endTime: number) => {
-      _setLoopRegion({ enabled: true, startTime, endTime });
+      _setLoopRegion({ enabled: loopRegion?.enabled ?? true, startTime, endTime });
     },
     toggleLoop: () => {
-      _setLoopRegion((prev) => (prev ? { ...prev, enabled: !prev.enabled } : { enabled: true, startTime: 0, endTime: 0 }));
+      if (!loopRegion) return;
+      const enabled = loopRegion.enabled;
+      _setLoopRegion((prev) => (prev ? { ...prev, enabled: !enabled } : prev));
     },
     clearLoopRegion: () => {
       _setLoopRegion(null);
     },
-    // Phase 3: Metronome
-    toggleMetronome: () => {},
-    setMetronomeVolume: () => {},
-    setMetronomeBeatSound: () => {},
-    // Modal State
-    showNewProjectModal: false,
+    toggleMetronome: () => {
+      _setMetronomeSettings((prev) => ({ ...prev, enabled: !prev.enabled }));
+    },
+    setMetronomeVolume: (volume: number) => {
+      _setMetronomeSettings((prev) => ({ ...prev, volume }));
+    },
+    setMetronomeBeatSound: (sound: MetronomeSettings["beatSound"]) => {
+      _setMetronomeSettings((prev) => ({ ...prev, beatSound: sound }));
+    },
     openNewProjectModal: () => {},
     closeNewProjectModal: () => {},
-    showExportModal: false,
     openExportModal: () => {},
     closeExportModal: () => {},
-    showAudioSettingsModal: false,
     openAudioSettingsModal: () => {},
     closeAudioSettingsModal: () => {},
-    showAboutModal: false,
     openAboutModal: () => {},
     closeAboutModal: () => {},
-    // Additional Modals
-    showSaveAsModal: false,
     openSaveAsModal: () => {},
     closeSaveAsModal: () => {},
-    showOpenProjectModal: false,
     openOpenProjectModal: () => {},
     closeOpenProjectModal: () => {},
-    showMidiSettingsModal: false,
     openMidiSettingsModal: () => {},
     closeMidiSettingsModal: () => {},
-    showMixerOptionsModal: false,
     openMixerOptionsModal: () => {},
     closeMixerOptionsModal: () => {},
-    showPreferencesModal: false,
     openPreferencesModal: () => {},
     closePreferencesModal: () => {},
-    showShortcutsModal: false,
     openShortcutsModal: () => {},
     closeShortcutsModal: () => {},
-    // Export
-    exportAudio: async () => {},
-    // Project Import/Export
+    exportAudio: async (_format: string, _quality: string) => {},
     exportProjectAsFile: () => {},
     importProjectFromFile: async () => {},
-    // Bus/Routing functions
     buses: [],
-    createBus: async () => {},
-    deleteBus: async () => {},
-    addTrackToBus: async () => {},
-    removeTrackFromBus: async () => {},
-    createSidechain: async () => {},
-    // Plugin functions
-    loadPlugin: () => {},
-    unloadPlugin: () => {},
-    loadedPlugins: new Map<string, Plugin[]>(),
-    // MIDI functions
+    createBus: (_name: string) => {},
+    deleteBus: (_busId: string) => {},
+    addTrackToBus: (_trackId: string, _busId: string) => {},
+    removeTrackFromBus: (_trackId: string, _busId: string) => {},
+    createSidechain: (_sourceTrackId: string, _targetTrackId: string) => {},
+    loadPlugin: (_trackId: string, _pluginName: string) => {},
+    unloadPlugin: (_trackId: string, _pluginId: string) => {},
     midiDevices,
-    createMIDIRoute: async () => {},
-    deleteMIDIRoute: async () => {},
-    getMIDIRoutesForTrack: () => [],
-    // Codette AI Integration (Phase 1)
+    createMIDIRoute: (_sourceDeviceId: string, _targetTrackId: string) => {},
+    deleteMIDIRoute: (_routeId: string) => {},
+    getMIDIRoutesForTrack: (_trackId: string) => [],
     codetteConnected: false,
     codetteLoading: false,
-    codetteSuggestions: [] as CodetteSuggestion[],
+    codetteSuggestions: [],
     getSuggestionsForTrack: async () => [],
-    applyCodetteSuggestion: async () => false,
+    applyCodetteSuggestion: async () => true,
     analyzeTrackWithCodette: async () => ({}),
-    syncDAWStateToCodette,
-    // Codette Transport Control (Phase 3)
+    syncDAWStateToCodette: async () => true,
     codetteTransportPlay,
     codetteTransportStop,
     codetteTransportSeek,
     codetteSetTempo,
     codetteSetLoop,
-    // WebSocket Status (Phase 4)
     getWebSocketStatus: () => webSocketStatus,
-    getCodetteBridgeStatus: () => ({ connected: false, reconnectCount: 0, isReconnecting: false }),
-    // Clipboard Operations
+    getCodetteBridgeStatus: () => ({
+      connected: false,
+      reconnectCount: 0,
+      isReconnecting: false,
+    }),
     clipboardData: { type: null, data: null },
     cutTrack,
     copyTrack,
@@ -654,10 +629,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     selectAllTracks,
     deselectAllTracks,
     selectedTracks: new Set<string>(),
-    // Utility
     cpuUsageDetailed: {},
-
-    // Recording state (NEW)
     recordingTrackId,
     recordingStartTime,
     recordingTakeCount,
@@ -667,8 +639,6 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     punchOutTime,
     recordingBlob,
     recordingError,
-    
-    // Recording methods (NEW)
     startRecording,
     stopRecording,
     pauseRecording,
@@ -677,21 +647,37 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     setPunchInOut,
     togglePunchIn,
     undoLastRecording,
-
-    // Phase 9: Effect Chain Management (from EffectChainContextAPI)
-    ...effectChainAPI,
+    effectChainsByTrack: effectChainAPI.effectChainsByTrack,
+    getTrackEffects: effectChainAPI.getTrackEffects,
+    addEffectToTrack: effectChainAPI.addEffectToTrack,
+    removeEffectFromTrack: effectChainAPI.removeEffectFromTrack,
+    updateEffectParameter: effectChainAPI.updateEffectParameter,
+    enableDisableEffect: effectChainAPI.enableDisableEffect,
+    setEffectWetDry: effectChainAPI.setEffectWetDry,
+    getEffectChainForTrack: effectChainAPI.getEffectChainForTrack,
+    processTrackEffects: effectChainAPI.processTrackEffects,
+    hasActiveEffects: effectChainAPI.hasActiveEffects,
+    loadedPlugins: new Map(),
+    showNewProjectModal: false,
+    showExportModal: false,
+    showAudioSettingsModal: false,
+    showAboutModal: false,
+    showSaveAsModal: false,
+    showOpenProjectModal: false,
+    showMidiSettingsModal: false,
+    showMixerOptionsModal: false,
+    showPreferencesModal: false,
+    showShortcutsModal: false,
   };
 
-  return (
-    <DAWContext.Provider value={contextValue}>
-      {children}
-    </DAWContext.Provider>
-  );
+  return <DAWContext.Provider value={contextValue}>{children}</DAWContext.Provider>;
 }
 
-// Hook that asserts presence of provider and returns a non-undefined context
-export const useDAW = (): DAWContextType => {
-  const ctx = React.useContext(DAWContext);
-  if (!ctx) throw new Error("useDAW must be used within DAWProvider");
-  return ctx;
-};
+// Custom hook to use DAW context
+export function useDAW() {
+  const context = React.useContext(DAWContext);
+  if (!context) {
+    throw new Error("useDAW must be used within a DAWProvider");
+  }
+  return context;
+}
