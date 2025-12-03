@@ -1,0 +1,183 @@
+/**
+ * SPECTRUM ANALYZER
+ * Real-time frequency display with peak detection
+ */
+
+import { useEffect, useRef } from 'react';
+import { Activity } from 'lucide-react';
+import { Tooltip } from './TooltipProvider';
+
+interface SpectrumAnalyzerProps {
+  _trackId?: string;
+  height?: number;
+  width?: number;
+  fftSize?: number;
+}
+
+export function SpectrumAnalyzer({
+  _trackId,
+  height = 150,
+  width = 300,
+  fftSize = 2048,
+}: SpectrumAnalyzerProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const peaksRef = useRef<number[]>([]);
+  const animationRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Initialize analyser from audio context
+    // This will be connected to the track's output in real implementation
+    const initializeAnalyser = () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const engine = (window as any)?.audioEngineRef?.current;
+        if (engine?.audioContext) {
+          const analyser = engine.audioContext.createAnalyser();
+          analyser.fftSize = fftSize;
+          analyserRef.current = analyser;
+          dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
+          peaksRef.current = new Array(analyser.frequencyBinCount).fill(0);
+        }
+      } catch (err) {
+        console.error('Failed to initialize spectrum analyzer:', err);
+      }
+    };
+
+    initializeAnalyser();
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [fftSize]);
+
+  // Draw spectrum
+  useEffect(() => {
+    const draw = () => {
+      if (!canvasRef.current || !analyserRef.current || !dataArrayRef.current) {
+        animationRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        animationRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
+      analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+
+      // Clear canvas
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const bins = dataArrayRef.current.length;
+      const barWidth = canvas.width / bins;
+
+      // Update peaks (slow decay)
+      for (let i = 0; i < bins; i++) {
+        peaksRef.current[i] = Math.max(
+          dataArrayRef.current[i],
+          peaksRef.current[i] * 0.95
+        );
+      }
+
+      // Draw frequency bars with gradient
+      for (let i = 0; i < bins; i++) {
+        const value = dataArrayRef.current[i];
+        const peak = peaksRef.current[i];
+        const barHeight = (value / 255) * canvas.height;
+        const peakHeight = (peak / 255) * canvas.height;
+
+        const x = i * barWidth;
+
+        // Color gradient: green ? yellow ? red
+        let hue;
+        if (i < bins * 0.3) {
+          hue = 120; // Green (low frequencies)
+        } else if (i < bins * 0.7) {
+          hue = 60; // Yellow (mid frequencies)
+        } else {
+          hue = 0; // Red (high frequencies)
+        }
+
+        // Bar
+        const gradient = ctx.createLinearGradient(0, barHeight, 0, canvas.height);
+        gradient.addColorStop(0, `hsl(${hue}, 100%, 45%)`);
+        gradient.addColorStop(1, `hsl(${hue}, 100%, 25%)`);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+
+        // Peak line
+        ctx.fillStyle = `hsl(${hue}, 100%, 70%)`;
+        ctx.fillRect(x, canvas.height - peakHeight, barWidth - 1, 2);
+      }
+
+      // Draw frequency labels
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+
+      const frequencies = ['20Hz', '200Hz', '2kHz', '20kHz'];
+      const positions = [0, bins * 0.1, bins * 0.5, bins - 1];
+
+      positions.forEach((pos, idx) => {
+        const x = (pos / bins) * canvas.width;
+        ctx.fillText(frequencies[idx], x, canvas.height - 2);
+      });
+
+      animationRef.current = requestAnimationFrame(draw);
+    };
+
+    animationRef.current = requestAnimationFrame(draw);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div className="space-y-2 p-3 bg-gray-800 rounded-lg border border-gray-700">
+      <label className="text-xs font-semibold text-gray-400 flex items-center gap-1">
+        <Activity className="w-3 h-3 animate-pulse text-green-400" />
+        SPECTRUM ANALYZER
+      </label>
+
+      <Tooltip
+        content={{
+          title: 'Spectrum Analyzer',
+          description:
+            'Real-time frequency spectrum display. Green = Bass (20-200Hz), Yellow = Mids (200Hz-2kHz), Red = Treble (2-20kHz)',
+          category: 'mixer',
+          relatedFunctions: ['Level Meter', 'Phase Correlation', 'Loudness Meter'],
+          performanceTip: 'Use FFT size 2048 for balanced detail and CPU. 4096 for more detail, 1024 for less CPU.',
+          examples: [
+            'Check for sub-bass rumble',
+            'Spot harsh midrange frequencies',
+            'Verify presence peak around 3-5kHz',
+            'Monitor high-frequency content for mastering',
+          ],
+        }}
+        position="top"
+      >
+        <canvas
+          ref={canvasRef}
+          width={width}
+          height={height}
+          className="w-full border border-gray-700 rounded bg-gray-900"
+          style={{ display: 'block' }}
+        />
+      </Tooltip>
+
+      <div className="text-xs text-gray-500 italic text-center">
+        Frequency: 20Hz - 20kHz | FFT: {fftSize}
+      </div>
+    </div>
+  );
+}
