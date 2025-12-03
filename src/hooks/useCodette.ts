@@ -160,7 +160,7 @@ const MOCK_PERSPECTIVES: Record<string, string> = {
   psychological: 'Listener fatigue peaks at 4kHz. Psychological research suggests -1dB reduction.'
 };
 
-const CODETTE_API_URL = (import.meta as any).env?.VITE_CODETTE_API || 'http://localhost:8000';
+const CODETTE_API_URL = import.meta.env.VITE_CODETTE_API || 'http://localhost:8000';
 
 // ============================================================================
 // MAIN HOOK
@@ -223,7 +223,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
             const data = await response.json();
             const assistantMsg: CodetteChatMessage = {
               role: 'assistant',
-              content: data.perspectives ? Object.values(data.perspectives).join('\n\n') : data.message,
+              content: data.perspectives ? Object.keys(data.perspectives).map(k => (data.perspectives as any)[k]).join('\n\n') : data.message,
               timestamp: Date.now(),
               source: 'codette_engine',
               confidence: data.confidence || 0.85
@@ -236,7 +236,8 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         }
 
         const localResponse = await queryAllPerspectives(message);
-        const combinedResponse = Object.entries(localResponse)
+        const responseEntries: Array<[string, string]> = Object.keys(localResponse).map(k => [k, localResponse[k]]);
+        const combinedResponse = responseEntries
           .map(([perspective, answer]) => `**${perspective}**: ${answer}`)
           .join('\n\n');
 
@@ -659,7 +660,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
   }, []);
 
   const updateActivePerspectives = useCallback((perspectives: string[]) => {
-    setActivePerspectives(perspectives.filter(p => PERSPECTIVES.includes(p as any)));
+    setActivePerspectives(perspectives.filter(p => (PERSPECTIVES as readonly string[]).includes(p)));
   }, []);
 
   const startListening = useCallback(() => {
