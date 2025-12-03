@@ -1,11 +1,4 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-  useMemo,
-} from "react";
+import React, { createContext, useContext, useState } from "react";
 import type {
   Track,
   Project,
@@ -19,21 +12,8 @@ import type {
   MidiRoute,
   AudioContextState,
 } from "@/types";
-import { getAudioEngine } from "../lib/audioEngine";
-import { getCodetteBridge, CodetteSuggestion } from "../lib/codetteBridge";
-import { setDAWContext } from "../lib/actions/initializeActions";
+import { CodetteSuggestion } from "../lib/codetteBridge";
 import { supabase } from "../lib/supabase";
-import {
-  saveProjectToStorage,
-  loadProjectFromStorage,
-  clearProjectStorage,
-  createAutoSaveInterval,
-} from "../lib/projectStorage";
-import {
-  downloadProjectFile,
-  importProjectFromFile,
-  openFileDialog,
-} from "../lib/projectImportExport";
 import { useEffectChainAPI, EffectChainContextAPI } from "../lib/effectChainContextAdapter";
 
 interface DAWContextType {
@@ -53,7 +33,7 @@ interface DAWContextType {
   canUndo: boolean;
   canRedo: boolean;
   markers: Marker[];
-  loopRegion: LoopRegion;
+  loopRegion: LoopRegion | null;
   metronomeSettings: MetronomeSettings;
   inputLevel: number;
   latencyMs: number;
@@ -65,7 +45,7 @@ interface DAWContextType {
   selectedInputDeviceId: string | null;
   selectedOutputDeviceId: string | null;
   selectInputDevice: (deviceId: string) => Promise<void>;
-  selectOutputDevice: (deviceId: string) => Promise<void>;
+  selectOutputDevice: (deviceId: string) => Promise<void>
   getAudioContextStatus: () => AudioContextState | string;
   setCurrentProject: (project: Project | null) => void;
   addTrack: (type: Track["type"]) => void;
@@ -195,7 +175,7 @@ interface DAWContextType {
     isReconnecting: boolean;
   };
   // Clipboard Operations
-  clipboardData: { type: 'track' | 'clip' | null; data: any };
+  clipboardData: { type: 'track' | 'clip' | null; data: any | null };
   cutTrack: (trackId: string) => void;
   copyTrack: (trackId: string) => void;
   pasteTrack: () => void;
@@ -248,42 +228,53 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
-  const [zoom, setZoom] = useState<number>(1);
-  const [logicCoreMode, setLogicCoreMode] = useState<LogicCoreMode>("normal");
+  const [zoom, _setZoom] = useState<number>(1);
+  const [logicCoreMode, setLogicCoreMode] = useState<LogicCoreMode>("ON");
   const [voiceControlActive, setVoiceControlActive] = useState<boolean>(false);
-  const [cpuUsage, setCpuUsage] = useState<number>(0);
+  const [cpuUsage, _setCpuUsage] = useState<number>(0);
   const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [deletedTracks, setDeletedTracks] = useState<Track[]>([]);
-  const [canUndo, setCanUndo] = useState<boolean>(false);
-  const [canRedo, setCanRedo] = useState<boolean>(false);
-  const [markers, setMarkers] = useState<Marker[]>([]);
-  const [loopRegion, setLoopRegion] = useState<LoopRegion | null>(null);
-  const [metronomeSettings, setMetronomeSettings] = useState<MetronomeSettings>({
+  const [deletedTracks, _setDeletedTracks] = useState<Track[]>([]);
+  const [canUndo, _setCanUndo] = useState<boolean>(false);
+  const [canRedo, _setCanRedo] = useState<boolean>(false);
+  const [markers, _setMarkers] = useState<Marker[]>([]);
+  const [loopRegion, _setLoopRegion] = useState<LoopRegion | null>(null);
+  const [metronomeSettings, _setMetronomeSettings] = useState<MetronomeSettings>({
     enabled: false,
     volume: 1,
-    beatSound: "default",
+    beatSound: "click",
+    accentFirst: false,
   });
 
   // Audio I/O State - Real device management
-  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState<string | null>(null);
-  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string | null>(null);
-  const [inputLevel, setInputLevel] = useState<number>(0);
-  const [latencyMs, setLatencyMs] = useState<number>(0);
-  const [bufferUnderruns, setBufferUnderruns] = useState<number>(0);
-  const [bufferOverruns, setBufferOverruns] = useState<number>(0);
-  const [isAudioIOActive, setIsAudioIOActive] = useState<boolean>(false);
-  const [audioIOError, setAudioIOError] = useState<string | null>(null);
+  const [selectedInputDeviceId, _setSelectedInputDeviceId] = useState<string | null>(null);
+  const [selectedOutputDeviceId, _setSelectedOutputDeviceId] = useState<string | null>(null);
+  const [inputLevel, _setInputLevel] = useState<number>(0);
+  const [latencyMs, _setLatencyMs] = useState<number>(0);
+  const [bufferUnderruns, _setBufferUnderruns] = useState<number>(0);
+  const [bufferOverruns, _setBufferOverruns] = useState<number>(0);
+  const [isAudioIOActive, _setIsAudioIOActive] = useState<boolean>(false);
+  const [audioIOError, _setAudioIOError] = useState<string | null>(null);
 
   // MIDI State
   const [midiDevices] = useState<MidiDevice[]>([]);
-  const [midiRoutes, setMidiRoutes] = useState<MidiRoute[]>([]);
   
   // Phase 9: Effect Chain API
   const effectChainAPI = useEffectChainAPI();
   
+  // Recording state (NEW)
+  const [recordingTrackId, _setRecordingTrackId] = useState<string | null>(null);
+  const [recordingStartTime, _setRecordingStartTime] = useState<number>(0);
+  const [recordingTakeCount, setRecordingTakeCount] = useState<number>(0);
+  const [recordingModeState, setRecordingModeState] = useState<'audio' | 'midi' | 'overdub'>('audio');
+  const [punchInEnabled, _setPunchInEnabled] = useState<boolean>(false);
+  const [punchInTime, _setPunchInTime] = useState<number>(0);
+  const [punchOutTime, _setPunchOutTime] = useState<number>(0);
+  const [recordingBlob, _setRecordingBlob] = useState<Blob | null>(null);
+  const [recordingError, _setRecordingError] = useState<string | null>(null);
+
   // WebSocket Status (Phase 4)
-  const [webSocketStatus, setWebSocketStatus] = useState<{ connected: boolean; reconnectAttempts: number }>({
+  const [webSocketStatus, _setWebSocketStatus] = useState<{ connected: boolean; reconnectAttempts: number }>({
     connected: false,
     reconnectAttempts: 0,
   });
@@ -359,27 +350,27 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Implementation for Codette transport stop
   };
 
-  const codetteTransportSeek = async (timeSeconds: number) => {
+  const codetteTransportSeek = async (_timeSeconds: number) => {
     // Implementation for Codette transport seek
   };
 
-  const codetteSetTempo = async (bpm: number) => {
+  const codetteSetTempo = async (_bpm: number) => {
     // Implementation for setting tempo in Codette
   };
 
   const codetteSetLoop = async (
-    enabled: boolean,
-    startTime?: number,
-    endTime?: number
+    _enabled: boolean,
+    _startTime?: number,
+    _endTime?: number
   ) => {
     // Implementation for setting loop in Codette
   };
 
-  const cutTrack = (trackId: string) => {
+  const cutTrack = (_trackId: string) => {
     // Implementation for cutting a track
   };
 
-  const copyTrack = (trackId: string) => {
+  const copyTrack = (_trackId: string) => {
     // Implementation for copying a track
   };
 
@@ -395,7 +386,7 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Implementation for deselecting all tracks
   };
 
-  const startRecording = async (trackId: string) => {
+  const startRecording = async (_trackId: string) => {
     // Implementation for starting recording
     return true;
   };
@@ -415,11 +406,12 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  // method exposed via context to set recording mode
   const setRecordingMode = (mode: 'audio' | 'midi' | 'overdub') => {
-    // Implementation for setting recording mode
+    setRecordingModeState(mode);
   };
 
-  const setPunchInOut = (punchIn: number, punchOut: number) => {
+  const setPunchInOut = (_punchIn: number, _punchOut: number) => {
     // Implementation for setting punch in and out
   };
 
@@ -432,19 +424,17 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRecordingTakeCount((prev: number) => Math.max(0, prev - 1));
   };
 
+  const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
+
+  const undo = () => {
+    console.log("undo");
+  };
+  const redo = () => {
+    console.log("redo");
+  };
+
   // Phase 9: Effect Chain Management (from EffectChainContextAPI)
-  const {
-    effectChainsByTrack,
-    getTrackEffects,
-    addEffectToTrack,
-    removeEffectFromTrack,
-    updateEffectParameter,
-    enableDisableEffect,
-    setEffectWetDry,
-    getEffectChainForTrack,
-    processTrackEffects,
-    hasActiveEffects,
-  } = effectChainAPI;
+  // use effectChainAPI directly and spread into contextValue later
 
   // Context value
   const contextValue = {
@@ -475,16 +465,61 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectedInputDevice: null,
     selectedInputDeviceId,
     selectedOutputDeviceId,
-    selectInputDevice: async () => {},
-    selectOutputDevice: async () => {},
+    selectInputDevice: async (deviceId: string) => { _setSelectedInputDeviceId(deviceId); },
+    selectOutputDevice: async (deviceId: string) => { _setSelectedOutputDeviceId(deviceId); },
     getAudioContextStatus,
     setCurrentProject,
-    addTrack: async () => {},
-    selectTrack: setSelectedTrack,
-    updateTrack: async () => {},
-    deleteTrack: async () => {},
-    duplicateTrack: async () => null,
-    restoreTrack: async () => {},
+    addTrack: (type: Track["type"]) => {
+      const t: Track = {
+        id: `track-${Date.now()}`,
+        name: `${type} ${tracks.length + 1}`,
+        type,
+        color: '#888',
+        muted: false,
+        soloed: false,
+        armed: false,
+        inputGain: 0,
+        volume: 0,
+        pan: 0,
+        stereoWidth: 100,
+        phaseFlip: false,
+        inserts: [],
+        sends: [],
+        routing: '',
+      };
+      setTracks((prev) => [...prev, t]);
+    },
+    selectTrack: (trackId: string) => {
+      const t = tracks.find((tr) => tr.id === trackId) || null;
+      setSelectedTrack(t);
+    },
+    updateTrack: (trackId: string, updates: Partial<Track>) => {
+      setTracks((prev) => prev.map((t) => (t.id === trackId ? { ...t, ...updates } : t)));
+    },
+    deleteTrack: (trackId: string) => {
+      setTracks((prev) => prev.filter((t) => t.id !== trackId));
+      const del = tracks.find((t) => t.id === trackId);
+      if (del) _setDeletedTracks((prev) => [...prev, del]);
+    },
+    duplicateTrack: async (trackId: string) => {
+      const source = tracks.find((t) => t.id === trackId);
+      if (!source) return null;
+      const copy: Track = { ...source, id: `track-${Date.now()}` };
+      setTracks((prev) => [...prev, copy]);
+      return copy;
+    },
+    restoreTrack: (trackId: string) => {
+      // Move a track from deletedTracks back to tracks
+      _setDeletedTracks((prev) => {
+        const idx = prev.findIndex((t) => t.id === trackId);
+        if (idx === -1) return prev;
+        const track = prev[idx];
+        setTracks((tracksPrev) => [...tracksPrev, track]);
+        const next = [...prev];
+        next.splice(idx, 1);
+        return next;
+      });
+    },
     permanentlyDeleteTrack: async () => {},
     togglePlay,
     toggleRecord,
@@ -506,13 +541,26 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     undo,
     redo,
     // Phase 3: Markers
-    addMarker: () => {},
-    deleteMarker: () => {},
-    updateMarker: () => {},
+    addMarker: (time: number, name: string) => {
+      const marker: Marker = { id: `marker-${Date.now()}`, name, time, color: '#fff', locked: false };
+      _setMarkers((prev) => [...prev, marker]);
+    },
+    deleteMarker: (markerId: string) => {
+      _setMarkers((prev) => prev.filter((m) => m.id !== markerId));
+    },
+    updateMarker: (markerId: string, updates: Partial<Marker>) => {
+      _setMarkers((prev) => prev.map((m) => (m.id === markerId ? { ...m, ...updates } : m)));
+    },
     // Phase 3: Looping
-    setLoopRegion: () => {},
-    toggleLoop: () => {},
-    clearLoopRegion: () => {},
+    setLoopRegion: (startTime: number, endTime: number) => {
+      _setLoopRegion({ enabled: true, startTime, endTime });
+    },
+    toggleLoop: () => {
+      _setLoopRegion((prev) => (prev ? { ...prev, enabled: !prev.enabled } : { enabled: true, startTime: 0, endTime: 0 }));
+    },
+    clearLoopRegion: () => {
+      _setLoopRegion(null);
+    },
     // Phase 3: Metronome
     toggleMetronome: () => {},
     setMetronomeVolume: () => {},
@@ -592,7 +640,7 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isReconnecting: false,
     }),
     // Clipboard Operations
-    clipboardData: { type: 'track' | 'clip' | null, data: null },
+    clipboardData: { type: null, data: null },
     cutTrack,
     copyTrack,
     pasteTrack,
@@ -603,15 +651,15 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     cpuUsageDetailed: {},
 
     // Recording state (NEW)
-    recordingTrackId: null,
-    recordingStartTime: 0,
-    recordingTakeCount: 0,
-    recordingMode: 'audio',
-    punchInEnabled: false,
-    punchInTime: 0,
-    punchOutTime: 0,
-    recordingBlob: null,
-    recordingError: null,
+    recordingTrackId,
+    recordingStartTime,
+    recordingTakeCount,
+    recordingMode: recordingModeState,
+    punchInEnabled,
+    punchInTime,
+    punchOutTime,
+    recordingBlob,
+    recordingError,
     
     // Recording methods (NEW)
     startRecording,
@@ -634,11 +682,13 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 };
 
-export const useDAWContext = () => {
-  return useContext(DAWContext);
-};
 
-// Export as useDAW for easier usage
-export const useDAW = useDAWContext;
-
+// Create context (may be undefined before provider mounts)
 const DAWContext = createContext<DAWContextType | undefined>(undefined);
+
+// Hook that asserts presence of provider and returns a non-undefined context
+export const useDAW = (): DAWContextType => {
+  const ctx = useContext(DAWContext);
+  if (!ctx) throw new Error("useDAW must be used within DAWProvider");
+  return ctx;
+};

@@ -58,8 +58,6 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
   const [confidenceFilter, setConfidenceFilter] = useState(0); // NEW: Confidence threshold (0-100%)
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false); // NEW: Favorites filter
   const [favoriteSuggestions, setFavoriteSuggestions] = useState<Set<string>>(new Set()); // NEW: Starred suggestions
-  const [analysisHistory, setAnalysisHistory] = useState<any[]>([]); // NEW: Track analysis history
-  const [historyIndex, setHistoryIndex] = useState(0); // NEW: Current history position
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const waveformCanvasRef = useRef<HTMLCanvasElement>(null); // NEW: Waveform canvas ref
 
@@ -510,7 +508,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             <ul className="space-y-0.5">
                               {analysis.findings.map((finding, idx) => (
                                 <li key={idx} className="text-xs text-gray-400">
-                                  • {finding}
+                                  • {String(finding)}
                                 </li>
                               ))}
                             </ul>
@@ -523,7 +521,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                             <ul className="space-y-0.5">
                               {analysis.recommendations.map((rec, idx) => (
                                 <li key={idx} className="text-xs text-gray-400">
-                                  → {rec}
+                                  → {String(rec)}
                                 </li>
                               ))}
                             </ul>

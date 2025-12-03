@@ -377,6 +377,13 @@ export class TrackEffectChainManager {
         tracksWithEffects > 0 ? totalEffects / tracksWithEffects : 0,
     };
   }
+
+  /**
+   * Public getter for all effect chains map. Returns a shallow copy to avoid external mutation.
+   */
+  getAllChains(): Map<string, TrackEffectChain> {
+    return new Map(this.effectChains);
+  }
 }
 
 // Singleton instance

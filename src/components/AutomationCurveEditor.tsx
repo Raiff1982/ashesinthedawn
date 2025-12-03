@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Copy, Trash2 } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface CurvePoint {
   x: number; // 0-1
@@ -28,7 +28,7 @@ export function AutomationCurveEditor({
     { x: 1, y: 0.5, tension: 0 },
   ],
   onPointsChange,
-  curveType = 'volume',
+  curveType: _curveType = 'volume',
   height = 200,
   width = 400,
 }: AutomationCurveEditorProps) {

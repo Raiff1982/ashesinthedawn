@@ -117,7 +117,7 @@ export function useEffectChainAPI(): EffectChainContextAPI {
     async (
       trackId: string,
       audio: Float32Array,
-      sampleRate: number
+      /* sampleRate */ _sampleRate: number
     ): Promise<Float32Array> => {
       const manager = effectChainManagerRef.current;
       const chain = manager.getChainForTrack(trackId);
@@ -150,7 +150,7 @@ export function useEffectChainAPI(): EffectChainContextAPI {
   }, []);
 
   return {
-    effectChainsByTrack: effectChainManagerRef.current.effectChains as unknown as Map<string, TrackEffectChain>,
+    effectChainsByTrack: effectChainManagerRef.current.getAllChains(),
     getTrackEffects,
     addEffectToTrack,
     removeEffectFromTrack,

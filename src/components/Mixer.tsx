@@ -455,7 +455,7 @@ const MixerComponent = () => {
                         onUpdate={updateTrack}
                         onAddPlugin={addPluginToTrack}
                         onRemovePlugin={removePluginFromTrack}
-                        togglePluginEnabled={togglePluginEnabled}
+                        // togglePluginEnabled not part of MixerTile props; handled via DetachablePluginRack
                         levels={levels}
                         stripWidth={scaledStripWidth}
                         stripHeight={stripHeight}
@@ -492,7 +492,6 @@ const MixerComponent = () => {
                   {/* Input Monitor - Left Column */}
                   <div className="col-span-1">
                     <InputMonitor 
-                      trackId={selectedTrack.id}
                       showLabel={true}
                       compact={false}
                       height="h-32"

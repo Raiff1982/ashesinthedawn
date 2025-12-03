@@ -11,20 +11,20 @@ export default function LoopControl() {
   } = useDAW();
 
   const handleSetStart = () => {
-    setLoopRegion(
-      currentTime,
-      loopRegion.endTime === 0 ? currentTime + 5 : loopRegion.endTime
-    );
+    const end =
+      loopRegion && loopRegion.endTime !== 0 ? loopRegion.endTime : currentTime + 5;
+    setLoopRegion(currentTime, end);
   };
 
   const handleSetEnd = () => {
-    setLoopRegion(
-      loopRegion.startTime === 0 ? currentTime - 5 : loopRegion.startTime,
-      currentTime
-    );
+    const start =
+      loopRegion && loopRegion.startTime !== 0
+        ? loopRegion.startTime
+        : Math.max(0, currentTime - 5);
+    setLoopRegion(start, currentTime);
   };
 
-  const loopDuration = loopRegion.endTime - loopRegion.startTime;
+  const loopDuration = loopRegion ? loopRegion.endTime - loopRegion.startTime : 0;
   const loopIsValid = loopDuration > 0;
 
   return (
@@ -40,18 +40,14 @@ export default function LoopControl() {
           id="loop-enabled"
           name="loop-enabled"
           type="checkbox"
-          checked={loopRegion.enabled && loopIsValid}
+          checked={(loopRegion?.enabled ?? false) && loopIsValid}
           onChange={toggleLoop}
           disabled={!loopIsValid}
           className="w-3 h-3 cursor-pointer"
         />
         <label htmlFor="loop-enabled" className="text-gray-400">
-          {loopIsValid
-            ? `${loopRegion.startTime.toFixed(
-                2
-              )}s - ${loopRegion.endTime.toFixed(2)}s (${loopDuration.toFixed(
-                2
-              )}s)`
+          {loopIsValid && loopRegion
+            ? `${loopRegion.startTime.toFixed(2)}s - ${loopRegion.endTime.toFixed(2)}s (${loopDuration.toFixed(2)}s)`
             : "Set loop points"}
         </label>
       </div>
@@ -80,8 +76,8 @@ export default function LoopControl() {
 
       {/* Loop info */}
       <div className="text-xs text-gray-500 space-y-1">
-        <div>Start: {loopRegion.startTime.toFixed(2)}s</div>
-        <div>End: {loopRegion.endTime.toFixed(2)}s</div>
+        <div>Start: {(loopRegion?.startTime ?? 0).toFixed(2)}s</div>
+        <div>End: {(loopRegion?.endTime ?? 0).toFixed(2)}s</div>
         <div>Duration: {loopDuration.toFixed(2)}s</div>
       </div>
     </div>

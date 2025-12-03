@@ -141,7 +141,11 @@ export function MIDIEditor() {
             No MIDI sequence yet. Create one to start editing.
           </p>
         </div>
-        <Tooltip content={{ text: "Create a new MIDI sequence for this track" }}>
+        <Tooltip content={{
+            title: 'Create Sequence',
+            description: 'Create a new MIDI sequence for this instrument track',
+            category: 'tools'
+          }}>
           <button
             onClick={handleCreateSequence}
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg font-medium text-white transition-colors"
@@ -167,7 +171,12 @@ export function MIDIEditor() {
 
         {/* Zoom controls */}
         <div className="flex items-center gap-2">
-          <Tooltip content={{ text: "Zoom out (-)" }}>
+          <Tooltip content={{
+              title: 'Zoom Out',
+              description: 'Decrease editor zoom level',
+              category: 'tools',
+              hotkey: '-'
+            }}>
             <button
               onClick={() => setZoom(z => Math.max(z - 20, 20))}
               className="px-3 py-1 text-sm bg-gray-800 hover:bg-gray-700 rounded transition-colors text-gray-300"
@@ -176,7 +185,12 @@ export function MIDIEditor() {
             </button>
           </Tooltip>
           <span className="text-xs text-gray-500 min-w-12 text-center">{zoom}%</span>
-          <Tooltip content={{ text: "Zoom in (+)" }}>
+          <Tooltip content={{
+              title: 'Zoom In',
+              description: 'Increase editor zoom level',
+              category: 'tools',
+              hotkey: '+'
+            }}>
             <button
               onClick={() => setZoom(z => Math.min(z + 20, 400))}
               className="px-3 py-1 text-sm bg-gray-800 hover:bg-gray-700 rounded transition-colors text-gray-300"

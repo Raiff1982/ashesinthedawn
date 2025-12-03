@@ -8,16 +8,14 @@ import { Activity } from 'lucide-react';
 import { Tooltip } from './TooltipProvider';
 
 interface SpectrumAnalyzerProps {
-  _trackId?: string;
-  height?: number;
   width?: number;
+  height?: number;
   fftSize?: number;
 }
 
 export function SpectrumAnalyzer({
-  _trackId,
-  height = 150,
-  width = 300,
+  width = 200,
+  height = 120,
   fftSize = 2048,
 }: SpectrumAnalyzerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

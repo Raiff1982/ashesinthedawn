@@ -7,19 +7,17 @@ import { useEffect, useState, useRef } from 'react';
 import { useDAW } from '../contexts/DAWContext';
 
 interface InputMonitorProps {
-  trackId?: string;
   showLabel?: boolean;
   compact?: boolean;
   height?: string;
 }
 
 export default function InputMonitor({
-  trackId,
   showLabel = true,
   compact = false,
   height = 'h-8',
 }: InputMonitorProps) {
-  const { inputLevel, selectedTrack } = useDAW();
+  const { inputLevel } = useDAW();
   const [peakLevel, setPeakLevel] = useState(0);
   const [rmsLevel, setRmsLevel] = useState(0);
   const [isClipping, setIsClipping] = useState(false);
