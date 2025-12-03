@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   createContext,
   useContext,
   useState,
@@ -637,8 +637,5 @@ export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 export const useDAWContext = () => {
   return useContext(DAWContext);
 };
-
-// Export as useDAW for easier usage
-export const useDAW = useDAWContext;
 
 const DAWContext = createContext<DAWContextType | undefined>(undefined);
