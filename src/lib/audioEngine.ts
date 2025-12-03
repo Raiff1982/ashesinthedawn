@@ -1026,6 +1026,159 @@ export class AudioEngine {
     this.isInitialized = false;
     console.log("Audio Engine disposed");
   }
+
+  /**
+   * Convert MIDI pitch to frequency in Hz
+   * A4 (pitch 69) = 440 Hz
+   */
+  private pitchToFrequency(pitch: number): number {
+    const A4 = 440;
+    const A4_MIDI = 69;
+    return A4 * Math.pow(2, (pitch - A4_MIDI) / 12);
+  }
+
+  /**
+   * Play a single MIDI note
+   * @param pitch MIDI pitch (0-127)
+   * @param velocity MIDI velocity (0-127)
+   * @param duration Duration in seconds
+   * @param startTime When to start (relative to now)
+   * @param waveformType Type of waveform: 'sine' | 'triangle' | 'square' | 'sawtooth'
+   */
+  playMIDINote(
+    pitch: number,
+    velocity: number = 100,
+    duration: number = 0.5,
+    startTime: number = 0,
+    waveformType: OscillatorType = 'triangle'
+  ): void {
+    if (!this.audioContext || !this.masterGain) return;
+
+    try {
+      // Resume audio context if suspended
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+
+      const now = this.audioContext.currentTime;
+      const noteStartTime = now + startTime;
+      const noteEndTime = noteStartTime + duration;
+
+      // Convert MIDI values to audio parameters
+      const frequency = this.pitchToFrequency(pitch);
+      const velocityGain = (velocity / 127) * 0.3; // Scale velocity to 0-0.3 for safety
+
+      // Create oscillator
+      const oscillator = this.audioContext.createOscillator();
+      oscillator.type = waveformType;
+      oscillator.frequency.value = frequency;
+
+      // Create gain node for this note with ADSR envelope
+      const noteGain = this.audioContext.createGain();
+      
+      // ADSR Envelope:
+      // Attack: 0.005s (5ms)
+      // Decay: 0.1s
+      // Sustain: velocityGain level
+      // Release: 0.2s
+      const attackTime = 0.005;
+      const decayTime = 0.1;
+      const sustainLevel = velocityGain * 0.8;
+      const releaseTime = 0.2;
+
+      // Attack phase
+      noteGain.gain.setValueAtTime(0, noteStartTime);
+      noteGain.gain.linearRampToValueAtTime(velocityGain, noteStartTime + attackTime);
+
+      // Decay phase
+      noteGain.gain.linearRampToValueAtTime(
+        sustainLevel,
+        noteStartTime + attackTime + decayTime
+      );
+
+      // Sustain phase (hold until release)
+      noteGain.gain.setValueAtTime(
+        sustainLevel,
+        noteEndTime - releaseTime
+      );
+
+      // Release phase
+      noteGain.gain.exponentialRampToValueAtTime(
+        0.001, // Near-silent
+        noteEndTime
+      );
+
+      // Connect: oscillator → gain → master
+      oscillator.connect(noteGain);
+      noteGain.connect(this.masterGain);
+
+      // Start and stop oscillator
+      oscillator.start(noteStartTime);
+      oscillator.stop(noteEndTime);
+
+      console.log(
+        `Playing MIDI note: pitch=${pitch} (${this.midiPitchToNote(pitch)}), velocity=${velocity}, duration=${duration}s`
+      );
+    } catch (error) {
+      console.error('Error playing MIDI note:', error);
+    }
+  }
+
+  /**
+   * Play multiple MIDI notes simultaneously (chord)
+   * @param pitches Array of MIDI pitches
+   * @param velocity MIDI velocity (0-127)
+   * @param duration Duration in seconds
+   * @param startTime When to start (relative to now)
+   */
+  playMIDIChord(
+    pitches: number[],
+    velocity: number = 100,
+    duration: number = 0.5,
+    startTime: number = 0
+  ): void {
+    pitches.forEach(pitch => {
+      this.playMIDINote(pitch, velocity, duration, startTime, 'triangle');
+    });
+  }
+
+  /**
+   * Convert MIDI pitch to note name for debugging
+   */
+  private midiPitchToNote(pitch: number): string {
+    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const octave = Math.floor(pitch / 12) - 1;
+    const noteName = notes[pitch % 12];
+    return `${noteName}${octave}`;
+  }
+
+  /**
+   * Play a MIDI sequence
+   * @param notes Array of MIDI notes to play
+   * @param bpm Tempo in beats per minute
+   */
+  playMIDISequence(
+    notes: Array<{ pitch: number; velocity: number; startTime: number; duration: number }>,
+    bpm: number = 120
+  ): void {
+    if (!this.audioContext) return;
+
+    notes.forEach(note => {
+      // Convert beat-based timing to seconds if needed
+      const startTimeSeconds = note.startTime;
+      const durationSeconds = note.duration;
+
+      this.playMIDINote(
+        note.pitch,
+        note.velocity,
+        durationSeconds,
+        startTimeSeconds,
+        'triangle'
+      );
+    });
+
+    console.log(`Playing MIDI sequence with ${notes.length} notes at ${bpm} BPM`);
+  }
 }
 
 // Singleton instance

@@ -4,9 +4,10 @@
  * Piano roll editor with note editing capabilities
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Music } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
+import { getAudioEngine } from '../lib/audioEngine';
 import { MIDISequence, MIDINote } from '../types/midi';
 import { createEmptySequence } from '../lib/midiUtils';
 import { PianoRoll } from './PianoRoll';
@@ -21,6 +22,8 @@ export function MIDIEditor() {
   const [zoom, setZoom] = useState<number>(100);
   const [quantizeValue, setQuantizeValue] = useState<number>(8);
 
+  const audioEngine = getAudioEngine();
+
   // Load MIDI sequence when track changes
   useEffect(() => {
     if (selectedTrack && 'midiSequence' in selectedTrack && selectedTrack.midiSequence) {
@@ -31,14 +34,31 @@ export function MIDIEditor() {
     }
   }, [selectedTrack?.id]);
 
+  // Trigger MIDI playback when isPlaying changes
+  useEffect(() => {
+    if (!midiSequence) return;
+
+    if (isPlaying) {
+      // Play the sequence
+      audioEngine.playMIDISequence(
+        midiSequence.notes,
+        midiSequence.bpm
+      );
+      console.log('▶️ Playing MIDI sequence');
+    } else {
+      // Stop all playback (audio engine will handle this)
+      console.log('⏹️ Stopped MIDI playback');
+    }
+  }, [isPlaying, midiSequence]);
+
   // Update MIDI sequence in DAW context
   const handleSequenceChange = (newSequence: MIDISequence) => {
     setMIDISequence(newSequence);
     if (selectedTrack) {
       updateTrack(selectedTrack.id, {
         ...selectedTrack,
-        midiSequence: newSequence,
-      });
+        ...newSequence,  // Just pass the new sequence
+      } as Parameters<typeof updateTrack>[1]);
     }
   };
 

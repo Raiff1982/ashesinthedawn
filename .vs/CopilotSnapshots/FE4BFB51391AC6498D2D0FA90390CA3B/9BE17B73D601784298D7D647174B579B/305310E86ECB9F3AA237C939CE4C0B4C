@@ -1,0 +1,101 @@
+﻿/**
+ * NOTE CONTROLS
+ * Duration and velocity sliders for selected notes
+ */
+
+import React, { useState, useEffect } from 'react';
+import { MIDINote } from '../types/midi';
+
+interface NoteControlsProps {
+  selectedNotes: MIDINote[];
+  onNotesChange: (notes: MIDINote[]) => void;
+}
+
+export function NoteControls({ selectedNotes, onNotesChange }: NoteControlsProps) {
+  const [avgDuration, setAvgDuration] = useState<number>(0);
+  const [avgVelocity, setAvgVelocity] = useState<number>(80);
+
+  // Update averages when selection changes
+  useEffect(() => {
+    if (selectedNotes.length === 0) return;
+
+    const avgDur = selectedNotes.reduce((sum, n) => sum + n.duration, 0) / selectedNotes.length;
+    const avgVel = selectedNotes.reduce((sum, n) => sum + n.velocity, 0) / selectedNotes.length;
+
+    setAvgDuration(avgDur);
+    setAvgVelocity(avgVel);
+  }, [selectedNotes]);
+
+  const handleDurationChange = (duration: number) => {
+    setAvgDuration(duration);
+    onNotesChange(
+      selectedNotes.map(note => ({ ...note, duration }))
+    );
+  };
+
+  const handleVelocityChange = (velocity: number) => {
+    setAvgVelocity(velocity);
+    onNotesChange(
+      selectedNotes.map(note => ({ ...note, velocity: Math.round(velocity) }))
+    );
+  };
+
+  if (selectedNotes.length === 0) {
+    return (
+      <div className="p-4 text-gray-500 text-sm border-t border-gray-700 bg-gray-800">
+        Select notes to edit duration and velocity
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4 bg-gray-800 border-t border-gray-700">
+      {/* Duration Control */}
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-xs font-semibold text-gray-300">Duration</label>
+          <span className="text-xs text-gray-400">{avgDuration.toFixed(2)}s</span>
+        </div>
+        <input
+          type="range"
+          min="0.05"
+          max="4"
+          step="0.05"
+          value={avgDuration}
+          onChange={(e) => handleDurationChange(parseFloat(e.target.value))}
+          className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+        />
+        <div className="flex justify-between text-xs text-gray-500 mt-1">
+          <span>50ms</span>
+          <span>4s</span>
+        </div>
+      </div>
+
+      {/* Velocity Control */}
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-xs font-semibold text-gray-300">Velocity</label>
+          <span className="text-xs text-gray-400">{Math.round(avgVelocity)}/127</span>
+        </div>
+        <input
+          type="range"
+          min="1"
+          max="127"
+          step="1"
+          value={avgVelocity}
+          onChange={(e) => handleVelocityChange(parseInt(e.target.value))}
+          className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-600"
+        />
+        <div className="flex justify-between text-xs text-gray-500 mt-1">
+          <span>Silent</span>
+          <span>Max</span>
+        </div>
+      </div>
+
+      {/* Selected count */}
+      <div className="text-xs text-gray-500 border-t border-gray-700 pt-3">
+        {selectedNotes.length} note{selectedNotes.length !== 1 ? 's' : ''} selected
+      </div>
+    </div>
+  );
+}
