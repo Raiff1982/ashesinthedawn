@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import * as React from "react";
 import type {
   Track,
   Project,
@@ -15,6 +15,7 @@ import type {
 import { CodetteSuggestion } from "../lib/codetteBridge";
 import { supabase } from "../lib/supabase";
 import { useEffectChainAPI, EffectChainContextAPI } from "../lib/effectChainContextAdapter";
+import { getAudioEngine } from "../lib/audioEngine";
 
 // Create context (may be undefined before provider mounts)
 const DAWContext = React.createContext<DAWContextType | undefined>(undefined);
@@ -213,10 +214,38 @@ interface DAWContextType {
   getEffectChainForTrack: EffectChainContextAPI['getEffectChainForTrack'];
   processTrackEffects: EffectChainContextAPI['processTrackEffects'];
   hasActiveEffects: EffectChainContextAPI['hasActiveEffects'];
+
+  // NEW: Track management methods
+  addTrack: (type: Track["type"]) => void;
+  selectTrack: (trackId: string) => void;
+  updateTrack: (trackId: string, updates: Partial<Track>) => void;
+  deleteTrack: (trackId: string) => void;
+  duplicateTrack: (trackId: string) => Promise<Track | null>;
+  restoreTrack: (trackId: string) => void;
+  permanentlyDeleteTrack: (trackId: string) => void;
 }
 
 // DAW Provider component
 export function DAWProvider({ children }: { children: React.ReactNode }) {
+  // Get AudioEngine singleton (stable across renders)
+  const audioEngineRef = React.useRef(getAudioEngine());
+  const audioEngineInitializedRef = React.useRef(false);
+
+  // Initialize AudioEngine on mount
+  React.useEffect(() => {
+    if (!audioEngineInitializedRef.current) {
+      audioEngineRef.current
+        .initialize()
+        .then(() => {
+          console.log("[DAWContext] AudioEngine initialized successfully");
+          audioEngineInitializedRef.current = true;
+        })
+        .catch((error) => {
+          console.error("[DAWContext] Failed to initialize AudioEngine:", error);
+        });
+    }
+  }, []);
+
   // State and context initialization
   const [currentProject, setCurrentProject] = React.useState<Project | null>(null);
   const [tracks, setTracks] = React.useState<Track[]>([]);
@@ -274,6 +303,25 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     connected: false,
     reconnectAttempts: 0,
   });
+
+  // Modal State Management (NEW)
+  const [showNewProjectModal, setShowNewProjectModal] = React.useState<boolean>(false);
+  const [showExportModal, setShowExportModal] = React.useState<boolean>(false);
+  const [showAudioSettingsModal, setShowAudioSettingsModal] = React.useState<boolean>(false);
+  const [showAboutModal, setShowAboutModal] = React.useState<boolean>(false);
+  const [showSaveAsModal, setShowSaveAsModal] = React.useState<boolean>(false);
+  const [showOpenProjectModal, setShowOpenProjectModal] = React.useState<boolean>(false);
+  const [showMidiSettingsModal, setShowMidiSettingsModal] = React.useState<boolean>(false);
+  const [showMixerOptionsModal, setShowMixerOptionsModal] = React.useState<boolean>(false);
+  const [showPreferencesModal, setShowPreferencesModal] = React.useState<boolean>(false);
+  const [showShortcutsModal, setShowShortcutsModal] = React.useState<boolean>(false);
+
+  // Bus and MIDI routing state (NEW)
+  const [buses, setBuses] = React.useState<Bus[]>([]);
+  const [midiRoutes, setMidiRoutes] = React.useState<MidiRoute[]>([]);
+  const [selectedTracks, setSelectedTracks] = React.useState<Set<string>>(new Set());
+  const [clipboardData, setClipboardData] = React.useState<{ type: 'track' | 'clip' | null; data: any | null }>({ type: null, data: null });
+
 
   // Unique ID counter to prevent React key collisions
   const trackIdCounterRef = React.useRef<number>(0);
@@ -347,6 +395,8 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     setCurrentTime(0);
   };
 
+  const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
+
   const saveProject = async () => {
     if (!currentProject) return;
     setIsUploadingFile(true);
@@ -384,6 +434,102 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // NEW: Upload audio file and load into AudioEngine
+  const uploadAudioFile = async (file: File): Promise<boolean> => {
+    if (!selectedTrack) {
+      setUploadError("Please select a track first");
+      return false;
+    }
+
+    // Validate file type
+    const validTypes = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/flac", "audio/aac"];
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|flac|aac)$/i)) {
+      setUploadError("Unsupported audio format. Use MP3, WAV, OGG, FLAC, or AAC.");
+      return false;
+    }
+
+    // Validate file size (100MB max)
+    const maxSize = 100 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setUploadError("File too large. Maximum size is 100MB.");
+      return false;
+    }
+
+    setIsUploadingFile(true);
+    setUploadError(null);
+
+    try {
+      // Load audio file into AudioEngine
+      const success = await audioEngineRef.current.loadAudioFile(selectedTrack.id, file);
+      
+      if (!success) {
+        setUploadError("Failed to decode audio file");
+        return false;
+      }
+
+      // Cache waveform and duration from AudioEngine
+      const waveform = audioEngineRef.current.getWaveformData(selectedTrack.id);
+      const duration = audioEngineRef.current.getAudioDuration(selectedTrack.id);
+      
+      waveformCacheRef.current.set(selectedTrack.id, waveform);
+      durationCacheRef.current.set(selectedTrack.id, duration);
+
+      console.log(
+        `[DAWContext] Audio file loaded: ${duration.toFixed(2)}s, ${waveform.length} waveform samples`
+      );
+
+      return true;
+    } catch (error) {
+      console.error("Error uploading audio file:", error);
+      setUploadError(error instanceof Error ? error.message : "Unknown error occurred");
+      return false;
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
+
+  // NEW: Get waveform data from AudioEngine (with fallback to cache)
+  const getWaveformData = (trackId: string): number[] => {
+    // Try AudioEngine first
+    try {
+      const waveform = audioEngineRef.current.getWaveformData(trackId);
+      if (waveform && waveform.length > 0) {
+        return waveform;
+      }
+    } catch (error) {
+      console.debug("[DAWContext] AudioEngine waveform retrieval failed:", error);
+    }
+
+    // Fall back to local cache
+    return waveformCacheRef.current.get(trackId) || [];
+  };
+
+  // NEW: Get audio duration from AudioEngine (with fallback to cache)
+  const getAudioDuration = (trackId: string): number => {
+    // Try AudioEngine first
+    try {
+      const duration = audioEngineRef.current.getAudioDuration(trackId);
+      if (duration > 0) {
+        return duration;
+      }
+    } catch (error) {
+      console.debug("[DAWContext] AudioEngine duration retrieval failed:", error);
+    }
+
+    // Fall back to local cache
+    return durationCacheRef.current.get(trackId) || 0;
+  };
+
+  // NEW: Get audio buffer data from AudioEngine
+  const getAudioBufferData = (trackId: string): Float32Array | null => {
+    try {
+      return audioEngineRef.current.getAudioBufferData(trackId);
+    } catch (error) {
+      console.debug("[DAWContext] AudioEngine buffer retrieval failed:", error);
+      return null;
+    }
+  };
+
   // Sync DAW state to Codette AI (Phase 1)
   const syncDAWStateToCodette = async () => {
     return true;
@@ -400,39 +546,449 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     _endTime?: number
   ) => {};
 
-  const cutTrack = (_trackId: string) => {};
-  const copyTrack = (_trackId: string) => {};
-  const pasteTrack = () => {};
-  const selectAllTracks = () => {};
-  const deselectAllTracks = () => {};
+  // Clipboard and track selection functions (NEW - Step 4)
+  const cutTrack = (trackId: string) => {
+    try {
+      const track = tracks.find((t) => t.id === trackId);
+      if (!track) return;
+      setClipboardData({ type: 'track', data: { ...track } });
+      // Delete track will be called after deleteTrack is defined
+      setTracks((prev) => prev.filter((t) => t.id !== trackId));
+      const del = tracks.find((t) => t.id === trackId);
+      if (del) _setDeletedTracks((prev) => [...prev, del]);
+      console.log(`[DAWContext] Track ${trackId} cut to clipboard`);
+    } catch (error) {
+      console.error("[DAWContext] cutTrack failed:", error);
+    }
+  };
 
-  const startRecording = async (_trackId: string) => {
-    return true;
+  const copyTrack = (trackId: string) => {
+    try {
+      const track = tracks.find((t) => t.id === trackId);
+      if (!track) return;
+      setClipboardData({ type: 'track', data: { ...track } });
+      console.log(`[DAWContext] Track ${trackId} copied to clipboard`);
+    } catch (error) {
+      console.error("[DAWContext] copyTrack failed:", error);
+    }
   };
-  const stopRecording = async () => {
-    return null;
+
+  const pasteTrack = () => {
+    try {
+      if (clipboardData.type !== 'track' || !clipboardData.data) {
+        console.warn("[DAWContext] No track data in clipboard");
+        return;
+      }
+      const sourceTrack = clipboardData.data as Track;
+      const newTrack: Track = {
+        ...sourceTrack,
+        id: getUniqueTrackId(),
+        name: `${sourceTrack.name} (copy)`,
+      };
+      setTracks((prev) => [...prev, newTrack]);
+      
+      // Copy audio buffer if available
+      if (sourceTrack.id) {
+        audioEngineRef.current.duplicateTrackAudioBuffer(sourceTrack.id, newTrack.id).catch(
+          (error) => console.error("[DAWContext] Audio buffer duplication failed:", error)
+        );
+      }
+      
+      ensureDemoDataForTrack(newTrack.id);
+      console.log(`[DAWContext] Track pasted: ${newTrack.id}`);
+    } catch (error) {
+      console.error("[DAWContext] pasteTrack failed:", error);
+    }
   };
-  const pauseRecording = () => {
-    return true;
+
+  const selectAllTracks = () => {
+    try {
+      const allTrackIds = new Set(tracks.map((t) => t.id));
+      setSelectedTracks(allTrackIds);
+      console.log(`[DAWContext] Selected ${tracks.length} tracks`);
+    } catch (error) {
+      console.error("[DAWContext] selectAllTracks failed:", error);
+    }
   };
-  const resumeRecording = () => {
-    return true;
+
+  const deselectAllTracks = () => {
+    try {
+      setSelectedTracks(new Set());
+      console.log("[DAWContext] Deselected all tracks");
+    } catch (error) {
+      console.error("[DAWContext] deselectAllTracks failed:", error);
+    }
   };
+
+  // Recording functions (NEW - Step 5)
+  const startRecording = async (trackId: string): Promise<boolean> => {
+    try {
+      _setRecordingTrackId(trackId);
+      _setRecordingStartTime(Date.now());
+      setIsRecording(true);
+      const result = await audioEngineRef.current.startRecording();
+      console.log(`[DAWContext] Recording started on track ${trackId}`);
+      return result;
+    } catch (error) {
+      console.error("[DAWContext] startRecording failed:", error);
+      _setRecordingError(error instanceof Error ? error.message : "Recording failed");
+      return false;
+    }
+  };
+
+  const stopRecording = async (): Promise<Blob | null> => {
+    try {
+      setIsRecording(false);
+      const blob = await audioEngineRef.current.stopRecording();
+      if (blob && recordingTrackId) {
+        _setRecordingBlob(blob);
+        await audioEngineRef.current.saveRecordingToTrack(recordingTrackId, blob);
+        console.log(`[DAWContext] Recording saved to track ${recordingTrackId}`);
+      }
+      return blob;
+    } catch (error) {
+      console.error("[DAWContext] stopRecording failed:", error);
+      _setRecordingError(error instanceof Error ? error.message : "Stop recording failed");
+      return null;
+    }
+  };
+
+  const pauseRecording = (): boolean => {
+    try {
+      const result = audioEngineRef.current.pauseRecording();
+      if (result) console.log("[DAWContext] Recording paused");
+      return result;
+    } catch (error) {
+      console.error("[DAWContext] pauseRecording failed:", error);
+      return false;
+    }
+  };
+
+  const resumeRecording = (): boolean => {
+    try {
+      const result = audioEngineRef.current.resumeRecording();
+      if (result) console.log("[DAWContext] Recording resumed");
+      return result;
+    } catch (error) {
+      console.error("[DAWContext] resumeRecording failed:", error);
+      return false;
+    }
+  };
+
+  const setPunchInOut = (punchIn: number, punchOut: number) => {
+    try {
+      _setPunchInTime(punchIn);
+      _setPunchOutTime(punchOut);
+      console.log(`[DAWContext] Punch in/out set: ${punchIn}s - ${punchOut}s`);
+    } catch (error) {
+      console.error("[DAWContext] setPunchInOut failed:", error);
+    }
+  };
+
+  const togglePunchIn = () => {
+    try {
+      _setPunchInEnabled((prev) => !prev);
+      console.log(`[DAWContext] Punch in ${punchInEnabled ? 'disabled' : 'enabled'}`);
+    } catch (error) {
+      console.error("[DAWContext] togglePunchIn failed:", error);
+    }
+  };
+
   const setRecordingMode = (mode: 'audio' | 'midi' | 'overdub') => {
-    setRecordingModeState(mode);
+    try {
+      setRecordingModeState(mode);
+      console.log(`[DAWContext] Recording mode set to ${mode}`);
+    } catch (error) {
+      console.error("[DAWContext] setRecordingMode failed:", error);
+    }
   };
-  const setPunchInOut = (_punchIn: number, _punchOut: number) => {};
-  const togglePunchIn = () => {};
+
   const undoLastRecording = () => {
-    console.log("Undo last recording action");
-    setRecordingTakeCount((prev: number) => Math.max(0, prev - 1));
+    try {
+      console.log("[DAWContext] Undo last recording (stub)");
+      // TODO: Implement undo recording
+    } catch (error) {
+      console.error("[DAWContext] undoLastRecording failed:", error);
+    }
   };
 
-  const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
-  const undo = () => { console.log("undo"); };
-  const redo = () => { console.log("redo"); };
+  // Bus/Routing functions (NEW - Step 7)
+  const createBus = (name: string) => {
+    try {
+      const bus: Bus = {
+        id: `bus-${Date.now()}`,
+        name,
+        trackIds: [],
+        volume: 0,
+        pan: 0,
+        color: '#888',
+        muted: false,
+        inserts: [],
+      };
+      setBuses((prev) => [...prev, bus]);
+      console.log(`[DAWContext] Bus created: ${name}`);
+    } catch (error) {
+      console.error("[DAWContext] createBus failed:", error);
+    }
+  };
 
-  const contextValue = {
+  const deleteBus = (busId: string) => {
+    try {
+      setBuses((prev) => prev.filter((b) => b.id !== busId));
+      console.log(`[DAWContext] Bus ${busId} deleted`);
+    } catch (error) {
+      console.error("[DAWContext] deleteBus failed:", error);
+    }
+  };
+
+  const addTrackToBus = (trackId: string, busId: string) => {
+    try {
+      setBuses((prev) =>
+        prev.map((b) =>
+          b.id === busId ? { ...b, trackIds: [...b.trackIds, trackId] } : b
+        )
+      );
+      console.log(`[DAWContext] Track ${trackId} added to bus ${busId}`);
+    } catch (error) {
+      console.error("[DAWContext] addTrackToBus failed:", error);
+    }
+  };
+
+  const removeTrackFromBus = (trackId: string, busId: string) => {
+    try {
+      setBuses((prev) =>
+        prev.map((b) =>
+          b.id === busId ? { ...b, trackIds: b.trackIds.filter((t: string) => t !== trackId) } : b
+        )
+      );
+      console.log(`[DAWContext] Track ${trackId} removed from bus ${busId}`);
+    } catch (error) {
+      console.error("[DAWContext] removeTrackFromBus failed:", error);
+    }
+  };
+
+  const createSidechain = (sourceTrackId: string, targetTrackId: string) => {
+    try {
+      const updateTrackImpl = (tid: string, updates: Partial<Track>) => {
+        setTracks((prev) => prev.map((t) => (t.id === tid ? { ...t, ...updates } : t)));
+      };
+      updateTrackImpl(targetTrackId, {
+        routing: `sidechain:${sourceTrackId}`,
+      });
+      console.log(`[DAWContext] Sidechain created: ${sourceTrackId} → ${targetTrackId}`);
+    } catch (error) {
+      console.error("[DAWContext] createSidechain failed:", error);
+    }
+  };
+
+  // MIDI functions (NEW - Step 8)
+  const createMIDIRoute = (sourceDeviceId: string, targetTrackId: string) => {
+    try {
+      const route: MidiRoute = {
+        id: `route-${Date.now()}`,
+        sourceDeviceId,
+        targetTrackId,
+        channel: 0,
+      };
+      setMidiRoutes((prev) => [...prev, route]);
+      console.log(`[DAWContext] MIDI route created: ${sourceDeviceId} → ${targetTrackId}`);
+    } catch (error) {
+      console.error("[DAWContext] createMIDIRoute failed:", error);
+    }
+  };
+
+  const deleteMIDIRoute = (routeId: string) => {
+    try {
+      setMidiRoutes((prev) => prev.filter((r) => r.id !== routeId));
+      console.log(`[DAWContext] MIDI route ${routeId} deleted`);
+    } catch (error) {
+      console.error("[DAWContext] deleteMIDIRoute failed:", error);
+    }
+  };
+
+  const getMIDIRoutesForTrack = (trackId: string): MidiRoute[] => {
+    try {
+      return midiRoutes.filter((r) => r.targetTrackId === trackId);
+    } catch (error) {
+      console.error("[DAWContext] getMIDIRoutesForTrack failed:", error);
+      return [];
+    }
+  };
+
+  // Export functions (NEW - Step 9)
+  const exportAudio = async (format: string, quality: string) => {
+    try {
+      console.log(`[DAWContext] Exporting audio as ${format} (${quality})`);
+      // TODO: Implement actual audio export with format/quality handling
+      console.log("[DAWContext] Export complete (stub implementation)");
+    } catch (error) {
+      console.error("[DAWContext] exportAudio failed:", error);
+    }
+  };
+
+  const exportProjectAsFile = () => {
+    try {
+      const projectData = {
+        currentProject,
+        tracks,
+        buses,
+        midiRoutes,
+        loopRegion,
+        metronomeSettings,
+      };
+      const json = JSON.stringify(projectData, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentProject?.name || 'project'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      console.log("[DAWContext] Project exported successfully");
+    } catch (error) {
+      console.error("[DAWContext] exportProjectAsFile failed:", error);
+    }
+  };
+
+  const importProjectFromFile = async () => {
+    try {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = async (e: any) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        const data = JSON.parse(text);
+        setCurrentProject(data.currentProject);
+        setTracks(data.tracks || []);
+        setBuses(data.buses || []);
+        setMidiRoutes(data.midiRoutes || []);
+        _setLoopRegion(data.loopRegion || null);
+        _setMetronomeSettings(data.metronomeSettings || { enabled: false, volume: 1, beatSound: "click", accentFirst: false });
+        console.log("[DAWContext] Project imported successfully");
+      };
+      input.click();
+    } catch (error) {
+      console.error("[DAWContext] importProjectFromFile failed:", error);
+    }
+  };
+
+  const unloadPlugin = (trackId: string, pluginId: string) => {
+    try {
+      removePluginFromTrack(trackId, pluginId);
+      console.log(`[DAWContext] Plugin ${pluginId} unloaded from track ${trackId}`);
+    } catch (error) {
+      console.error("[DAWContext] unloadPlugin failed:", error);
+    }
+  };
+
+  // Audio engine wrapper functions (NEW - Step 2)
+  const seek = (timeSeconds: number) => {
+    setCurrentTime(timeSeconds);
+    if (isPlaying) {
+      try {
+        audioEngineRef.current.stopAllAudio();
+        setIsPlaying(false);
+        setIsPlaying(true);
+      } catch (error) {
+        console.error("[DAWContext] Seek failed:", error);
+      }
+    }
+  };
+
+  const setTrackInputGain = (trackId: string, gainDb: number) => {
+    try {
+      audioEngineRef.current.setTrackInputGain(trackId, gainDb);
+      // Update track state to reflect input gain change
+      const track = tracks.find((t) => t.id === trackId);
+      if (track) {
+        setTracks((prev) =>
+          prev.map((t) => (t.id === trackId ? { ...t, inputGain: gainDb } : t))
+        );
+      }
+    } catch (error) {
+      console.error("[DAWContext] setTrackInputGain failed:", error);
+    }
+  };
+
+  const getAudioLevels = (): Uint8Array | null => {
+    try {
+      return audioEngineRef.current.getAudioLevels();
+    } catch (error) {
+      console.debug("[DAWContext] getAudioLevels failed:", error);
+      return null;
+    }
+  };
+
+  // Plugin management functions (NEW - Step 3)
+  const addPluginToTrack = (trackId: string, plugin: Plugin) => {
+    try {
+      setTracks((prev) =>
+        prev.map((t) =>
+          t.id === trackId
+            ? { ...t, inserts: [...(t.inserts || []), plugin] }
+            : t
+        )
+      );
+      console.log(`[DAWContext] Plugin ${plugin.id} added to track ${trackId}`);
+    } catch (error) {
+      console.error("[DAWContext] addPluginToTrack failed:", error);
+    }
+  };
+
+  const removePluginFromTrack = (trackId: string, pluginId: string) => {
+    try {
+      setTracks((prev) =>
+        prev.map((t) =>
+          t.id === trackId
+            ? { ...t, inserts: (t.inserts || []).filter((p) => p.id !== pluginId) }
+            : t
+        )
+      );
+      console.log(`[DAWContext] Plugin ${pluginId} removed from track ${trackId}`);
+    } catch (error) {
+      console.error("[DAWContext] removePluginFromTrack failed:", error);
+    }
+  };
+
+  const togglePluginEnabled = (trackId: string, pluginId: string, enabled: boolean) => {
+    try {
+      effectChainAPI.enableDisableEffect(trackId, pluginId, enabled);
+      console.log(`[DAWContext] Plugin ${pluginId} on track ${trackId}: ${enabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error("[DAWContext] togglePluginEnabled failed:", error);
+    }
+  };
+
+  const loadPlugin = (trackId: string, pluginName: string) => {
+    try {
+      const plugin: Plugin = {
+        id: `plugin-${Date.now()}`,
+        name: pluginName,
+        type: 'utility',
+        parameters: {},
+        enabled: true,
+      };
+      addPluginToTrack(trackId, plugin);
+      console.log(`[DAWContext] Plugin ${pluginName} loaded on track ${trackId}`);
+    } catch (error) {
+      console.error("[DAWContext] loadPlugin failed:", error);
+    }
+  };
+
+  // Stub functions for undo/redo
+  const undo = () => { 
+    console.log("[DAWContext] undo (stub)");
+  };
+
+  const redo = () => { 
+    console.log("[DAWContext] redo (stub)");
+  };
+
+  const contextValue: DAWContextType = {
     currentProject,
     tracks,
     selectedTrack,
@@ -471,16 +1027,16 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     toggleVoiceControl,
     saveProject,
     loadProject,
-    uploadAudioFile: async () => false,
-    getWaveformData: (_trackId: string) => [],
-    getAudioDuration: (_trackId: string) => 0,
-    getAudioBufferData: () => null,
-    getAudioLevels: () => null,
-    seek: () => {},
-    setTrackInputGain: () => {},
-    addPluginToTrack: () => {},
-    removePluginFromTrack: () => {},
-    togglePluginEnabled: () => {},
+    uploadAudioFile,
+    getWaveformData,
+    getAudioDuration,
+    getAudioBufferData,
+    getAudioLevels,
+    seek,
+    setTrackInputGain,
+    addPluginToTrack,
+    removePluginFromTrack,
+    togglePluginEnabled,
     undo,
     redo,
     addTrack: (type: Track["type"]) => {
@@ -523,7 +1079,11 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       if (!source) return null;
       const copy: Track = { ...source, id: getUniqueTrackId() };
       setTracks((prev) => [...prev, copy]);
-      // copy cached data
+      
+      // Duplicate audio buffer in AudioEngine
+      await audioEngineRef.current.duplicateTrackAudioBuffer(source.id, copy.id);
+      
+      // Copy cached data
       const wf = waveformCacheRef.current.get(source.id);
       if (wf) waveformCacheRef.current.set(copy.id, wf);
       const dur = durationCacheRef.current.get(source.id);
@@ -569,41 +1129,81 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     setMetronomeBeatSound: (sound: MetronomeSettings["beatSound"]) => {
       _setMetronomeSettings((prev) => ({ ...prev, beatSound: sound }));
     },
-    openNewProjectModal: () => {},
-    closeNewProjectModal: () => {},
-    openExportModal: () => {},
-    closeExportModal: () => {},
-    openAudioSettingsModal: () => {},
-    closeAudioSettingsModal: () => {},
-    openAboutModal: () => {},
-    closeAboutModal: () => {},
-    openSaveAsModal: () => {},
-    closeSaveAsModal: () => {},
-    openOpenProjectModal: () => {},
-    closeOpenProjectModal: () => {},
-    openMidiSettingsModal: () => {},
-    closeMidiSettingsModal: () => {},
-    openMixerOptionsModal: () => {},
-    closeMixerOptionsModal: () => {},
-    openPreferencesModal: () => {},
-    closePreferencesModal: () => {},
-    openShortcutsModal: () => {},
-    closeShortcutsModal: () => {},
-    exportAudio: async (_format: string, _quality: string) => {},
-    exportProjectAsFile: () => {},
-    importProjectFromFile: async () => {},
-    buses: [],
-    createBus: (_name: string) => {},
-    deleteBus: (_busId: string) => {},
-    addTrackToBus: (_trackId: string, _busId: string) => {},
-    removeTrackFromBus: (_trackId: string, _busId: string) => {},
-    createSidechain: (_sourceTrackId: string, _targetTrackId: string) => {},
-    loadPlugin: (_trackId: string, _pluginName: string) => {},
-    unloadPlugin: (_trackId: string, _pluginId: string) => {},
+    openNewProjectModal: () => {
+      setShowNewProjectModal(true);
+    },
+    closeNewProjectModal: () => {
+      setShowNewProjectModal(false);
+    },
+    openExportModal: () => {
+      setShowExportModal(true);
+    },
+    closeExportModal: () => {
+      setShowExportModal(false);
+    },
+    openAudioSettingsModal: () => {
+      setShowAudioSettingsModal(true);
+    },
+    closeAudioSettingsModal: () => {
+      setShowAudioSettingsModal(false);
+    },
+    openAboutModal: () => {
+      setShowAboutModal(true);
+    },
+    closeAboutModal: () => {
+      setShowAboutModal(false);
+    },
+    openSaveAsModal: () => {
+      setShowSaveAsModal(true);
+    },
+    closeSaveAsModal: () => {
+      setShowSaveAsModal(false);
+    },
+    openOpenProjectModal: () => {
+      setShowOpenProjectModal(true);
+    },
+    closeOpenProjectModal: () => {
+      setShowOpenProjectModal(false);
+    },
+    openMidiSettingsModal: () => {
+      setShowMidiSettingsModal(true);
+    },
+    closeMidiSettingsModal: () => {
+      setShowMidiSettingsModal(false);
+    },
+    openMixerOptionsModal: () => {
+      setShowMixerOptionsModal(true);
+    },
+    closeMixerOptionsModal: () => {
+      setShowMixerOptionsModal(false);
+    },
+    openPreferencesModal: () => {
+      setShowPreferencesModal(true);
+    },
+    closePreferencesModal: () => {
+      setShowPreferencesModal(false);
+    },
+    openShortcutsModal: () => {
+      setShowShortcutsModal(true);
+    },
+    closeShortcutsModal: () => {
+      setShowShortcutsModal(false);
+    },
+    exportAudio,
+    exportProjectAsFile,
+    importProjectFromFile,
+    buses,
+    createBus,
+    deleteBus,
+    addTrackToBus,
+    removeTrackFromBus,
+    createSidechain,
+    loadPlugin,
+    unloadPlugin,
     midiDevices,
-    createMIDIRoute: (_sourceDeviceId: string, _targetTrackId: string) => {},
-    deleteMIDIRoute: (_routeId: string) => {},
-    getMIDIRoutesForTrack: (_trackId: string) => [],
+    createMIDIRoute,
+    deleteMIDIRoute,
+    getMIDIRoutesForTrack,
     codetteConnected: false,
     codetteLoading: false,
     codetteSuggestions: [],
@@ -658,16 +1258,16 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     processTrackEffects: effectChainAPI.processTrackEffects,
     hasActiveEffects: effectChainAPI.hasActiveEffects,
     loadedPlugins: new Map(),
-    showNewProjectModal: false,
-    showExportModal: false,
-    showAudioSettingsModal: false,
-    showAboutModal: false,
-    showSaveAsModal: false,
-    showOpenProjectModal: false,
-    showMidiSettingsModal: false,
-    showMixerOptionsModal: false,
-    showPreferencesModal: false,
-    showShortcutsModal: false,
+    showNewProjectModal,
+    showExportModal,
+    showAudioSettingsModal,
+    showAboutModal,
+    showSaveAsModal,
+    showOpenProjectModal,
+    showMidiSettingsModal,
+    showMixerOptionsModal,
+    showPreferencesModal,
+    showShortcutsModal,
   };
 
   return <DAWContext.Provider value={contextValue}>{children}</DAWContext.Provider>;
