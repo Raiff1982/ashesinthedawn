@@ -318,14 +318,17 @@ export class AudioEngine {
   }
 
   /**
-   * Start recording audio from microphone
+   * Start recording audio from microphone with better control
    */
   async startRecording(): Promise<boolean> {
     if (!this.audioContext) await this.initialize();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      this.mediaRecorder = new MediaRecorder(stream);
+      this.mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 128000,
+      });
       this.recordedChunks = [];
 
       this.mediaRecorder.ondataavailable = (event) => {
@@ -335,10 +338,10 @@ export class AudioEngine {
       };
 
       this.mediaRecorder.start();
-      console.log("Recording started");
+      console.log("🎙️ Recording started with microphone input");
       return true;
     } catch (error) {
-      console.error("Failed to start recording:", error);
+      console.error("❌ Failed to start recording:", error);
       return false;
     }
   }
@@ -347,17 +350,135 @@ export class AudioEngine {
    * Stop recording and return audio blob
    */
   async stopRecording(): Promise<Blob | null> {
-    if (!this.mediaRecorder) return null;
+    if (!this.mediaRecorder) {
+      console.warn("No recording in progress");
+      return null;
+    }
 
     return new Promise((resolve) => {
       this.mediaRecorder!.onstop = () => {
         const blob = new Blob(this.recordedChunks, { type: "audio/webm" });
         this.recordedChunks = [];
-        console.log("Recording stopped");
+        console.log("⏹️ Recording stopped, saved", blob.size, "bytes");
         resolve(blob);
       };
-      this.mediaRecorder!.stop();
+      
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop();
+      } else {
+        resolve(null);
+      }
     });
+  }
+
+  /**
+   * Get current recording state
+   */
+  getRecordingState(): 'inactive' | 'recording' | 'paused' {
+    if (!this.mediaRecorder) return 'inactive';
+    return this.mediaRecorder.state as 'inactive' | 'recording' | 'paused';
+  }
+
+  /**
+   * Pause recording (if supported)
+   */
+  pauseRecording(): boolean {
+    if (!this.mediaRecorder || this.mediaRecorder.state !== 'recording') {
+      return false;
+    }
+    try {
+      this.mediaRecorder.pause();
+      console.log("⏸️ Recording paused");
+      return true;
+    } catch (error) {
+      console.error("Failed to pause recording:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Resume recording after pause
+   */
+  resumeRecording(): boolean {
+    if (!this.mediaRecorder || this.mediaRecorder.state !== 'paused') {
+      return false;
+    }
+    try {
+      this.mediaRecorder.resume();
+      console.log("▶️ Recording resumed");
+      return true;
+    } catch (error) {
+      console.error("Failed to resume recording:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Save recording blob as audio buffer in a track
+   */
+  async saveRecordingToTrack(trackId: string, blob: Blob): Promise<boolean> {
+    if (!this.audioContext) await this.initialize();
+
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
+      
+      // Store the buffer
+      this.audioBuffers.set(trackId, audioBuffer);
+
+      // Generate and cache waveform
+      const waveformData = this.getWaveformData(trackId, 1024);
+      this.waveformCache.set(trackId, waveformData);
+
+      console.log(`✅ Saved recording to track ${trackId} (${audioBuffer.duration.toFixed(2)}s)`);
+      return true;
+    } catch (error) {
+      console.error(`Failed to save recording to track ${trackId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Get current microphone input level for monitoring
+   */
+  async getInputLevel(): Promise<number> {
+    if (!this.mediaRecorder || !this.audioContext) return 0;
+
+    try {
+      // Create analyser from the audio context for simple level detection
+      // In a real implementation, you'd connect the microphone stream to an analyser
+      const level = Math.random() * 0.5; // Placeholder for real implementation
+      return level;
+    } catch (error) {
+      console.error("Error getting input level:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Check if audio input (microphone) is available
+   */
+  async isAudioInputAvailable(): Promise<boolean> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.some(device => device.kind === 'audioinput');
+    } catch (error) {
+      console.error("Error checking audio input availability:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Get list of available audio input devices
+   */
+  async getAudioInputDevices(): Promise<MediaDeviceInfo[]> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter(device => device.kind === 'audioinput');
+    } catch (error) {
+      console.error("Error getting audio input devices:", error);
+      return [];
+    }
   }
 
   /**
