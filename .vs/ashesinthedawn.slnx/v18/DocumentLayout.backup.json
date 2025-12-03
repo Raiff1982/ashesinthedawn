@@ -1,7 +1,75 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "I:\\ashesinthedawn\\",
-  "Documents": [],
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-51fb4bfe-1a39-49c6-8d2d-0fa90390ca3b.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\MIDI_EDITOR_PLAN.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:MIDI_EDITOR_PLAN.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\MOMENT_OF_TRUTH.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:MOMENT_OF_TRUTH.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\NEXT_PHASE_OPTIONS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:NEXT_PHASE_OPTIONS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\CROSSROADS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:CROSSROADS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\DECISION_TIME.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:DECISION_TIME.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\src\\components\\MIDIEditor.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\components\\MIDIEditor.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\src\\lib\\audioEngine.ts||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\lib\\audioEngine.ts||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\MIDI_EDITOR_TEST_GUIDE.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:MIDI_EDITOR_TEST_GUIDE.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\RECORDING_INTERFACE_DESIGN.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:RECORDING_INTERFACE_DESIGN.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\src\\components\\RecordingControls.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\components\\RecordingControls.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\src\\components\\InputMonitor.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\components\\InputMonitor.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\src\\components\\RecordingStatus.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\components\\RecordingStatus.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\src\\components\\PunchInOutPanel.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\components\\PunchInOutPanel.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\SESSION_SUMMARY_EPIC.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:SESSION_SUMMARY_EPIC.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\FINAL_STATUS_EPIC.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:FINAL_STATUS_EPIC.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\src\\contexts\\DAWContext.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\contexts\\DAWContext.tsx||{0F2454B1-A556-402D-A7D0-1FDE7F99DEE0}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -9,11 +77,238 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": -1,
+          "SelectedChildIndex": 8,
           "Children": [
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{3ae79031-e1bc-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "NEXT_PHASE_OPTIONS.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\NEXT_PHASE_OPTIONS.md",
+              "RelativeDocumentMoniker": "NEXT_PHASE_OPTIONS.md",
+              "ToolTip": "I:\\ashesinthedawn\\NEXT_PHASE_OPTIONS.md",
+              "RelativeToolTip": "NEXT_PHASE_OPTIONS.md",
+              "ViewState": "AgIAAHUAAAAAAAAAAAAAAA0BAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:25:33.567Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "CROSSROADS.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\CROSSROADS.md",
+              "RelativeDocumentMoniker": "CROSSROADS.md",
+              "ToolTip": "I:\\ashesinthedawn\\CROSSROADS.md",
+              "RelativeToolTip": "CROSSROADS.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAMgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:25:52.753Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "DECISION_TIME.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\DECISION_TIME.md",
+              "RelativeDocumentMoniker": "DECISION_TIME.md",
+              "ToolTip": "I:\\ashesinthedawn\\DECISION_TIME.md",
+              "RelativeToolTip": "DECISION_TIME.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABsBAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:26:27.037Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "MOMENT_OF_TRUTH.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\MOMENT_OF_TRUTH.md",
+              "RelativeDocumentMoniker": "MOMENT_OF_TRUTH.md",
+              "ToolTip": "I:\\ashesinthedawn\\MOMENT_OF_TRUTH.md",
+              "RelativeToolTip": "MOMENT_OF_TRUTH.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADEAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:26:59.591Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "MIDI_EDITOR_PLAN.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\MIDI_EDITOR_PLAN.md",
+              "RelativeDocumentMoniker": "MIDI_EDITOR_PLAN.md",
+              "ToolTip": "I:\\ashesinthedawn\\MIDI_EDITOR_PLAN.md",
+              "RelativeToolTip": "MIDI_EDITOR_PLAN.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABQCAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:29:45.482Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "plan-51fb4bfe-1a39-49c6-8d2d-0fa90390ca3b.md",
+              "DocumentMoniker": "C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-51fb4bfe-1a39-49c6-8d2d-0fa90390ca3b.md",
+              "ToolTip": "C:\\Users\\Jonathan\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-51fb4bfe-1a39-49c6-8d2d-0fa90390ca3b.md [Read Only]",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:30:22.154Z",
+              "EditorCaption": " [Read Only]"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "MIDIEditor.tsx",
+              "DocumentMoniker": "I:\\ashesinthedawn\\src\\components\\MIDIEditor.tsx",
+              "RelativeDocumentMoniker": "src\\components\\MIDIEditor.tsx",
+              "ToolTip": "I:\\ashesinthedawn\\src\\components\\MIDIEditor.tsx",
+              "RelativeToolTip": "src\\components\\MIDIEditor.tsx",
+              "ViewState": "AgIAAPIAAAAAAAAAAABBwKYAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
+              "WhenOpened": "2025-12-03T01:32:04.639Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "audioEngine.ts",
+              "DocumentMoniker": "I:\\ashesinthedawn\\src\\lib\\audioEngine.ts",
+              "RelativeDocumentMoniker": "src\\lib\\audioEngine.ts",
+              "ToolTip": "I:\\ashesinthedawn\\src\\lib\\audioEngine.ts",
+              "RelativeToolTip": "src\\lib\\audioEngine.ts",
+              "ViewState": "AgIAACIFAAAAAAAAAIBJwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
+              "WhenOpened": "2025-12-03T01:37:31.707Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "MIDI_EDITOR_TEST_GUIDE.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\MIDI_EDITOR_TEST_GUIDE.md",
+              "RelativeDocumentMoniker": "MIDI_EDITOR_TEST_GUIDE.md",
+              "ToolTip": "I:\\ashesinthedawn\\MIDI_EDITOR_TEST_GUIDE.md",
+              "RelativeToolTip": "MIDI_EDITOR_TEST_GUIDE.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAHgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:45:26.959Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "RECORDING_INTERFACE_DESIGN.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\RECORDING_INTERFACE_DESIGN.md",
+              "RelativeDocumentMoniker": "RECORDING_INTERFACE_DESIGN.md",
+              "ToolTip": "I:\\ashesinthedawn\\RECORDING_INTERFACE_DESIGN.md",
+              "RelativeToolTip": "RECORDING_INTERFACE_DESIGN.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAMYBAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:46:05.33Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "RecordingControls.tsx",
+              "DocumentMoniker": "I:\\ashesinthedawn\\src\\components\\RecordingControls.tsx",
+              "RelativeDocumentMoniker": "src\\components\\RecordingControls.tsx",
+              "ToolTip": "I:\\ashesinthedawn\\src\\components\\RecordingControls.tsx",
+              "RelativeToolTip": "src\\components\\RecordingControls.tsx",
+              "ViewState": "AgIAAJgAAAAAAAAAAABBwJkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
+              "WhenOpened": "2025-12-03T01:46:29.911Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "InputMonitor.tsx",
+              "DocumentMoniker": "I:\\ashesinthedawn\\src\\components\\InputMonitor.tsx",
+              "RelativeDocumentMoniker": "src\\components\\InputMonitor.tsx",
+              "ToolTip": "I:\\ashesinthedawn\\src\\components\\InputMonitor.tsx",
+              "RelativeToolTip": "src\\components\\InputMonitor.tsx",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
+              "WhenOpened": "2025-12-03T01:46:42.767Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "RecordingStatus.tsx",
+              "DocumentMoniker": "I:\\ashesinthedawn\\src\\components\\RecordingStatus.tsx",
+              "RelativeDocumentMoniker": "src\\components\\RecordingStatus.tsx",
+              "ToolTip": "I:\\ashesinthedawn\\src\\components\\RecordingStatus.tsx",
+              "RelativeToolTip": "src\\components\\RecordingStatus.tsx",
+              "ViewState": "AgIAAGMAAAAAAAAAAABBwGQAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
+              "WhenOpened": "2025-12-03T01:46:54.318Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "PunchInOutPanel.tsx",
+              "DocumentMoniker": "I:\\ashesinthedawn\\src\\components\\PunchInOutPanel.tsx",
+              "RelativeDocumentMoniker": "src\\components\\PunchInOutPanel.tsx",
+              "ToolTip": "I:\\ashesinthedawn\\src\\components\\PunchInOutPanel.tsx",
+              "RelativeToolTip": "src\\components\\PunchInOutPanel.tsx",
+              "ViewState": "AgIAAKYAAAAAAAAAAIBJwKgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
+              "WhenOpened": "2025-12-03T01:47:06.164Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "SESSION_SUMMARY_EPIC.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\SESSION_SUMMARY_EPIC.md",
+              "RelativeDocumentMoniker": "SESSION_SUMMARY_EPIC.md",
+              "ToolTip": "I:\\ashesinthedawn\\SESSION_SUMMARY_EPIC.md",
+              "RelativeToolTip": "SESSION_SUMMARY_EPIC.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABgBAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:49:01.144Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "FINAL_STATUS_EPIC.md",
+              "DocumentMoniker": "I:\\ashesinthedawn\\FINAL_STATUS_EPIC.md",
+              "RelativeDocumentMoniker": "FINAL_STATUS_EPIC.md",
+              "ToolTip": "I:\\ashesinthedawn\\FINAL_STATUS_EPIC.md",
+              "RelativeToolTip": "FINAL_STATUS_EPIC.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAEwBAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2025-12-03T01:49:43.444Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "DAWContext.tsx",
+              "DocumentMoniker": "I:\\ashesinthedawn\\src\\contexts\\DAWContext.tsx",
+              "RelativeDocumentMoniker": "src\\contexts\\DAWContext.tsx",
+              "ToolTip": "I:\\ashesinthedawn\\src\\contexts\\DAWContext.tsx",
+              "RelativeToolTip": "src\\contexts\\DAWContext.tsx",
+              "ViewState": "AgIAAA4DAAAAAAAAAABBwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003213|",
+              "WhenOpened": "2025-12-03T01:57:42.392Z",
+              "EditorCaption": ""
             }
           ]
         },
