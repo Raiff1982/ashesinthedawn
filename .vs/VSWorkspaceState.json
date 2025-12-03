@@ -2,7 +2,10 @@
   "ActiveTargetSystem": "WSL: Ubuntu",
   "DevContainersInfoBarHidden": true,
   "ExpandedNodes": [
-    ""
+    "",
+    "\\src",
+    "\\src\\components"
   ],
+  "SelectedNode": "\\start_codette_ai.py",
   "PreviewInSolutionExplorer": false
 }
