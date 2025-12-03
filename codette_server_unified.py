@@ -1316,3 +1316,157 @@ async def chat_endpoint(request: ChatRequest):
                             if any(word in entry_content for word in ['tip', 'advice', 'know', 'consider']):
                                 relevance += 1
                             
+
+                    if best_relevance > 0:
+                        best_match = entry
+                        best_relevance = relevance
+                
+                if best_match:
+                    response = best_match.get('content', '')
+                    confidence = 0.72
+                    response_source = "heuristic_search"
+                    ml_scores = {"relevance": 0.72, "specificity": 0.70, "certainty": 0.65}
+                    logger.info(f"[ML] Found heuristic match: {response[:50]}...")
+            
+            except Exception as e:
+                logger.warning(f"[ML] Error in semantic/heuristic search: {e}")
+        
+        # If still no response, use fallback
+        if not response:
+            response = "I'm still learning! Could you provide more context or rephrase your question?"
+            response_source = "fallback"
+            confidence = 0.50
+            ml_scores = {"relevance": 0.40, "specificity": 0.30, "certainty": 0.20}
+        
+        # Return response
+        return ChatResponse(
+            response=response,
+            perspective=perspective,
+            confidence=confidence,
+            timestamp=get_timestamp(),
+            source=response_source,
+            ml_score=ml_scores
+        )
+    
+    except Exception as e:
+        logger.error(f"ERROR in /codette/chat endpoint: {e}", exc_info=True)
+        return ChatResponse(
+            response=f"An error occurred: {str(e)}",
+            perspective="error",
+            confidence=0.0,
+            timestamp=get_timestamp(),
+            source="error",
+            ml_score={"relevance": 0.0, "specifically": 0.0, "certainty": 0.0}
+        )
+
+
+# ============================================================================
+# TRANSPORT ENDPOINTS  
+# ============================================================================
+
+@app.post("/transport/play", response_model=TransportCommandResponse)
+async def transport_play():
+    """Start playback"""
+    try:
+        state = transport_manager.play()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback started",
+            state=state
+        )
+    except Exception as e:
+        logger.error(f"ERROR in /transport/play: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.post("/transport/stop", response_model=TransportCommandResponse)
+async def transport_stop():
+    """Stop playback"""
+    try:
+        state = transport_manager.stop()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback stopped",
+            state=state
+        )
+    except Exception as e:
+        logger.error(f"ERROR in /transport/stop: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.post("/transport/pause", response_model=TransportCommandResponse)
+async def transport_pause():
+    """Pause playback"""
+    try:
+        state = transport_manager.pause()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback paused",
+            state=state
+        )
+    except Exception as e:
+        logger.error(f"ERROR in /transport/pause: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.get("/transport/state", response_model=TransportState)
+async def get_transport_state():
+    """Get current transport state"""
+    try:
+        return transport_manager.get_state()
+    except Exception as e:
+        logger.error(f"ERROR in /transport/state: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# STARTUP & SHUTDOWN
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Startup event"""
+    logger.info("="*80)
+    logger.info("Codette AI Unified Server Starting")
+    logger.info("="*80)
+    logger.info(f"Real Engine: {USE_REAL_ENGINE}")
+    logger.info(f"Training Available: {TRAINING_AVAILABLE}")
+    logger.info(f"Supabase Available: {SUPABASE_AVAILABLE}")
+    logger.info(f"Redis Available: {REDIS_AVAILABLE}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown event"""
+    logger.info("="*80)
+    logger.info("Codette AI Unified Server Shutting Down")
+    logger.info("="*80)
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    host = os.getenv('CODETTE_HOST', '0.0.0.0')
+    port = int(os.getenv('CODETTE_PORT', 8000))
+    
+    logger.info(f"Starting Codette AI Unified Server on {host}:{port}")
+    
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info"
+    )

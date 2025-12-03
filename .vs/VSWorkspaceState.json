@@ -2,16 +2,8 @@
   "ActiveTargetSystem": "WSL: Ubuntu",
   "DevContainersInfoBarHidden": true,
   "ExpandedNodes": [
-    "",
-    "\\.github",
-    "\\ashesinthedawn-main",
-    "\\ashesinthedawn-main\\Codette",
-    "\\ashesinthedawn-main\\Codette\\core",
-    "\\ashesinthedawn-main\\Codette\\src",
-    "\\ashesinthedawn-main\\Codette\\src\\tests",
-    "\\ashesinthedawn-main\\Codette\\src\\tests\\verification",
-    "\\Codette",
-    "\\daw_core"
+    ""
   ],
+  "SelectedNode": "\\codette_server_unified.py",
   "PreviewInSolutionExplorer": false
 }

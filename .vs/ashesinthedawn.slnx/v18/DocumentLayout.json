@@ -1,28 +1,7 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "I:\\ashesinthedawn\\",
-  "Documents": [
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\COMMIT_MESSAGE_CODETTE_ENHANCED.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:COMMIT_MESSAGE_CODETTE_ENHANCED.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\CODETTE_ENHANCED_INTEGRATION_STATUS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:CODETTE_ENHANCED_INTEGRATION_STATUS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\CODETTE_ENHANCED_DELIVERY_FINAL.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:CODETTE_ENHANCED_DELIVERY_FINAL.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\CODETTE_ENHANCED_DELIVERY_CHECKLIST.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:CODETTE_ENHANCED_DELIVERY_CHECKLIST.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|I:\\ashesinthedawn\\README_CODETTE_ENHANCED.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:README_CODETTE_ENHANCED.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
-    }
-  ],
+  "Documents": [],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -30,7 +9,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 4,
+          "SelectedChildIndex": -1,
           "Children": [
             {
               "$type": "Bookmark",
@@ -42,72 +21,7 @@
             },
             {
               "$type": "Bookmark",
-              "Name": "ST:0:0:{c6f34f0d-7ae5-4f3a-be61-fe0c21ae9eb8}"
-            },
-            {
-              "$type": "Bookmark",
               "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "COMMIT_MESSAGE_CODETTE_ENHANCED.md",
-              "DocumentMoniker": "I:\\ashesinthedawn\\COMMIT_MESSAGE_CODETTE_ENHANCED.md",
-              "RelativeDocumentMoniker": "COMMIT_MESSAGE_CODETTE_ENHANCED.md",
-              "ToolTip": "I:\\ashesinthedawn\\COMMIT_MESSAGE_CODETTE_ENHANCED.md",
-              "RelativeToolTip": "COMMIT_MESSAGE_CODETTE_ENHANCED.md",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAKwAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T13:09:58.776Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "CODETTE_ENHANCED_INTEGRATION_STATUS.md",
-              "DocumentMoniker": "I:\\ashesinthedawn\\CODETTE_ENHANCED_INTEGRATION_STATUS.md",
-              "RelativeDocumentMoniker": "CODETTE_ENHANCED_INTEGRATION_STATUS.md",
-              "ToolTip": "I:\\ashesinthedawn\\CODETTE_ENHANCED_INTEGRATION_STATUS.md",
-              "RelativeToolTip": "CODETTE_ENHANCED_INTEGRATION_STATUS.md",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAKwBAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T13:10:33.951Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "CODETTE_ENHANCED_DELIVERY_FINAL.md",
-              "DocumentMoniker": "I:\\ashesinthedawn\\CODETTE_ENHANCED_DELIVERY_FINAL.md",
-              "RelativeDocumentMoniker": "CODETTE_ENHANCED_DELIVERY_FINAL.md",
-              "ToolTip": "I:\\ashesinthedawn\\CODETTE_ENHANCED_DELIVERY_FINAL.md",
-              "RelativeToolTip": "CODETTE_ENHANCED_DELIVERY_FINAL.md",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAN4BAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T13:15:56.905Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "CODETTE_ENHANCED_DELIVERY_CHECKLIST.md",
-              "DocumentMoniker": "I:\\ashesinthedawn\\CODETTE_ENHANCED_DELIVERY_CHECKLIST.md",
-              "RelativeDocumentMoniker": "CODETTE_ENHANCED_DELIVERY_CHECKLIST.md",
-              "ToolTip": "I:\\ashesinthedawn\\CODETTE_ENHANCED_DELIVERY_CHECKLIST.md",
-              "RelativeToolTip": "CODETTE_ENHANCED_DELIVERY_CHECKLIST.md",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAALgBAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T13:16:31.74Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "README_CODETTE_ENHANCED.md",
-              "DocumentMoniker": "I:\\ashesinthedawn\\README_CODETTE_ENHANCED.md",
-              "RelativeDocumentMoniker": "README_CODETTE_ENHANCED.md",
-              "ToolTip": "I:\\ashesinthedawn\\README_CODETTE_ENHANCED.md",
-              "RelativeToolTip": "README_CODETTE_ENHANCED.md",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAHYBAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
-              "WhenOpened": "2025-12-03T13:17:18.057Z"
             }
           ]
         },
