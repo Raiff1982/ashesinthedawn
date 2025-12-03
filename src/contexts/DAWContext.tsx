@@ -197,6 +197,27 @@ interface DAWContextType {
   selectedTracks: Set<string>;
   // Utility
   cpuUsageDetailed: Record<string, number>;
+
+  // Recording state (NEW)
+  recordingTrackId: null;
+  recordingStartTime: 0;
+  recordingTakeCount: 0;
+  recordingMode: 'audio';
+  punchInEnabled: false;
+  punchInTime: 0;
+  punchOutTime: 0;
+  recordingBlob: null;
+  recordingError: null;
+  
+  // Recording methods (NEW)
+  startRecording: (trackId: string) => Promise<boolean>;
+  stopRecording: () => Promise<Blob | null>;
+  pauseRecording: () => boolean;
+  resumeRecording: () => boolean;
+  setRecordingMode: (mode: 'audio' | 'midi' | 'overdub') => void;
+  setPunchInOut: (punchIn: number, punchOut: number) => void;
+  togglePunchIn: () => void;
+  undoLastRecording: () => void;
 }
 
 const DAWContext = createContext<DAWContextType | undefined>(undefined);
@@ -1993,6 +2014,125 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         selectAllTracks,
         deselectAllTracks,
         selectedTracks,
+        // Recording state
+        recordingTrackId: null,
+        recordingStartTime: 0,
+        recordingTakeCount: 0,
+        recordingMode: 'audio',
+        punchInEnabled: false,
+        punchInTime: 0,
+        punchOutTime: 0,
+        recordingBlob: null,
+        recordingError: null,
+        // Recording methods
+        startRecording: async (trackId: string) => {
+          if (isRecording) return false;
+          try {
+            setIsRecording(true);
+            setSelectedTrack(tracks.find(t => t.id === trackId) || null);
+            setCurrentTime(0);
+            
+            // Reset recording state
+            setTracks(prev =>
+              prev.map(t =>
+                t.id === trackId
+                  ? { ...t, informs: [], volume: -6, pan: 0 } // Prepare track for recording
+                  : t
+              )
+            );
+            
+            // Start audio engine recording
+            const success = await audioEngineRef.current.startRecording();
+            return success;
+          } catch (error) {
+            console.error("Recording start error:", error);
+            setIsRecording(false);
+            return false;
+          }
+        },
+        stopRecording: () => {
+          return new Promise(async (resolve) => {
+            if (!isRecording) {
+              resolve(null);
+              return;
+            }
+            
+            try {
+              const blob = await audioEngineRef.current.stopRecording();
+              setIsRecording(false);
+              
+              if (blob) {
+                // Create a new audio track from the recording
+                const recordedFile = new File(
+                  [blob],
+                  `Recording-${Date.now()}.webm`,
+                  { type: "audio/webm" }
+                );
+                uploadAudioFile(recordedFile);
+                resolve(blob);
+              } else {
+                resolve(null);
+              }
+            } catch (error) {
+              console.error("Recording stop error:", error);
+              setIsRecording(false);
+              resolve(null);
+            }
+          });
+        },
+        pauseRecording: () => {
+          if (!isRecording) return false;
+          try {
+            audioEngineRef.current.pauseRecording();
+            setIsRecording(false);
+            return true;
+          } catch (error) {
+            console.error("Recording pause error:", error);
+            return false;
+          }
+        },
+        resumeRecording: () => {
+          if (isRecording) return false;
+          try {
+            audioEngineRef.current.resumeRecording();
+            setIsRecording(true);
+            return true;
+          } catch (error) {
+            console.error("Recording resume error:", error);
+            return false;
+          }
+        },
+        setRecordingMode: (mode: 'audio' | 'midi' | 'overdub') => {
+          setTracks(prev =>
+            prev.map(t =>
+              t.id === selectedTrack?.id
+                ? { ...t, recordingMode: mode }
+                : t
+            )
+          );
+        },
+        setPunchInOut: (punchIn: number, punchOut: number) => {
+          setTracks(prev =>
+            prev.map(t =>
+              t.id === selectedTrack?.id
+                ? { ...t, punchInTime: punchIn, punchOutTime: punchOut }
+                : t
+            )
+          );
+        },
+        togglePunchIn: () => {
+          setTracks(prev =>
+            prev.map(t =>
+              t.id === selectedTrack?.id
+                ? { ...t, punchInEnabled: !t.punchInEnabled }
+                : t
+            )
+          );
+        },
+        undoLastRecording: () => {
+          // Placeholder for undoing last recording action
+          console.log("Undo last recording action (not implemented)");
+        },
       };
 
   // Initialize action system with DAW context
