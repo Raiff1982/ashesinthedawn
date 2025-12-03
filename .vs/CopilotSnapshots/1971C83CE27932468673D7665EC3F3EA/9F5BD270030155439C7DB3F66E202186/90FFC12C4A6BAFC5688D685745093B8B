@@ -445,7 +445,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Validate file type
-    const validTypes: string[] = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/flac", "audio/aac"];
+    const validTypes = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/flac", "audio/aac"];
     if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|flac|aac)$/i)) {
       setUploadError("Unsupported audio format. Use MP3, WAV, OGG, FLAC, or AAC.");
       return false;
@@ -534,7 +534,6 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Sync DAW state to Codette AI (Phase 1)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const syncDAWStateToCodette = async () => {
     return true;
   };

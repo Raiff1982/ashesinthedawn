@@ -445,7 +445,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Validate file type
-    const validTypes: string[] = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/flac", "audio/aac"];
+    const validTypes = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/flac", "audio/aac"];
     if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|flac|aac)$/i)) {
       setUploadError("Unsupported audio format. Use MP3, WAV, OGG, FLAC, or AAC.");
       return false;

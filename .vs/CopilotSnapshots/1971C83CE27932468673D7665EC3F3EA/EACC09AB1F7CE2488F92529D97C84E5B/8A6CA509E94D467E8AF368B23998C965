@@ -1,11 +1,10 @@
-/**
+﻿/**
  * useCodette Hook - Complete Codette AI Integration
  * All 11 perspectives, music guidance, memory system, and real-time features
  * 
  * Status: ✅ Production Ready
  * Version: 3.0
  */
-/* eslint-disable react-hooks/rules-of-hooks */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 
@@ -99,7 +98,7 @@ export interface UseCodetteReturn {
   getMusicGuidance: (guidanceType: string, context: Record<string, any>) => Promise<string[]>;
   suggestMixing: (trackInfo: Record<string, any>) => Promise<Suggestion[]>;
   suggestArrangement: (tracks: any[]) => Promise<string[]>;
-  analyzeTechnical: (problem: string) => Promise<Record<string, string>>;
+  analyzeTechnical: (problem: string) -> Promise<Record<string, string>>;
 
   queryPerspective: (perspective: string, query: string) => Promise<string>;
   queryAllPerspectives: (query: string) => Promise<Record<string, string>>;
@@ -138,6 +137,14 @@ const PERSPECTIVES = [
   'psychological'
 ] as const;
 
+const MUSIC_PERSPECTIVES = [
+  'mix_engineering',
+  'audio_theory',
+  'creative_production',
+  'technical_troubleshooting',
+  'workflow_optimization'
+] as const;
+
 const MOCK_QUANTUM_STATE: QuantumState = {
   coherence: 0.87,
   entanglement: 0.65,
@@ -160,7 +167,7 @@ const MOCK_PERSPECTIVES: Record<string, string> = {
   psychological: 'Listener fatigue peaks at 4kHz. Psychological research suggests -1dB reduction.'
 };
 
-const CODETTE_API_URL = (import.meta as any).env?.VITE_CODETTE_API || 'http://localhost:8000';
+const CODETTE_API_URL = import.meta.env.VITE_CODETTE_API || 'http://localhost:8000';
 
 // ============================================================================
 // MAIN HOOK

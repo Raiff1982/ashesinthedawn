@@ -1,13 +1,12 @@
-/**
+﻿/**
  * useCodette Hook - Complete Codette AI Integration
  * All 11 perspectives, music guidance, memory system, and real-time features
  * 
  * Status: ✅ Production Ready
  * Version: 3.0
  */
-/* eslint-disable react-hooks/rules-of-hooks */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 // ============================================================================
 // TYPES & INTERFACES
