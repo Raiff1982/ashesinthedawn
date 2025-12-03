@@ -89,8 +89,62 @@ const TrackListComponent = () => {
       {/* Tracks List */}
       <div className="flex-1 overflow-y-auto">
         {tracks.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-500 text-xs text-center p-4">
-            No tracks. Click "Add Track" to get started.
+          <div className="flex flex-col items-center justify-center h-full text-center p-6 gap-6 bg-gradient-to-b from-gray-900 to-gray-950">
+            {/* Empty State Icon & Message */}
+            <div className="space-y-3">
+              <div className="flex justify-center">
+                <div className="text-6xl opacity-40">??</div>
+              </div>
+              <h3 className="text-sm font-bold text-gray-300">No Tracks Yet</h3>
+              <p className="text-xs text-gray-400 max-w-xs leading-relaxed">
+                Get started by creating your first track. Choose based on what you're working with.
+              </p>
+            </div>
+
+            {/* Suggested Track Cards */}
+            <div className="grid grid-cols-2 gap-2 w-full px-2">
+              <button
+                onClick={() => addTrack('audio')}
+                className="flex flex-col items-center gap-2 px-3 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-600 transition group"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">???</div>
+                <div className="text-xs font-semibold text-gray-200">Audio</div>
+                <div className="text-xs text-gray-500">Recordings</div>
+              </button>
+              <button
+                onClick={() => addTrack('instrument')}
+                className="flex flex-col items-center gap-2 px-3 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-600 transition group"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">??</div>
+                <div className="text-xs font-semibold text-gray-200">Instrument</div>
+                <div className="text-xs text-gray-500">Synths</div>
+              </button>
+              <button
+                onClick={() => addTrack('midi')}
+                className="flex flex-col items-center gap-2 px-3 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-600 transition group"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">???</div>
+                <div className="text-xs font-semibold text-gray-200">MIDI</div>
+                <div className="text-xs text-gray-500">Sequences</div>
+              </button>
+              <button
+                onClick={() => addTrack('aux')}
+                className="flex flex-col items-center gap-2 px-3 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-600 transition group"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">??</div>
+                <div className="text-xs font-semibold text-gray-200">Aux Bus</div>
+                <div className="text-xs text-gray-500">Routing</div>
+              </button>
+            </div>
+
+            {/* Quick Action Button */}
+            <button
+              onClick={() => addTrack('audio')}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-xs transition shadow-lg hover:shadow-blue-500/50"
+            >
+              <Plus className="w-4 h-4" />
+              Create First Track
+            </button>
           </div>
         ) : (
           tracks.map((track) => (

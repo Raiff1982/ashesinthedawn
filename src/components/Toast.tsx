@@ -1,0 +1,83 @@
+/**
+ * ENHANCEMENT #3: Toast Notifications
+ * Celebratory feedback for user actions
+ */
+
+import { useEffect, useState } from 'react';
+import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
+
+export interface Toast {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info';
+  duration?: number;
+}
+
+interface ToastProps extends Toast {
+  onClose: (id: string) => void;
+}
+
+export function ToastNotification({ id, message, type, duration = 3000, onClose }: ToastProps) {
+  useEffect(() => {
+    if (duration > 0) {
+      const timer = setTimeout(() => onClose(id), duration);
+      return () => clearTimeout(timer);
+    }
+  }, [id, duration, onClose]);
+
+  const getIcon = () => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle className="w-4 h-4 text-green-400" />;
+      case 'error':
+        return <AlertCircle className="w-4 h-4 text-red-400" />;
+      default:
+        return <Info className="w-4 h-4 text-blue-400" />;
+    }
+  };
+
+  const getColors = () => {
+    switch (type) {
+      case 'success':
+        return 'bg-green-900/40 border-green-700 text-green-100';
+      case 'error':
+        return 'bg-red-900/40 border-red-700 text-red-100';
+      default:
+        return 'bg-blue-900/40 border-blue-700 text-blue-100';
+    }
+  };
+
+  return (
+    <div
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${getColors()} animate-in slide-in-from-bottom-4 duration-300 shadow-lg`}
+    >
+      {getIcon()}
+      <span className="text-sm font-medium flex-1">{message}</span>
+      <button
+        onClick={() => onClose(id)}
+        className="p-1 hover:bg-white/10 rounded transition-colors"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Hook for managing toast notifications
+ */
+export function useToast() {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'info', duration = 3000) => {
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    const newToast: Toast = { id, message, type, duration };
+    setToasts(prev => [...prev, newToast]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  return { toasts, addToast, removeToast };
+}

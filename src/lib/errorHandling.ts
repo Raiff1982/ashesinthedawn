@@ -270,6 +270,39 @@ export const createGenericError = (message: string, severity: ErrorSeverity = 'e
   timestamp: Date.now(),
 });
 
+export const createFileTooBigError = (filename: string, size: number): AppError => ({
+  id: `file-size-${Date.now()}`,
+  title: 'File Too Large',
+  message: `"${filename}" is ${(size / 1024 / 1024).toFixed(1)}MB. Max 100MB. Try compressing to MP3 first.`,
+  severity: 'warning',
+  context: { filename, size, recoveryHint: 'compress-mp3' },
+  recoverable: true,
+  recovery: async () => {
+    console.log('[Recovery] Suggestion: Use FFmpeg to compress: ffmpeg -i input.wav -codec:a libmp3lame -q:a 4 output.mp3');
+  },
+  timestamp: Date.now(),
+});
+
+export const createNoTrackSelectedError = (): AppError => ({
+  id: `no-track-${Date.now()}`,
+  title: 'No Track Selected',
+  message: 'Select a track or create one to proceed with this action.',
+  severity: 'info',
+  context: { action: 'track-operation' },
+  recoverable: true,
+  timestamp: Date.now(),
+});
+
+export const createClippingWarning = (trackName: string): AppError => ({
+  id: `clipping-${Date.now()}`,
+  title: 'Audio Clipping Detected',
+  message: `Track "${trackName}" is clipping. Reduce volume to prevent distortion.`,
+  severity: 'warning',
+  context: { trackName },
+  recoverable: true,
+  timestamp: Date.now(),
+});
+
 /**
  * Safe async execution wrapper
  */
