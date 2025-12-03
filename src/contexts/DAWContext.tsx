@@ -6,7 +6,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-import {
+import type {
   Track,
   Project,
   LogicCoreMode,
@@ -17,7 +17,8 @@ import {
   Bus,
   MidiDevice,
   MidiRoute,
-} from "../types";
+  AudioContextState,
+} from "@/types";
 import { getAudioEngine } from "../lib/audioEngine";
 import { getCodetteBridge, CodetteSuggestion } from "../lib/codetteBridge";
 import { setDAWContext } from "../lib/actions/initializeActions";

@@ -24,9 +24,7 @@ export default defineConfig({
           // Lazy-load heavy components
           'chunk-codette': [
             './src/components/CodettePanel.tsx',
-            './src/components/EnhancedCodetteControlPanel.tsx',
-            './src/components/CodetteAdvancedTools.tsx',
-            './src/components/CodetteTeachingGuide.tsx',
+            './src/components/CodetteControlCenter.tsx',
           ],
           
           'chunk-mixer': [

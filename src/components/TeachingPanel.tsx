@@ -11,7 +11,14 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import { useTeachingMode, useCodetteTeaching, useFormattedTime } from '../hooks/useTeachingMode';
-import { CODETTE_TEACHING_PROMPTS } from './CodetteTeachingGuide';
+
+// Fallback teaching prompts (CodetteTeachingGuide deleted during consolidation)
+const CODETTE_TEACHING_PROMPTS = {
+  'learning-path': (level: string) => `What functions should I learn next for ${level} level?`,
+  'performance-tips': (context: string, bpm: number) => `Give me performance optimization tips for ${context} at ${bpm} BPM`,
+  'music-theory': (topic: string) => `Explain ${topic} in music production`,
+  'dsp-explanation': (topic: string) => `Explain the basics of ${topic} in digital signal processing`,
+};
 
 /**
  * Comprehensive Teaching Panel Component

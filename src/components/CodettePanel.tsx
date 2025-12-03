@@ -1,17 +1,12 @@
 /**
  * Codette AI Panel Component
  * Real-time suggestions, analysis, and chat with Codette AI backend
- * With persistent chat history and analysis storage
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useCodette } from '../hooks/useCodette';
-import { useDAW } from '../contexts/DAWContext';
-import { useChatHistory } from '../hooks/useChatHistory';
-import { useAudioAnalysis } from '../hooks/useAudioAnalysis';
-import { usePaginatedFiles } from '../hooks/usePaginatedFiles';
-import { useCodetteControl } from '../hooks/useCodetteControl';
-import { Plugin } from '../types';
+import { useCodette } from '@/hooks/useCodette';
+import { useDAW } from '@/contexts/DAWContext';
+import type { Plugin } from '@/types';
 import {
   MessageCircle,
   Send,
@@ -23,10 +18,7 @@ import {
   ChevronDown,
   ChevronUp,
   Minimize2,
-  FileText,
-  Settings,
 } from 'lucide-react';
-import CodetteControlCenter from './CodetteControlCenter';
 
 export interface CodettePanelProps {
   isVisible?: boolean;
@@ -47,7 +39,6 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     reconnect,
     getSuggestions,
     getMasteringAdvice,
-    analyzeAudio,
   } = useCodette({ autoConnect: true });
 
   // DAW Context for actual state updates
@@ -58,36 +49,19 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     updateTrack,
     isPlaying,
     getAudioBufferData,
-    tracks,
   } = useDAW();
-
-  // Database persistence hooks
-  // Get user ID from auth (fallback to demo user)
-  const userId = 'demo-user';
-  const { session: chatSession, addMessage: addChatMessage } = useChatHistory(userId);
-  const { saveAnalysis: saveAnalysisToDb } = useAudioAnalysis();
 
   const [inputValue, setInputValue] = useState('');
   const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions' | 'files' | 'control'>('suggestions');
   const [selectedContext, setSelectedContext] = useState('general');
   const [expanded, setExpanded] = useState(true);
+  const [confidenceFilter, setConfidenceFilter] = useState(0); // NEW: Confidence threshold (0-100%)
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false); // NEW: Favorites filter
+  const [favoriteSuggestions, setFavoriteSuggestions] = useState<Set<string>>(new Set()); // NEW: Starred suggestions
+  const [analysisHistory, setAnalysisHistory] = useState<any[]>([]); // NEW: Track analysis history
+  const [historyIndex, setHistoryIndex] = useState(0); // NEW: Current history position
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Initialize Codette Control Center for activity logging and permissions
-  const { addActivity } = useCodetteControl(userId);
-
-  // Save chat messages to database when chat history changes
-  useEffect(() => {
-    if (chatHistory.length > 0 && chatSession) {
-      // Convert chat history to database format and save
-      const dbMessages = chatHistory.map(msg => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-        timestamp: (msg as any).timestamp || Date.now(),
-      }));
-      console.log('[CodettePanel] Syncing chat history to database, messages:', dbMessages.length);
-    }
-  }, [chatHistory, chatSession]);
+  const waveformCanvasRef = useRef<HTMLCanvasElement>(null); // NEW: Waveform canvas ref
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -131,70 +105,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     const message = inputValue;
     setInputValue('');
 
-    // Save user message to database
-    await addChatMessage({
-      role: 'user',
-      content: message,
-      timestamp: Date.now(),
-    });
-
-    // Collect DAW context to provide track/project-specific advice
-    const dawContext: Record<string, unknown> = {};
-    
-    // Add selected track information
-    if (selectedTrack) {
-      dawContext.selected_track = {
-        id: selectedTrack.id,
-        name: selectedTrack.name,
-        type: selectedTrack.type,
-        volume: selectedTrack.volume,
-        pan: selectedTrack.pan,
-        muted: selectedTrack.muted,
-        armed: selectedTrack.armed,
-      };
-    }
-    
-    // Add project/session metadata
-    if (tracks.length > 0) {
-      dawContext.total_tracks = tracks.length;
-      dawContext.audio_tracks = tracks.filter(t => t.type === 'audio').length;
-      dawContext.instrument_tracks = tracks.filter(t => t.type === 'instrument').length;
-    }
-    
-    // Add audio analysis if available (placeholder for future audio buffer analysis)
-    if (selectedTrack && getAudioBufferData) {
-      try {
-        const bufferData = getAudioBufferData(selectedTrack.id);
-        if (bufferData && bufferData instanceof Float32Array) {
-          // bufferData is audio samples, add simple analysis
-          dawContext.audio_analysis = {
-            sample_count: bufferData.length,
-            channels: selectedTrack.type === 'audio' ? 2 : 1,
-          };
-        }
-      } catch (err) {
-        console.debug('Could not get audio buffer data:', err);
-      }
-    }
-
-    const response = await sendMessage(message, dawContext);
-
-    // Save assistant response to database
-    if (response) {
-      await addChatMessage({
-        role: 'assistant',
-        content: response,
-        timestamp: Date.now(),
-      });
-    }
-
-    // Log the interaction to activity logs
-    await addActivity('user', 'Asked Codette AI a question', {
-      message: message.substring(0, 100), // First 100 chars
-      context: selectedContext,
-      trackId: selectedTrack?.id,
-      responseLength: response?.length || 0,
-    });
+    await sendMessage(message);
   };
 
   const handleLoadSuggestions = async (context: string) => {
@@ -204,36 +115,98 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     } else {
       await getSuggestions(context);
     }
-    
-    // Log suggestion retrieval activity
-    await addActivity('codette', `Generated ${context} suggestions`, {
-      context,
-      trackId: selectedTrack?.id,
-      timestamp: new Date().toISOString(),
-    });
   };
 
-  // Helper function to log analysis operations
-  const logAnalysisActivity = async (analysisType: string, trackName: string) => {
-    await addActivity('codette', `Performed ${analysisType} analysis`, {
-      analysisType,
-      trackName,
-      trackId: selectedTrack?.id,
-      timestamp: new Date().toISOString(),
-    });
+  // NEW: Draw waveform preview on canvas
+  const drawWaveform = (canvas: HTMLCanvasElement, data: Float32Array | number[] | null) => {
+    if (!canvas || !data) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Clear canvas with gradient background
+    const gradBg = ctx.createLinearGradient(0, 0, 0, height);
+    gradBg.addColorStop(0, '#1f2937');   // gray-800
+    gradBg.addColorStop(1, '#111827');   // gray-900
+    ctx.fillStyle = gradBg;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Draw subtle grid
+    ctx.strokeStyle = '#374151'; // gray-700
+    ctx.lineWidth = 0.5;
+    ctx.globalAlpha = 0.3;
+    for (let i = 0; i <= 4; i++) {
+      const y = (height / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    
+    // Draw center line with glow
+    ctx.strokeStyle = '#3b82f6'; // blue-500
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    
+    // Draw waveform with gradient
+    const waveGrad = ctx.createLinearGradient(0, 0, 0, height);
+    waveGrad.addColorStop(0, '#8b5cf6');   // violet
+    waveGrad.addColorStop(0.25, '#6366f1'); // indigo
+    waveGrad.addColorStop(0.5, '#3b82f6');  // blue
+    waveGrad.addColorStop(0.75, '#06b6d4'); // cyan
+    waveGrad.addColorStop(1, '#8b5cf6');    // violet
+    
+    ctx.strokeStyle = waveGrad;
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    
+    const samples = data instanceof Float32Array ? data : new Float32Array(data);
+    const step = Math.max(1, Math.floor(samples.length / width));
+    
+    for (let i = 0; i < width; i++) {
+      const sample = samples[i * step] || 0;
+      const y = (height / 2) - (sample * height / 2);
+      
+      if (i === 0) {
+        ctx.moveTo(i, y);
+      } else {
+        ctx.lineTo(i, y);
+      }
+    }
+    
+    ctx.stroke();
   };
+
+  // NEW: Update waveform when audio buffer changes
+  useEffect(() => {
+    if (waveformCanvasRef.current && selectedTrack) {
+      const audioData = getAudioBufferData(selectedTrack.id);
+      drawWaveform(waveformCanvasRef.current, audioData);
+    }
+  }, [selectedTrack, analysis]);
 
   if (!isVisible) return null;
 
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white text-xs">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-3 flex items-center justify-between flex-shrink-0 w-full min-w-0">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-3 flex items-center justify-between flex-shrink-0 w-full min-w-0 shadow-lg">
         <div className="flex items-center gap-2 min-w-0">
-          <Zap className="w-4 h-4 flex-shrink-0" />
+          <Zap className="w-4 h-4 flex-shrink-0 animate-pulse" />
           <h3 className="font-semibold truncate">Codette AI Assistant</h3>
           <div
-            className={`w-2 h-2 rounded-full flex-shrink-0 ${
+            className={`w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-300 ${
               isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
             }`}
           />
@@ -241,19 +214,19 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="p-1 hover:bg-white/20 rounded transition-colors"
+            className="p-1 hover:bg-white/20 rounded transition-all duration-200 hover:scale-110"
             title={expanded ? 'Collapse' : 'Expand'}
           >
             {expanded ? (
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="w-3.5 h-3.5 transition-transform" />
             ) : (
-              <ChevronUp className="w-3.5 h-3.5" />
+              <ChevronUp className="w-3.5 h-3.5 transition-transform" />
             )}
           </button>
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 hover:bg-white/20 rounded transition-colors"
+              className="p-1 hover:bg-white/20 rounded transition-all duration-200 hover:scale-110"
               title="Minimize"
             >
               <Minimize2 className="w-3.5 h-3.5" />
@@ -316,28 +289,6 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
               <Zap className="w-3 h-3" />
               Actions
             </button>
-            <button
-              onClick={() => setActiveTab('files')}
-              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
-                activeTab === 'files'
-                  ? 'border-b-2 border-blue-400 text-blue-400'
-                  : 'text-gray-400 hover:text-gray-300'
-              }`}
-            >
-              <FileText className="w-3 h-3" />
-              Files
-            </button>
-            <button
-              onClick={() => setActiveTab('control')}
-              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
-                activeTab === 'control'
-                  ? 'border-b-2 border-blue-400 text-blue-400'
-                  : 'text-gray-400 hover:text-gray-300'
-              }`}
-            >
-              <Settings className="w-3 h-3" />
-              Control
-            </button>
           </div>
 
           {/* Error Message */}
@@ -376,82 +327,112 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                 {/* Suggestions List */}
                 {suggestions.length > 0 ? (
                   <>
+                    {/* Confidence Filter Controls - NEW */}
+                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-lg p-3 space-y-3 shadow-md hover:shadow-lg transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-gray-200 tracking-wide">CONFIDENCE FILTER</label>
+                        <span className="text-xs font-mono px-2.5 py-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full font-semibold shadow-md">
+                          {confidenceFilter}%
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={confidenceFilter}
+                          onChange={(e) => setConfidenceFilter(parseInt(e.target.value))}
+                          className="w-full h-2 bg-gradient-to-r from-gray-700 to-gray-600 rounded-lg appearance-none cursor-pointer accent-purple-500 hover:accent-purple-400 transition-all"
+                        />
+                        <div className="flex justify-between text-xs text-gray-500 px-1">
+                          <span>Low</span>
+                          <span>High</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
+                        className={`w-full px-3 py-2 rounded-lg transition-all duration-200 font-semibold flex items-center justify-center gap-2 ${
+                          showOnlyFavorites
+                            ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 text-white shadow-lg scale-105'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:shadow-md'
+                        }`}
+                      >
+                        ⭐ Favorites ({favoriteSuggestions.size})
+                      </button>
+                    </div>
+
                     {isLoading && (
                       <div className="flex items-center justify-center py-1 text-xs text-gray-400">
                         <Loader className="w-3 h-3 animate-spin mr-1" />
                         Refreshing suggestions...
                       </div>
                     )}
-                    {suggestions.map((suggestion, idx) => {
-                      // Defensive: ensure title and description are strings
-                      const titleText = typeof suggestion.title === 'string' 
-                        ? suggestion.title 
-                        : (suggestion.title as any)?.title || (suggestion.title as any)?.prediction || String(suggestion.title);
-                      const descText = typeof suggestion.description === 'string'
-                        ? suggestion.description
-                        : (suggestion.description as any)?.description || (suggestion.description as any)?.reasoning || String(suggestion.description);
-                      
-                      return (
-                      <div key={idx} className={`p-2 bg-gray-800 border border-gray-700 rounded transition ${isLoading ? 'opacity-60' : 'opacity-100'}`}>
-                      <div className="flex items-start justify-between mb-1">
-                        <h4 className="font-medium text-xs text-blue-400">
-                          {titleText}
-                        </h4>
-                        <span className="text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">
-                          {Math.round(suggestion.confidence * 100)}%
-                        </span>
+                    
+                    {/* Filter and display suggestions */}
+                    {suggestions
+                      .filter(s => s.confidence * 100 >= confidenceFilter)
+                      .filter(s => !showOnlyFavorites || favoriteSuggestions.has(s.title))
+                      .map((suggestion, idx) => {
+                        const titleText = typeof suggestion.title === 'string' 
+                          ? suggestion.title 
+                          : (suggestion.title as any)?.title || String(suggestion.title);
+                        const descText = typeof suggestion.description === 'string'
+                          ? suggestion.description
+                          : (suggestion.description as any)?.description || String(suggestion.description);
+                        const isFavorite = favoriteSuggestions.has(titleText);
+                        
+                        return (
+                          <div key={idx} className="p-2 bg-gray-800 border border-gray-700 rounded hover:border-purple-600 transition">
+                            <div className="flex items-start justify-between mb-1">
+                              <h4 className="font-medium text-xs text-blue-400 flex-1">
+                                {titleText}
+                              </h4>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                {/* Star icon for favorites - NEW */}
+                                <button
+                                  onClick={() => {
+                                    const newFavorites = new Set(favoriteSuggestions);
+                                    if (isFavorite) {
+                                      newFavorites.delete(titleText);
+                                    } else {
+                                      newFavorites.add(titleText);
+                                    }
+                                    setFavoriteSuggestions(newFavorites);
+                                    // Save to localStorage
+                                    localStorage.setItem('codette_favorites', JSON.stringify(Array.from(newFavorites)));
+                                  }}
+                                  className={`text-xl transition-all duration-300 transform ${
+                                    isFavorite 
+                                      ? 'hover:scale-125 hover:drop-shadow-lg animate-bounce' 
+                                      : 'hover:scale-110 hover:text-yellow-400'
+                                  }`}
+                                  title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                                >
+                                  {isFavorite ? '⭐' : '☆'}
+                                </button>
+                                <span className="text-xs px-2 py-1 bg-gradient-to-r from-purple-700 to-blue-700 text-white rounded-full font-semibold shadow-md">
+                                  {Math.round(suggestion.confidence * 100)}%
+                                </span>
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-300 line-clamp-3">
+                              {descText}
+                            </p>
+                            {suggestion.source && (
+                              <div className="mt-1 text-xs text-gray-500">
+                                Source: {suggestion.source}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    
+                    {suggestions.filter(s => s.confidence * 100 >= confidenceFilter).length === 0 && (
+                      <div className="text-center py-4 text-gray-500 text-xs">
+                        No suggestions above {confidenceFilter}% confidence
                       </div>
-                      <p className="text-xs text-gray-300 line-clamp-3">
-                        {descText}
-                      </p>
-                      {suggestion.source && (
-                        <div className="mt-1 text-xs text-gray-500">
-                          Source: {suggestion.source}
-                        </div>
-                      )}
-                      {/* Apply Button for High-Confidence Suggestions */}
-                      {suggestion.confidence > 0.7 && (
-                        <button
-                          onClick={() => {
-                            console.log('🤖 Applying suggestion:', titleText);
-                            // Parse and execute suggestion actions
-                            if (titleText.toLowerCase().includes('eq')) {
-                              if (selectedTrack) {
-                                const eqPlugin: Plugin = {
-                                  id: `eq-${Date.now()}`,
-                                  name: 'EQ',
-                                  type: 'eq' as const,
-                                  enabled: true,
-                                  parameters: {},
-                                };
-                                updateTrack(selectedTrack.id, {
-                                  inserts: [...(selectedTrack.inserts || []), eqPlugin],
-                                });
-                              }
-                            } else if (titleText.toLowerCase().includes('compress')) {
-                              if (selectedTrack) {
-                                const compPlugin: Plugin = {
-                                  id: `comp-${Date.now()}`,
-                                  name: 'Compressor',
-                                  type: 'compressor' as const,
-                                  enabled: true,
-                                  parameters: {},
-                                };
-                                updateTrack(selectedTrack.id, {
-                                  inserts: [...(selectedTrack.inserts || []), compPlugin],
-                                });
-                              }
-                            }
-                          }}
-                          disabled={isLoading || !selectedTrack}
-                          className="mt-2 w-full text-left px-2 py-1 text-xs bg-green-600/20 hover:bg-green-600/40 disabled:opacity-50 border border-green-600/50 rounded text-green-400 transition-colors text-center"
-                        >
-                          Apply
-                        </button>
-                      )}
-                    </div>
-                    );
-                    })}
+                    )}
                   </>
                 ) : (
                   <div className="text-center py-6 text-gray-500 text-xs">
@@ -480,240 +461,81 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       <div className="text-xs text-gray-500 mt-0.5">Type: {selectedTrack.type}</div>
                     </div>
 
-                    {/* Audio Upload Guidance */}
-                    <div className="p-2 bg-blue-900/20 border border-blue-700/50 rounded text-xs text-blue-200">
-                      <p className="font-medium mb-1">💡 Tip: Upload audio to analyze</p>
-                      <p>Go to the <span className="font-semibold">Files</span> tab to upload audio for deeper analysis</p>
-                    </div>
-
-                    {/* Analysis Function Selector */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-gray-300 mb-1.5">Analysis Functions</h4>
-                      <div className="space-y-1.5">
-                        <button
-                          onClick={async () => {
-                            if (!selectedTrack) {
-                              console.warn('[Analysis] No track selected');
-                              return;
-                            }
-                            console.log('[Analysis] Starting health check for:', selectedTrack.id);
-                            const audioData = getAudioBufferData(selectedTrack.id);
-                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
-                            
-                            // Run analysis (will return no-audio guidance if needed)
-                            const result = await analyzeAudio(audioData || new Float32Array(0), 'health-check');
-                            
-                            // Save analysis to database
-                            if (result) {
-                              // Convert findings and recommendations to strings
-                              const findings = (result.findings || []).map(f => 
-                                typeof f === 'string' ? f : JSON.stringify(f)
-                              );
-                              const recommendations = (result.recommendations || []).map(r => 
-                                typeof r === 'string' ? r : JSON.stringify(r)
-                              );
-                              await saveAnalysisToDb(
-                                selectedTrack.id,
-                                'health-check',
-                                result.score || 50,
-                                findings,
-                                recommendations
-                              );
-                              console.log('[Analysis] Saved health check results to database');
-                              await logAnalysisActivity('Session Health Check', selectedTrack.name);
-                            }
-                          }}
-                          disabled={isLoading || !selectedTrack}
-                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
-                        >
-                          <span className="text-xs">🔍 Session Health Check</span>
-                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!selectedTrack) {
-                              console.warn('[Analysis] No track selected');
-                              return;
-                            }
-                            console.log('[Analysis] Starting spectrum analysis for:', selectedTrack.id);
-                            const audioData = getAudioBufferData(selectedTrack.id);
-                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
-                            
-                            // Run analysis (will return no-audio guidance if needed)
-                            const result = await analyzeAudio(audioData || new Float32Array(0), 'spectrum');
-                            
-                            // Save analysis to database
-                            if (result) {
-                              // Convert findings and recommendations to strings
-                              const findings = (result.findings || []).map(f => 
-                                typeof f === 'string' ? f : JSON.stringify(f)
-                              );
-                              const recommendations = (result.recommendations || []).map(r => 
-                                typeof r === 'string' ? r : JSON.stringify(r)
-                              );
-                              await saveAnalysisToDb(
-                                selectedTrack.id,
-                                'spectrum',
-                                result.score || 50,
-                                findings,
-                                recommendations
-                              );
-                              console.log('[Analysis] Saved spectrum analysis to database');
-                              await logAnalysisActivity('Audio Spectrum Analysis', selectedTrack.name);
-                            }
-                          }}
-                          disabled={isLoading || !selectedTrack}
-                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
-                        >
-                          <span className="text-xs">📊 Audio Spectrum Analysis</span>
-                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!selectedTrack) {
-                              console.warn('[Analysis] No track selected');
-                              return;
-                            }
-                            console.log('[Analysis] Starting metering for:', selectedTrack.id);
-                            const audioData = getAudioBufferData(selectedTrack.id);
-                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
-                            
-                            // Run analysis (will return no-audio guidance if needed)
-                            const result = await analyzeAudio(audioData || new Float32Array(0), 'metering');
-                            
-                            // Save analysis to database
-                            if (result) {
-                              // Convert findings and recommendations to strings
-                              const findings = (result.findings || []).map(f => 
-                                typeof f === 'string' ? f : JSON.stringify(f)
-                              );
-                              const recommendations = (result.recommendations || []).map(r => 
-                                typeof r === 'string' ? r : JSON.stringify(r)
-                              );
-                              await saveAnalysisToDb(
-                                selectedTrack.id,
-                                'metering',
-                                result.score || 50,
-                                findings,
-                                recommendations
-                              );
-                              console.log('[Analysis] Saved metering analysis to database');
-                              await logAnalysisActivity('Level Metering', selectedTrack.name);
-                            }
-                          }}
-                          disabled={isLoading || !selectedTrack}
-                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
-                        >
-                          <span className="text-xs">📈 Level Metering</span>
-                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!selectedTrack) {
-                              console.warn('[Analysis] No track selected');
-                              return;
-                            }
-                            console.log('[Analysis] Starting phase correlation for:', selectedTrack.id);
-                            const audioData = getAudioBufferData(selectedTrack.id);
-                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
-                            
-                            // Run analysis (will return no-audio guidance if needed)
-                            const result = await analyzeAudio(audioData || new Float32Array(0), 'phase');
-                            
-                            // Save analysis to database
-                            if (result) {
-                              // Convert findings and recommendations to strings
-                              const findings = (result.findings || []).map(f => 
-                                typeof f === 'string' ? f : JSON.stringify(f)
-                              );
-                              const recommendations = (result.recommendations || []).map(r => 
-                                typeof r === 'string' ? r : JSON.stringify(r)
-                              );
-                              await saveAnalysisToDb(
-                                selectedTrack.id,
-                                'phase',
-                                result.score || 50,
-                                findings,
-                                recommendations
-                              );
-                              console.log('[Analysis] Saved phase analysis to database');
-                              await logAnalysisActivity('Phase Correlation Analysis', selectedTrack.name);
-                            }
-                          }}
-                          disabled={isLoading || !selectedTrack}
-                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
-                        >
-                          <span className="text-xs">🎚️ Phase Correlation</span>
-                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Analysis Results */}
-                {analysis && (
-                  <>
-                    <div className="p-2 bg-blue-900/30 border border-blue-700 rounded">
+                    {/* NEW: Waveform Preview */}
+                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-lg p-3 shadow-md hover:shadow-lg transition-all">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium">Score</span>
-                        <span className="text-lg font-bold text-blue-400">
-                          {analysis.score}/100
+                        <label className="text-xs font-bold text-gray-200 tracking-wide">WAVEFORM</label>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                          getAudioBufferData(selectedTrack.id)
+                            ? 'bg-green-600/30 text-green-300 border border-green-600/50'
+                            : 'bg-gray-700/50 text-gray-400 border border-gray-700'
+                        }`}>
+                          {getAudioBufferData(selectedTrack.id) ? '✓ Audio' : '○ Empty'}
                         </span>
                       </div>
-                      <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div
-                          className="bg-blue-500 h-2 rounded-full transition-all"
-                          style={{ width: `${analysis.score}%` }}
-                        />
+                      <canvas
+                        ref={waveformCanvasRef}
+                        width={280}
+                        height={80}
+                        className="w-full border border-gray-700 rounded-lg bg-gradient-to-br from-gray-950 to-gray-900 shadow-inner transition-transform hover:scale-102"
+                      />
+                      <div className="text-xs text-gray-500 mt-2 text-center font-mono">
+                        {getAudioBufferData(selectedTrack.id) 
+                          ? `${(getAudioBufferData(selectedTrack.id)?.length || 0).toLocaleString()} samples`
+                          : 'No audio data loaded'
+                        }
                       </div>
                     </div>
 
-                    {analysis.findings.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-gray-300 mb-1">Findings</h4>
-                        <ul className="space-y-0.5">
-                          {analysis.findings.map((finding, idx) => {
-                            // Handle both string and object findings
-                            const findingText = typeof finding === 'string' 
-                              ? finding 
-                              : (finding as any).message || (finding as any).text || JSON.stringify(finding);
-                            return (
-                              <li key={idx} className="text-xs text-gray-400">
-                                • {findingText}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    )}
+                    {analysis ? (
+                      <>
+                        <div className="p-2 bg-blue-900/30 border border-blue-700 rounded">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium">Score</span>
+                            <span className="text-lg font-bold text-blue-400">
+                              {analysis.score}/100
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div
+                              className="bg-blue-500 h-2 rounded-full transition-all"
+                              style={{ width: `${analysis.score}%` }}
+                            />
+                          </div>
+                        </div>
 
-                    {analysis.recommendations.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-gray-300 mb-1">Recommendations</h4>
-                        <ul className="space-y-0.5">
-                          {analysis.recommendations.map((rec, idx) => {
-                            // Handle both string and object recommendations
-                            const recText = typeof rec === 'string' 
-                              ? rec 
-                              : (rec as any).reason || (rec as any).action || JSON.stringify(rec);
-                            return (
-                              <li key={idx} className="text-xs text-gray-400">
-                                → {recText}
-                              </li>
-                            );
-                          })}
-                        </ul>
+                        {analysis.findings.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-gray-300 mb-1">Findings</h4>
+                            <ul className="space-y-0.5">
+                              {analysis.findings.map((finding, idx) => (
+                                <li key={idx} className="text-xs text-gray-400">
+                                  • {finding}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {analysis.recommendations.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-gray-300 mb-1">Recommendations</h4>
+                            <ul className="space-y-0.5">
+                              {analysis.recommendations.map((rec, idx) => (
+                                <li key={idx} className="text-xs text-gray-400">
+                                  → {rec}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-center py-6 text-gray-500 text-xs">
+                        {isLoading ? 'Analyzing audio...' : 'No analysis yet'}
                       </div>
                     )}
                   </>
-                )}
-
-                {!analysis && !isLoading && selectedTrack && (
-                  <div className="text-center py-4 text-gray-500 text-xs">
-                    <p className="mb-1">💡 Upload audio data to analyze...</p>
-                    <p className="text-xs text-gray-600">Select an analysis function above</p>
-                  </div>
                 )}
               </div>
             )}
@@ -730,7 +552,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   </div>
                 ) : (
                   chatHistory.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-2`}>
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div
                         className={`max-w-[80%] px-2 py-1.5 rounded text-xs ${
                           msg.role === 'user'
@@ -739,22 +561,6 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         }`}
                       >
                         {msg.content}
-                        {msg.role === 'assistant' && (msg as any).source && (
-                          <div className="text-xs text-gray-500 mt-1 pt-1 border-t border-gray-700">
-                            <span className="inline-block mr-2">
-                              {(msg as any).source === 'daw_template' && '🎯 DAW-specific'}
-                              {(msg as any).source === 'semantic_search' && '🔍 From knowledge base'}
-                              {(msg as any).source === 'codette_engine' && '🤖 Codette analysis'}
-                              {(msg as any).source === 'daw_functions' && '⚙️ Function reference'}
-                              {(msg as any).source === 'ui_component' && '🖼️ UI reference'}
-                            </span>
-                            {(msg as any).confidence && (
-                              <span className="inline-block">
-                                Confidence: {Math.round((msg as any).confidence * 100)}%
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   ))
@@ -807,7 +613,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const eqPlugin: Plugin = {
                             id: `eq-${Date.now()}`,
                             name: 'EQ',
-                            type: 'eq' as const,
+                            type: 'eq',
                             enabled: true,
                             parameters: {},
                           };
@@ -829,7 +635,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const compPlugin: Plugin = {
                             id: `comp-${Date.now()}`,
                             name: 'Compressor',
-                            type: 'compressor' as const,
+                            type: 'compressor',
                             enabled: true,
                             parameters: {},
                           };
@@ -851,7 +657,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const reverbPlugin: Plugin = {
                             id: `reverb-${Date.now()}`,
                             name: 'Reverb',
-                            type: 'reverb' as const,
+                            type: 'reverb',
                             enabled: true,
                             parameters: {},
                           };
@@ -912,17 +718,6 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                 </div>
               </div>
             )}
-
-            {/* Files Tab */}
-            {activeTab === 'files' && (
-              <FilesTabContent />
-            )}
-
-            {activeTab === 'control' && (
-              <div className="overflow-auto flex-1 bg-gray-900 rounded-lg">
-                <CodetteControlCenter userId={userId} />
-              </div>
-            )}
           </div>
 
           {/* Input Area */}
@@ -938,7 +733,6 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   placeholder="Ask Codette..."
                   disabled={isLoading || !isConnected}
                   autoComplete="off"
-                  aria-label="Message input for Codette AI"
                   className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
                 />
                 <button
@@ -979,156 +773,6 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             )}
           </div>
         </>
-      )}
-    </div>
-  );
-}
-
-/**
- * Files Tab Content Component
- * Separate component for better code organization and pagination support
- */
-function FilesTabContent() {
-  const {
-    files,
-    currentPage,
-    pageSize,
-    hasMore,
-    total,
-    loading,
-    error,
-    nextPage,
-    prevPage,
-    setPageSize,
-    refresh,
-  } = usePaginatedFiles(5); // 5 files per page
-
-  const [fileSearch, setFileSearch] = useState('');
-  const [filteredFiles, setFilteredFiles] = useState(files);
-
-  // Filter files based on search term
-  useEffect(() => {
-    if (fileSearch.trim()) {
-      const filtered = files.filter((f) =>
-        f.filename.toLowerCase().includes(fileSearch.toLowerCase())
-      );
-      setFilteredFiles(filtered);
-    } else {
-      setFilteredFiles(files);
-    }
-  }, [fileSearch, files]);
-
-  return (
-    <div className="space-y-3">
-      {/* Page Size Control */}
-      <div className="flex gap-2 items-center">
-        <label className="text-xs text-gray-400">Per page:</label>
-        <select
-          value={pageSize}
-          onChange={(e) => setPageSize(parseInt(e.target.value))}
-          className="bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none focus:border-blue-500"
-        >
-          <option value={5}>5</option>
-          <option value={10}>10</option>
-          <option value={20}>20</option>
-          <option value={50}>50</option>
-        </select>
-      </div>
-
-      {/* Search Bar */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="Search files..."
-          value={fileSearch}
-          onChange={(e) => setFileSearch(e.target.value)}
-          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-        />
-        <button
-          onClick={() => setFileSearch('')}
-          className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 text-xs transition-colors"
-        >
-          Clear
-        </button>
-      </div>
-
-      {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center gap-2 text-gray-400 text-xs py-4">
-          <Loader className="w-3 h-3 animate-spin" />
-          Loading files...
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div className="text-xs text-red-400 bg-red-900 bg-opacity-20 p-2 rounded">
-          {error}
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!loading && filteredFiles.length === 0 && (
-        <div className="text-center text-xs text-gray-400 py-4">
-          {files.length === 0 ? 'No files saved yet' : 'No files match your search'}
-        </div>
-      )}
-
-      {/* Files List */}
-      {filteredFiles.length > 0 && (
-        <div className="space-y-1 max-h-56 overflow-y-auto">
-          {filteredFiles.map((file) => (
-            <div
-              key={file.id}
-              className="flex items-center justify-between gap-2 bg-gray-700 hover:bg-gray-600 p-2 rounded transition-colors"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-gray-200 truncate">
-                  {file.filename}
-                </div>
-                <div className="text-xs text-gray-400">
-                  {new Date(file.created_at).toLocaleDateString()}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Pagination Info */}
-      {total !== undefined && total > 0 && (
-        <div className="text-xs text-gray-400 border-t border-gray-700 pt-2 mt-2">
-          <div>
-            Page {currentPage + 1} • Showing {files.length} of {total} files
-          </div>
-        </div>
-      )}
-
-      {/* Pagination Controls */}
-      {total !== undefined && total > pageSize && (
-        <div className="flex gap-1 justify-between">
-          <button
-            onClick={prevPage}
-            disabled={currentPage === 0 || loading}
-            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
-          >
-            ← Prev
-          </button>
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
-          >
-            <RefreshCw className={`w-3 h-3 inline ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={nextPage}
-            disabled={!hasMore || loading}
-            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
-          >
-            Next →
-          </button>
-        </div>
       )}
     </div>
   );
