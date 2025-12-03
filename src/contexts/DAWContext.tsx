@@ -246,6 +246,17 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     CodetteSuggestion[]
   >([]);
   
+  // Recording state
+  const [recordingTrackId, setRecordingTrackId] = useState<string | null>(null);
+  const [recordingStartTime, setRecordingStartTime] = useState(0);
+  const [recordingTakeCount, setRecordingTakeCount] = useState(0);
+  const [recordingMode, setRecordingModeState] = useState<'audio' | 'midi' | 'overdub'>('audio');
+  const [punchInEnabled, setPunchInEnabled] = useState(false);
+  const [punchInTime, setPunchInTime] = useState(0);
+  const [punchOutTime, setPunchOutTime] = useState(30);
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  
   // Initialize CodetteBridge with error handling using useMemo
   const codetteRef = useRef<any>(null);
   
@@ -2017,15 +2028,15 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         deselectAllTracks,
         selectedTracks,
         // Recording state
-        recordingTrackId: null,
-        recordingStartTime: 0,
-        recordingTakeCount: 0,
-        recordingMode: 'audio',
-        punchInEnabled: false,
-        punchInTime: 0,
-        punchOutTime: 30,
-        recordingBlob: null,
-        recordingError: null,
+        recordingTrackId: recordingTrackId,
+        recordingStartTime: recordingStartTime,
+        recordingTakeCount: recordingTakeCount,
+        recordingMode: recordingMode,
+        punchInEnabled: punchInEnabled,
+        punchInTime: punchInTime,
+        punchOutTime: punchOutTime,
+        recordingBlob: recordingBlob,
+        recordingError: recordingError,
         // Recording methods
         startRecording: async (trackId: string) => {
           if (isRecording) return false;
@@ -2033,7 +2044,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
             setIsRecording(true);
             setRecordingTrackId(trackId);
             setRecordingStartTime(0);
-            setRecordingTakeCount((prev) => prev + 1);
+            setRecordingTakeCount((prev: number) => prev + 1);
             
             // Reset track state for recording
             updateTrack(trackId, {
@@ -2112,11 +2123,11 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
           setPunchOutTime(punchOut);
         },
         togglePunchIn: () => {
-          setPunchInEnabled((prev) => !prev);
+          setPunchInEnabled((prev: boolean) => !prev);
         },
         undoLastRecording: () => {
           console.log("Undo last recording action");
-          setRecordingTakeCount((prev) => Math.max(0, prev - 1));
+          setRecordingTakeCount((prev: number) => Math.max(0, prev - 1));
         },
       };
 

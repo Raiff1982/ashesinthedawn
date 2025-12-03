@@ -1,6 +1,5 @@
 import React from 'react';
 import { DAWProvider } from './contexts/DAWContext';
-import { CodettePanelProvider, useCodettePanel } from './contexts/CodettePanelContext';
 import { ThemeProvider } from './themes/ThemeContext';
 import TopBar from './components/TopBar';
 import MenuBar from './components/MenuBar';
@@ -10,12 +9,10 @@ import Mixer from './components/Mixer';
 import Sidebar from './components/Sidebar';
 import { CodettePanel } from './components/CodettePanel';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
-import CodetteMasterPanel from './components/CodetteMasterPanel';
 import { initializeActions } from './lib/actions/initializeActions';
 import { CommandPalette } from './components/CommandPalette';
 import { OnboardingTour } from './components/OnboardingTour';
 import { useToast, ToastNotification } from './components/Toast';
-import { BreadcrumbNavigation } from './components/BreadcrumbNavigation';
 
 // Suppress 404 errors from missing Supabase tables in browser console
 if (typeof window !== 'undefined') {
@@ -32,7 +29,6 @@ function AppContent() {
   const [isResizingMixer, setIsResizingMixer] = React.useState(false);
   const [rightSidebarTab, setRightSidebarTab] = React.useState<'files' | 'control'>('files');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
-  const { showCodetteMasterPanel, setShowCodetteMasterPanel } = useCodettePanel();
   const { toasts, removeToast } = useToast();
 
   // Initialize action system on mount
@@ -141,15 +137,6 @@ function AppContent() {
 
       {/* Global Modals */}
       <AudioSettingsModal />
-      
-      {/* Codette AI Master Panel - Floating Modal */}
-      {showCodetteMasterPanel && (
-        <div className="fixed inset-0 z-40 pointer-events-none">
-          <div className="absolute bottom-0 right-0 w-96 h-96 pointer-events-auto">
-            <CodetteMasterPanel onClose={() => setShowCodetteMasterPanel(false)} />
-          </div>
-        </div>
-      )}
 
       {/* ENHANCEMENT #7: Command Palette (Ctrl+K) */}
       <CommandPalette 
@@ -178,9 +165,7 @@ function App() {
   return (
     <ThemeProvider initialTheme="codette-graphite">
       <DAWProvider>
-        <CodettePanelProvider>
-          <AppContent />
-        </CodettePanelProvider>
+        <AppContent />
       </DAWProvider>
     </ThemeProvider>
   );
