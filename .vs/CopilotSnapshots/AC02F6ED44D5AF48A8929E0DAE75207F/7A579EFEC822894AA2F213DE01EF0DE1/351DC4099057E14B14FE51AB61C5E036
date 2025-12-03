@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+﻿import { useEffect, useRef, useState, useMemo } from "react";
 import { useDAW } from "../contexts/DAWContext";
 import { normalizeCanvasDimensions } from "../lib/windowScaling";
 import { ChevronLeft, ChevronRight } from "lucide-react";

@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import React, { createContext, useContext, useState } from "react";
 import type {
   Track,
   Project,
@@ -11,13 +11,10 @@ import type {
   MidiDevice,
   MidiRoute,
   AudioContextState,
-} from "../types";
+} from "@/types";
 import { CodetteSuggestion } from "../lib/codetteBridge";
 import { supabase } from "../lib/supabase";
 import { useEffectChainAPI, EffectChainContextAPI } from "../lib/effectChainContextAdapter";
-
-// Create context (may be undefined before provider mounts)
-const DAWContext = React.createContext<DAWContextType | undefined>(undefined);
 
 interface DAWContextType {
   currentProject: Project | null;
@@ -223,26 +220,26 @@ interface DAWContextType {
 }
 
 // DAW Provider component
-export function DAWProvider({ children }: { children: React.ReactNode }) {
+export const DAWProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // State and context initialization
-  const [currentProject, setCurrentProject] = React.useState<Project | null>(null);
-  const [tracks, setTracks] = React.useState<Track[]>([]);
-  const [selectedTrack, setSelectedTrack] = React.useState<Track | null>(null);
-  const [isPlaying, setIsPlaying] = React.useState<boolean>(false);
-  const [isRecording, setIsRecording] = React.useState<boolean>(false);
-  const [currentTime, setCurrentTime] = React.useState<number>(0);
-  const [zoom, _setZoom] = React.useState<number>(1);
-  const [logicCoreMode, setLogicCoreMode] = React.useState<LogicCoreMode>("ON");
-  const [voiceControlActive, setVoiceControlActive] = React.useState<boolean>(false);
-  const [cpuUsage, _setCpuUsage] = React.useState<number>(0);
-  const [isUploadingFile, setIsUploadingFile] = React.useState<boolean>(false);
-  const [uploadError, setUploadError] = React.useState<string | null>(null);
-  const [deletedTracks, _setDeletedTracks] = React.useState<Track[]>([]);
-  const [canUndo, _setCanUndo] = React.useState<boolean>(false);
-  const [canRedo, _setCanRedo] = React.useState<boolean>(false);
-  const [markers, _setMarkers] = React.useState<Marker[]>([]);
-  const [loopRegion, _setLoopRegion] = React.useState<LoopRegion | null>(null);
-  const [metronomeSettings, _setMetronomeSettings] = React.useState<MetronomeSettings>({
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [zoom, _setZoom] = useState<number>(1);
+  const [logicCoreMode, setLogicCoreMode] = useState<LogicCoreMode>("ON");
+  const [voiceControlActive, setVoiceControlActive] = useState<boolean>(false);
+  const [cpuUsage, _setCpuUsage] = useState<number>(0);
+  const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [deletedTracks, _setDeletedTracks] = useState<Track[]>([]);
+  const [canUndo, _setCanUndo] = useState<boolean>(false);
+  const [canRedo, _setCanRedo] = useState<boolean>(false);
+  const [markers, _setMarkers] = useState<Marker[]>([]);
+  const [loopRegion, _setLoopRegion] = useState<LoopRegion | null>(null);
+  const [metronomeSettings, _setMetronomeSettings] = useState<MetronomeSettings>({
     enabled: false,
     volume: 1,
     beatSound: "click",
@@ -250,86 +247,40 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   });
 
   // Audio I/O State - Real device management
-  const [selectedInputDeviceId, _setSelectedInputDeviceId] = React.useState<string | null>(null);
-  const [selectedOutputDeviceId, _setSelectedOutputDeviceId] = React.useState<string | null>(null);
-  const [inputLevel, _setInputLevel] = React.useState<number>(0);
-  const [latencyMs, _setLatencyMs] = React.useState<number>(0);
-  const [bufferUnderruns, _setBufferUnderruns] = React.useState<number>(0);
-  const [bufferOverruns, _setBufferOverruns] = React.useState<number>(0);
-  const [isAudioIOActive, _setIsAudioIOActive] = React.useState<boolean>(false);
-  const [audioIOError, _setAudioIOError] = React.useState<string | null>(null);
+  const [selectedInputDeviceId, _setSelectedInputDeviceId] = useState<string | null>(null);
+  const [selectedOutputDeviceId, _setSelectedOutputDeviceId] = useState<string | null>(null);
+  const [inputLevel, _setInputLevel] = useState<number>(0);
+  const [latencyMs, _setLatencyMs] = useState<number>(0);
+  const [bufferUnderruns, _setBufferUnderruns] = useState<number>(0);
+  const [bufferOverruns, _setBufferOverruns] = useState<number>(0);
+  const [isAudioIOActive, _setIsAudioIOActive] = useState<boolean>(false);
+  const [audioIOError, _setAudioIOError] = useState<string | null>(null);
 
   // MIDI State
-  const [midiDevices] = React.useState<MidiDevice[]>([]);
+  const [midiDevices] = useState<MidiDevice[]>([]);
   
   // Phase 9: Effect Chain API
   const effectChainAPI = useEffectChainAPI();
   
   // Recording state (NEW)
-  const [recordingTrackId, _setRecordingTrackId] = React.useState<string | null>(null);
-  const [recordingStartTime, _setRecordingStartTime] = React.useState<number>(0);
-  const [recordingTakeCount, setRecordingTakeCount] = React.useState<number>(0);
-  const [recordingModeState, setRecordingModeState] = React.useState<'audio' | 'midi' | 'overdub'>('audio');
-  const [punchInEnabled, _setPunchInEnabled] = React.useState<boolean>(false);
-  const [punchInTime, _setPunchInTime] = React.useState<number>(0);
-  const [punchOutTime, _setPunchOutTime] = React.useState<number>(0);
-  const [recordingBlob, _setRecordingBlob] = React.useState<Blob | null>(null);
-  const [recordingError, _setRecordingError] = React.useState<string | null>(null);
+  const [recordingTrackId, _setRecordingTrackId] = useState<string | null>(null);
+  const [recordingStartTime, _setRecordingStartTime] = useState<number>(0);
+  const [recordingTakeCount, setRecordingTakeCount] = useState<number>(0);
+  const [recordingModeState, setRecordingModeState] = useState<'audio' | 'midi' | 'overdub'>('audio');
+  const [punchInEnabled, _setPunchInEnabled] = useState<boolean>(false);
+  const [punchInTime, _setPunchInTime] = useState<number>(0);
+  const [punchOutTime, _setPunchOutTime] = useState<number>(0);
+  const [recordingBlob, _setRecordingBlob] = useState<Blob | null>(null);
+  const [recordingError, _setRecordingError] = useState<string | null>(null);
 
   // WebSocket Status (Phase 4)
-  const [webSocketStatus, _setWebSocketStatus] = React.useState<{ connected: boolean; reconnectAttempts: number }>({
+  const [webSocketStatus, _setWebSocketStatus] = useState<{ connected: boolean; reconnectAttempts: number }>({
     connected: false,
     reconnectAttempts: 0,
   });
 
-  // Simple playback timer
-  const playTimerRef = React.useRef<number | null>(null);
-  const lastTickRef = React.useRef<number | null>(null);
-
-  React.useEffect(() => {
-    if (isPlaying) {
-      lastTickRef.current = performance.now();
-      const tick = () => {
-        const now = performance.now();
-        const last = lastTickRef.current ?? now;
-        const deltaSec = (now - last) / 1000;
-        lastTickRef.current = now;
-        setCurrentTime((prev) => prev + deltaSec);
-        playTimerRef.current = requestAnimationFrame(tick);
-      };
-      playTimerRef.current = requestAnimationFrame(tick);
-    } else if (playTimerRef.current) {
-      cancelAnimationFrame(playTimerRef.current);
-      playTimerRef.current = null;
-      lastTickRef.current = null;
-    }
-    return () => {
-      if (playTimerRef.current) {
-        cancelAnimationFrame(playTimerRef.current);
-        playTimerRef.current = null;
-      }
-    };
-  }, [isPlaying]);
-
-  // Demo waveform and duration cache (stable across renders)
-  const waveformCacheRef = React.useRef<Map<string, number[]>>(new Map());
-  const durationCacheRef = React.useRef<Map<string, number>>(new Map());
-
-  const ensureDemoDataForTrack = (trackId: string) => {
-    if (!waveformCacheRef.current.has(trackId)) {
-      const length = 4096;
-      const data = Array.from({ length }, (_, i) => {
-        const t = (i / length) * Math.PI * 4;
-        return Math.abs(Math.sin(t) * 0.6 + Math.sin(t * 2) * 0.3 + Math.sin(t * 3) * 0.1 + Math.random() * 0.05);
-      });
-      waveformCacheRef.current.set(trackId, data);
-    }
-    if (!durationCacheRef.current.has(trackId)) {
-      durationCacheRef.current.set(trackId, 60); // default 60s
-    }
-  };
-
   const getAudioContextStatus = () => {
+    // Implementation for getting the audio context status
     return "running";
   };
 
@@ -386,52 +337,106 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 
   // Sync DAW state to Codette AI (Phase 1)
   const syncDAWStateToCodette = async () => {
+    // Implementation for syncing DAW state to Codette AI
     return true;
   };
 
   // Codette Transport Control (Phase 3)
-  const codetteTransportPlay = async () => {};
-  const codetteTransportStop = async () => {};
-  const codetteTransportSeek = async (_timeSeconds: number) => {};
-  const codetteSetTempo = async (_bpm: number) => {};
+  const codetteTransportPlay = async () => {
+    // Implementation for Codette transport play
+  };
+
+  const codetteTransportStop = async () => {
+    // Implementation for Codette transport stop
+  };
+
+  const codetteTransportSeek = async (_timeSeconds: number) => {
+    // Implementation for Codette transport seek
+  };
+
+  const codetteSetTempo = async (_bpm: number) => {
+    // Implementation for setting tempo in Codette
+  };
+
   const codetteSetLoop = async (
     _enabled: boolean,
     _startTime?: number,
     _endTime?: number
-  ) => {};
+  ) => {
+    // Implementation for setting loop in Codette
+  };
 
-  const cutTrack = (_trackId: string) => {};
-  const copyTrack = (_trackId: string) => {};
-  const pasteTrack = () => {};
-  const selectAllTracks = () => {};
-  const deselectAllTracks = () => {};
+  const cutTrack = (_trackId: string) => {
+    // Implementation for cutting a track
+  };
+
+  const copyTrack = (_trackId: string) => {
+    // Implementation for copying a track
+  };
+
+  const pasteTrack = () => {
+    // Implementation for pasting a track
+  };
+
+  const selectAllTracks = () => {
+    // Implementation for selecting all tracks
+  };
+
+  const deselectAllTracks = () => {
+    // Implementation for deselecting all tracks
+  };
 
   const startRecording = async (_trackId: string) => {
+    // Implementation for starting recording
     return true;
   };
+
   const stopRecording = async () => {
+    // Implementation for stopping recording
     return null;
   };
+
   const pauseRecording = () => {
+    // Implementation for pausing recording
     return true;
   };
+
   const resumeRecording = () => {
+    // Implementation for resuming recording
     return true;
   };
+
+  // method exposed via context to set recording mode
   const setRecordingMode = (mode: 'audio' | 'midi' | 'overdub') => {
     setRecordingModeState(mode);
   };
-  const setPunchInOut = (_punchIn: number, _punchOut: number) => {};
-  const togglePunchIn = () => {};
+
+  const setPunchInOut = (_punchIn: number, _punchOut: number) => {
+    // Implementation for setting punch in and out
+  };
+
+  const togglePunchIn = () => {
+    // Implementation for toggling punch in
+  };
+
   const undoLastRecording = () => {
     console.log("Undo last recording action");
     setRecordingTakeCount((prev: number) => Math.max(0, prev - 1));
   };
 
   const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
-  const undo = () => { console.log("undo"); };
-  const redo = () => { console.log("redo"); };
 
+  const undo = () => {
+    console.log("undo");
+  };
+  const redo = () => {
+    console.log("redo");
+  };
+
+  // Phase 9: Effect Chain Management (from EffectChainContextAPI)
+  // use effectChainAPI directly and spread into contextValue later
+
+  // Context value
   const contextValue = {
     currentProject,
     tracks,
@@ -483,13 +488,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         routing: '',
       };
       setTracks((prev) => [...prev, t]);
-      // Prepare demo data for new track (stable reference)
-      ensureDemoDataForTrack(t.id);
     },
     selectTrack: (trackId: string) => {
       const t = tracks.find((tr) => tr.id === trackId) || null;
       setSelectedTrack(t);
-      if (t) ensureDemoDataForTrack(t.id);
     },
     updateTrack: (trackId: string, updates: Partial<Track>) => {
       setTracks((prev) => prev.map((t) => (t.id === trackId ? { ...t, ...updates } : t)));
@@ -504,14 +506,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       if (!source) return null;
       const copy: Track = { ...source, id: `track-${Date.now()}` };
       setTracks((prev) => [...prev, copy]);
-      // copy cached data
-      const wf = waveformCacheRef.current.get(source.id);
-      if (wf) waveformCacheRef.current.set(copy.id, wf);
-      const dur = durationCacheRef.current.get(source.id);
-      if (dur) durationCacheRef.current.set(copy.id, dur);
       return copy;
     },
     restoreTrack: (trackId: string) => {
+      // Move a track from deletedTracks back to tracks
       _setDeletedTracks((prev) => {
         const idx = prev.findIndex((t) => t.id === trackId);
         if (idx === -1) return prev;
@@ -531,20 +529,11 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     saveProject,
     loadProject,
     uploadAudioFile: async () => false,
-    // Stable getters to avoid infinite re-render loops
-    getWaveformData: (trackId: string) => {
-      ensureDemoDataForTrack(trackId);
-      return waveformCacheRef.current.get(trackId) as number[];
-    },
-    getAudioDuration: (trackId: string) => {
-      ensureDemoDataForTrack(trackId);
-      return durationCacheRef.current.get(trackId) as number;
-    },
+    getWaveformData: () => [],
+    getAudioDuration: () => 0,
     getAudioBufferData: () => null,
     getAudioLevels: () => null,
-    seek: (timeSeconds: number) => {
-      setCurrentTime(Math.max(0, timeSeconds));
-    },
+    seek: () => {},
     setTrackInputGain: () => {},
     addPluginToTrack: () => {},
     removePluginFromTrack: () => {},
@@ -645,7 +634,11 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     codetteSetLoop,
     // WebSocket Status (Phase 4)
     getWebSocketStatus: () => webSocketStatus,
-    getCodetteBridgeStatus: () => ({ connected: false, reconnectCount: 0, isReconnecting: false }),
+    getCodetteBridgeStatus: () => ({
+      connected: false,
+      reconnectCount: 0,
+      isReconnecting: false,
+    }),
     // Clipboard Operations
     clipboardData: { type: null, data: null },
     cutTrack,
@@ -687,11 +680,15 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       {children}
     </DAWContext.Provider>
   );
-}
+};
+
+
+// Create context (may be undefined before provider mounts)
+const DAWContext = createContext<DAWContextType | undefined>(undefined);
 
 // Hook that asserts presence of provider and returns a non-undefined context
 export const useDAW = (): DAWContextType => {
-  const ctx = React.useContext(DAWContext);
+  const ctx = useContext(DAWContext);
   if (!ctx) throw new Error("useDAW must be used within DAWProvider");
   return ctx;
 };
