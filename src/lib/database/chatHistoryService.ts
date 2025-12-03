@@ -22,19 +22,48 @@ export async function saveChatSession(
   messages: ChatMessage[]
 ): Promise<{ success: boolean; data?: ChatSession; error?: string }> {
   try {
-    const { data, error } = await supabase
+    // Load existing session
+    const { data: existing } = await supabase
       .from('chat_history')
-      .upsert(
-        {
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const now = new Date().toISOString();
+
+    let data: ChatSession | null = null;
+    let error: any = null;
+
+    if (existing?.id) {
+      // Update existing
+      const result = await supabase
+        .from('chat_history')
+        .update({
+          messages: messages,
+          updated_at: now,
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      data = result.data;
+      error = result.error;
+    } else {
+      // Insert new
+      const result = await supabase
+        .from('chat_history')
+        .insert({
           user_id: userId,
           messages: messages,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      )
-      .select()
-      .single();
+          created_at: now,
+          updated_at: now,
+        })
+        .select()
+        .single();
+
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       console.error('[ChatHistoryService] Save error:', error);
@@ -93,7 +122,7 @@ export async function addChatMessage(
     // Load existing session
     const { data: existing } = await supabase
       .from('chat_history')
-      .select('messages')
+      .select('*')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -103,21 +132,36 @@ export async function addChatMessage(
       timestamp: message.timestamp || Date.now(),
     });
 
-    // Save updated session
-    const { error } = await supabase
-      .from('chat_history')
-      .upsert(
-        {
+    const now = new Date().toISOString();
+
+    // If session exists, update it; otherwise insert new one
+    if (existing?.id) {
+      const { error } = await supabase
+        .from('chat_history')
+        .update({
+          messages: messages,
+          updated_at: now,
+        })
+        .eq('id', existing.id);
+
+      if (error) {
+        console.error('[ChatHistoryService] Add message error:', error);
+        return { success: false, error: error.message };
+      }
+    } else {
+      const { error } = await supabase
+        .from('chat_history')
+        .insert({
           user_id: userId,
           messages: messages,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      );
+          created_at: now,
+          updated_at: now,
+        });
 
-    if (error) {
-      console.error('[ChatHistoryService] Add message error:', error);
-      return { success: false, error: error.message };
+      if (error) {
+        console.error('[ChatHistoryService] Add message error:', error);
+        return { success: false, error: error.message };
+      }
     }
 
     console.log('[ChatHistoryService] Message added');

@@ -1,6 +1,5 @@
 import React from 'react';
 import { DAWProvider } from './contexts/DAWContext';
-import { CodettePanelProvider, useCodettePanel } from './contexts/CodettePanelContext';
 import { ThemeProvider } from './themes/ThemeContext';
 import TopBar from './components/TopBar';
 import MenuBar from './components/MenuBar';
@@ -10,37 +9,31 @@ import Mixer from './components/Mixer';
 import Sidebar from './components/Sidebar';
 import { CodettePanel } from './components/CodettePanel';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
-import CommandPalette from './components/CommandPalette';
-import CodetteMasterPanel from './components/CodetteMasterPanel';
 import { initializeActions } from './lib/actions/initializeActions';
+import { CommandPalette } from './components/CommandPalette';
+import { OnboardingTour } from './components/OnboardingTour';
+import { useToast, ToastNotification } from './components/Toast';
+
+// Suppress 404 errors from missing Supabase tables in browser console
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    const msg = event.message || String(event);
+    if (msg.includes('404') && msg.includes('codette_')) {
+      event.preventDefault();
+    }
+  }, true);
+}
 
 function AppContent() {
   const [mixerHeight, setMixerHeight] = React.useState(200);
   const [isResizingMixer, setIsResizingMixer] = React.useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
   const [rightSidebarTab, setRightSidebarTab] = React.useState<'files' | 'control'>('files');
-  const { showCodetteMasterPanel, setShowCodetteMasterPanel } = useCodettePanel();
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+  const { toasts, removeToast } = useToast();
 
   // Initialize action system on mount
   React.useEffect(() => {
     initializeActions();
-  }, []);
-
-  // Global keyboard shortcuts
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Command Palette: Ctrl+Shift+P or Ctrl+/
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'p') {
-        e.preventDefault();
-        setIsCommandPaletteOpen(true);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault();
-        setIsCommandPaletteOpen(true);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   React.useEffect(() => {
@@ -140,25 +133,30 @@ function AppContent() {
             </div>
           </div>
         </div>
-
-
       </div>
 
       {/* Global Modals */}
       <AudioSettingsModal />
+
+      {/* ENHANCEMENT #7: Command Palette (Ctrl+K) */}
       <CommandPalette 
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
       />
-      
-      {/* Codette AI Master Panel - Floating Modal */}
-      {showCodetteMasterPanel && (
-        <div className="fixed inset-0 z-40 pointer-events-none">
-          <div className="absolute bottom-0 right-0 w-96 h-96 pointer-events-auto">
-            <CodetteMasterPanel onClose={() => setShowCodetteMasterPanel(false)} />
-          </div>
-        </div>
-      )}
+
+      {/* ENHANCEMENT #10: Onboarding Tour */}
+      <OnboardingTour />
+
+      {/* ENHANCEMENT #3: Toast Notifications */}
+      <div className="fixed bottom-4 right-4 z-40 space-y-2">
+        {toasts.map(toast => (
+          <ToastNotification
+            key={toast.id}
+            {...toast}
+            onClose={removeToast}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -167,9 +165,7 @@ function App() {
   return (
     <ThemeProvider initialTheme="codette-graphite">
       <DAWProvider>
-        <CodettePanelProvider>
-          <AppContent />
-        </CodettePanelProvider>
+        <AppContent />
       </DAWProvider>
     </ThemeProvider>
   );

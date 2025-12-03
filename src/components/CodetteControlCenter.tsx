@@ -38,9 +38,9 @@ export default function CodetteControlCenter({ userId = 'demo-user' }: CodetteCo
 
   const handleExportLog = () => {
     const csv = activityLogs
-      .map((a) => `"${new Date(a.timestamp).toLocaleTimeString()}","${a.source}","${a.action}"`)
+      .map((a) => `"${new Date(a.created_at || new Date().toISOString()).toLocaleTimeString()}","${a.source}","${a.activity_type}"`)
       .join('\n');
-    const header = '"Time","Source","Action"\n';
+    const header = '"Time","Source","Activity Type"\n';
     const blob = new Blob([header + csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -119,7 +119,7 @@ export default function CodetteControlCenter({ userId = 'demo-user' }: CodetteCo
                   {activityLogs.map((a, i) => (
                     <tr key={i} className="border-b border-gray-900 hover:bg-gray-900/50 transition">
                       <td className="py-2 px-4 text-gray-300 font-mono text-xs">
-                        {new Date(a.timestamp).toLocaleTimeString()}
+                        {new Date(a.created_at || new Date().toISOString()).toLocaleTimeString()}
                       </td>
                       <td className="py-2 px-4">
                         <span
@@ -134,7 +134,7 @@ export default function CodetteControlCenter({ userId = 'demo-user' }: CodetteCo
                           {a.source.charAt(0).toUpperCase() + a.source.slice(1)}
                         </span>
                       </td>
-                      <td className="py-2 px-4 text-gray-300">{a.action}</td>
+                      <td className="py-2 px-4 text-gray-300">{a.activity_type}</td>
                       <td className="py-2 px-4">
                         <span
                           className={`px-2 py-1 rounded text-xs font-medium ${
@@ -237,9 +237,9 @@ export default function CodetteControlCenter({ userId = 'demo-user' }: CodetteCo
                 </p>
               </div>
               <div className="bg-gray-900 rounded p-4">
-                <p className="text-gray-400 text-sm mb-1">Pending/Denied</p>
+                <p className="text-gray-400 text-sm mb-1">Pending/Failed</p>
                 <p className="text-3xl font-bold text-red-400">
-                  {activityLogs.filter((a) => a.status === 'pending' || a.status === 'denied').length}
+                  {activityLogs.filter((a) => a.status === 'pending' || a.status === 'failed').length}
                 </p>
               </div>
             </div>

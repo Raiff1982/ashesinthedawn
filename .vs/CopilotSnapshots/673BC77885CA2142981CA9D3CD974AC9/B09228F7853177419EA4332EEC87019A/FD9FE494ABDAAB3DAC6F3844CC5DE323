@@ -1,0 +1,68 @@
+﻿/**
+ * Codette Sidebar Panel
+ * Collapsible sidebar for integrating Codette AI into the main DAW layout
+ */
+
+import React, { useState } from 'react';
+import { ChevronLeft, Sparkles } from 'lucide-react';
+import CodettePanel from './CodettePanel';
+
+interface CodetteSidebarProps {
+  isCollapsed?: boolean;
+  onToggle?: () => void;
+}
+
+export const CodetteSidebar: React.FC<CodetteSidebarProps> = ({
+  isCollapsed = false,
+  onToggle,
+}) => {
+  const [localCollapsed, setLocalCollapsed] = useState(isCollapsed);
+
+  const handleToggle = () => {
+    setLocalCollapsed(!localCollapsed);
+    onToggle?.();
+  };
+
+  if (localCollapsed) {
+    return (
+      <div className="w-12 bg-gray-900 border-l border-gray-700 flex flex-col items-center py-4">
+        <button
+          onClick={handleToggle}
+          className="p-2 hover:bg-gray-800 rounded transition-colors group relative"
+          title="Open Codette"
+        >
+          <Sparkles className="w-5 h-5 text-purple-400 group-hover:text-purple-300" />
+          <div className="absolute left-full ml-2 bg-gray-800 text-gray-200 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">
+            Codette AI
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-80 bg-gray-900 border-l border-gray-700 flex flex-col">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-purple-400" />
+          <h2 className="font-bold text-white text-sm">Codette AI</h2>
+        </div>
+        <button
+          onClick={handleToggle}
+          className="p-1 hover:bg-gray-800 rounded transition-colors"
+          title="Collapse"
+        >
+          <ChevronLeft className="w-5 h-5 text-gray-400 hover:text-gray-300" />
+        </button>
+      </div>
+
+      {/* Panel Content */}
+      <div className="flex-1 overflow-hidden">
+        <CodettePanel isVisible={true} />
+      </div>
+    </div>
+  );
+};
+
+export default CodetteSidebar;

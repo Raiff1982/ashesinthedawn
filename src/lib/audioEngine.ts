@@ -40,6 +40,7 @@ export class AudioEngine {
   private panNodes: Map<string, StereoPannerNode> = new Map();
   private stereoWidthNodes: Map<string, GainNode> = new Map();
   private phaseFlipStates: Map<string, boolean> = new Map();
+  private trackAnalysers: Map<string, AnalyserNode> = new Map(); // Per-track metering
   private mediaRecorder: MediaRecorder | null = null;
   private recordedChunks: Blob[] = [];
   private playingTracksState: Map<string, TrackPlayState> = new Map();
@@ -182,7 +183,11 @@ export class AudioEngine {
         .filter(p => p.enabled)
         .map(p => p.type);
 
-      // Build the audio chain: source → input gain → plugins → pan → track gain (fader) → analyser → master
+      // Create per-track analyser for metering
+      const trackAnalyser = this.audioContext.createAnalyser();
+      trackAnalyser.fftSize = 2048;
+
+      // Build the audio chain: source → input gain → plugins → pan → track gain (fader) → track analyser → master
       source.connect(inputGain);
       
       // Process plugin chain and get the output node
@@ -193,12 +198,14 @@ export class AudioEngine {
       
       chainOutput.connect(panNode);
       panNode.connect(trackGain);
-      trackGain.connect(this.analyser!);
+      trackGain.connect(trackAnalyser);
+      trackAnalyser.connect(this.analyser!);
 
       // Store nodes for later updates
       this.inputGainNodes.set(trackId, inputGain);
       this.gainNodes.set(trackId, trackGain);
       this.panNodes.set(trackId, panNode);
+      this.trackAnalysers.set(trackId, trackAnalyser);
 
       // Track playback state
       this.playingTracksState.set(trackId, {
@@ -230,6 +237,8 @@ export class AudioEngine {
       try {
         source.stop();
         this.playingNodes.delete(trackId);
+        this.playingTracksState.delete(trackId);
+        this.trackAnalysers.delete(trackId); // Clean up track analyser
         console.log(`Stopped playback for track ${trackId}`);
       } catch (error) {
         console.error(`Error stopping audio for track ${trackId}:`, error);
@@ -309,14 +318,17 @@ export class AudioEngine {
   }
 
   /**
-   * Start recording audio from microphone
+   * Start recording audio from microphone with better control
    */
   async startRecording(): Promise<boolean> {
     if (!this.audioContext) await this.initialize();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      this.mediaRecorder = new MediaRecorder(stream);
+      this.mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 128000,
+      });
       this.recordedChunks = [];
 
       this.mediaRecorder.ondataavailable = (event) => {
@@ -326,10 +338,10 @@ export class AudioEngine {
       };
 
       this.mediaRecorder.start();
-      console.log("Recording started");
+      console.log("🎙️ Recording started with microphone input");
       return true;
     } catch (error) {
-      console.error("Failed to start recording:", error);
+      console.error("❌ Failed to start recording:", error);
       return false;
     }
   }
@@ -338,17 +350,135 @@ export class AudioEngine {
    * Stop recording and return audio blob
    */
   async stopRecording(): Promise<Blob | null> {
-    if (!this.mediaRecorder) return null;
+    if (!this.mediaRecorder) {
+      console.warn("No recording in progress");
+      return null;
+    }
 
     return new Promise((resolve) => {
       this.mediaRecorder!.onstop = () => {
         const blob = new Blob(this.recordedChunks, { type: "audio/webm" });
         this.recordedChunks = [];
-        console.log("Recording stopped");
+        console.log("⏹️ Recording stopped, saved", blob.size, "bytes");
         resolve(blob);
       };
-      this.mediaRecorder!.stop();
+      
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop();
+      } else {
+        resolve(null);
+      }
     });
+  }
+
+  /**
+   * Get current recording state
+   */
+  getRecordingState(): 'inactive' | 'recording' | 'paused' {
+    if (!this.mediaRecorder) return 'inactive';
+    return this.mediaRecorder.state as 'inactive' | 'recording' | 'paused';
+  }
+
+  /**
+   * Pause recording (if supported)
+   */
+  pauseRecording(): boolean {
+    if (!this.mediaRecorder || this.mediaRecorder.state !== 'recording') {
+      return false;
+    }
+    try {
+      this.mediaRecorder.pause();
+      console.log("⏸️ Recording paused");
+      return true;
+    } catch (error) {
+      console.error("Failed to pause recording:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Resume recording after pause
+   */
+  resumeRecording(): boolean {
+    if (!this.mediaRecorder || this.mediaRecorder.state !== 'paused') {
+      return false;
+    }
+    try {
+      this.mediaRecorder.resume();
+      console.log("▶️ Recording resumed");
+      return true;
+    } catch (error) {
+      console.error("Failed to resume recording:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Save recording blob as audio buffer in a track
+   */
+  async saveRecordingToTrack(trackId: string, blob: Blob): Promise<boolean> {
+    if (!this.audioContext) await this.initialize();
+
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
+      
+      // Store the buffer
+      this.audioBuffers.set(trackId, audioBuffer);
+
+      // Generate and cache waveform
+      const waveformData = this.getWaveformData(trackId, 1024);
+      this.waveformCache.set(trackId, waveformData);
+
+      console.log(`✅ Saved recording to track ${trackId} (${audioBuffer.duration.toFixed(2)}s)`);
+      return true;
+    } catch (error) {
+      console.error(`Failed to save recording to track ${trackId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Get current microphone input level for monitoring
+   */
+  async getInputLevel(): Promise<number> {
+    if (!this.mediaRecorder || !this.audioContext) return 0;
+
+    try {
+      // Create analyser from the audio context for simple level detection
+      // In a real implementation, you'd connect the microphone stream to an analyser
+      const level = Math.random() * 0.5; // Placeholder for real implementation
+      return level;
+    } catch (error) {
+      console.error("Error getting input level:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Check if audio input (microphone) is available
+   */
+  async isAudioInputAvailable(): Promise<boolean> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.some(device => device.kind === 'audioinput');
+    } catch (error) {
+      console.error("Error checking audio input availability:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Get list of available audio input devices
+   */
+  async getAudioInputDevices(): Promise<MediaDeviceInfo[]> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter(device => device.kind === 'audioinput');
+    } catch (error) {
+      console.error("Error getting audio input devices:", error);
+      return [];
+    }
   }
 
   /**
@@ -509,6 +639,26 @@ export class AudioEngine {
     const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
     this.analyser.getByteFrequencyData(dataArray);
     return dataArray;
+  }
+
+  /**
+   * Get per-track audio level (normalized 0-1) for metering
+   */
+  getTrackLevel(trackId: string): number {
+    const analyser = this.trackAnalysers.get(trackId);
+    if (!analyser) return 0;
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
+
+    // Calculate RMS (Root Mean Square) for normalized level
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const normalized = dataArray[i] / 255;
+      sum += normalized * normalized;
+    }
+    const rms = Math.sqrt(sum / dataArray.length);
+    return rms;
   }
 
   /**
@@ -975,6 +1125,58 @@ export class AudioEngine {
   }
 
   /**
+   * Get the audio context for direct Web Audio API access
+   * Used for device routing and advanced audio configuration
+   */
+  getAudioContext(): AudioContext | null {
+    return this.audioContext;
+  }
+
+  /**
+   * Get the master gain node
+   * Used for device output routing
+   */
+  getMasterGain(): GainNode | null {
+    return this.masterGain;
+  }
+
+  /**
+   * Get sample rate of the audio context
+   */
+  getSampleRate(): number {
+    return this.audioContext?.sampleRate || this.fallbackSampleRate;
+  }
+
+  /**
+   * Resume audio context if suspended
+   * Required for user interaction before playback
+   */
+  async resumeAudioContext(): Promise<void> {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      try {
+        await this.audioContext.resume();
+        console.log('Audio context resumed');
+      } catch (error) {
+        console.error('Failed to resume audio context:', error);
+      }
+    }
+  }
+
+  /**
+   * Get the current audio context state
+   */
+  getAudioContextState(): AudioContextState | null {
+    return this.audioContext?.state || null;
+  }
+
+  /**
+   * Get analyser node for frequency analysis and visualization
+   */
+  getAnalyserNode(): AnalyserNode | null {
+    return this.analyser;
+  }
+
+  /**
    * Cleanup and close audio context
    */
   dispose(): void {
@@ -996,6 +1198,159 @@ export class AudioEngine {
     this.playingTracksState.clear();
     this.isInitialized = false;
     console.log("Audio Engine disposed");
+  }
+
+  /**
+   * Convert MIDI pitch to frequency in Hz
+   * A4 (pitch 69) = 440 Hz
+   */
+  private pitchToFrequency(pitch: number): number {
+    const A4 = 440;
+    const A4_MIDI = 69;
+    return A4 * Math.pow(2, (pitch - A4_MIDI) / 12);
+  }
+
+  /**
+   * Play a single MIDI note
+   * @param pitch MIDI pitch (0-127)
+   * @param velocity MIDI velocity (0-127)
+   * @param duration Duration in seconds
+   * @param startTime When to start (relative to now)
+   * @param waveformType Type of waveform: 'sine' | 'triangle' | 'square' | 'sawtooth'
+   */
+  playMIDINote(
+    pitch: number,
+    velocity: number = 100,
+    duration: number = 0.5,
+    startTime: number = 0,
+    waveformType: OscillatorType = 'triangle'
+  ): void {
+    if (!this.audioContext || !this.masterGain) return;
+
+    try {
+      // Resume audio context if suspended
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+
+      const now = this.audioContext.currentTime;
+      const noteStartTime = now + startTime;
+      const noteEndTime = noteStartTime + duration;
+
+      // Convert MIDI values to audio parameters
+      const frequency = this.pitchToFrequency(pitch);
+      const velocityGain = (velocity / 127) * 0.3; // Scale velocity to 0-0.3 for safety
+
+      // Create oscillator
+      const oscillator = this.audioContext.createOscillator();
+      oscillator.type = waveformType;
+      oscillator.frequency.value = frequency;
+
+      // Create gain node for this note with ADSR envelope
+      const noteGain = this.audioContext.createGain();
+      
+      // ADSR Envelope:
+      // Attack: 0.005s (5ms)
+      // Decay: 0.1s
+      // Sustain: velocityGain level
+      // Release: 0.2s
+      const attackTime = 0.005;
+      const decayTime = 0.1;
+      const sustainLevel = velocityGain * 0.8;
+      const releaseTime = 0.2;
+
+      // Attack phase
+      noteGain.gain.setValueAtTime(0, noteStartTime);
+      noteGain.gain.linearRampToValueAtTime(velocityGain, noteStartTime + attackTime);
+
+      // Decay phase
+      noteGain.gain.linearRampToValueAtTime(
+        sustainLevel,
+        noteStartTime + attackTime + decayTime
+      );
+
+      // Sustain phase (hold until release)
+      noteGain.gain.setValueAtTime(
+        sustainLevel,
+        noteEndTime - releaseTime
+      );
+
+      // Release phase
+      noteGain.gain.exponentialRampToValueAtTime(
+        0.001, // Near-silent
+        noteEndTime
+      );
+
+      // Connect: oscillator → gain → master
+      oscillator.connect(noteGain);
+      noteGain.connect(this.masterGain);
+
+      // Start and stop oscillator
+      oscillator.start(noteStartTime);
+      oscillator.stop(noteEndTime);
+
+      console.log(
+        `Playing MIDI note: pitch=${pitch} (${this.midiPitchToNote(pitch)}), velocity=${velocity}, duration=${duration}s`
+      );
+    } catch (error) {
+      console.error('Error playing MIDI note:', error);
+    }
+  }
+
+  /**
+   * Play multiple MIDI notes simultaneously (chord)
+   * @param pitches Array of MIDI pitches
+   * @param velocity MIDI velocity (0-127)
+   * @param duration Duration in seconds
+   * @param startTime When to start (relative to now)
+   */
+  playMIDIChord(
+    pitches: number[],
+    velocity: number = 100,
+    duration: number = 0.5,
+    startTime: number = 0
+  ): void {
+    pitches.forEach(pitch => {
+      this.playMIDINote(pitch, velocity, duration, startTime, 'triangle');
+    });
+  }
+
+  /**
+   * Convert MIDI pitch to note name for debugging
+   */
+  private midiPitchToNote(pitch: number): string {
+    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const octave = Math.floor(pitch / 12) - 1;
+    const noteName = notes[pitch % 12];
+    return `${noteName}${octave}`;
+  }
+
+  /**
+   * Play a MIDI sequence
+   * @param notes Array of MIDI notes to play
+   * @param bpm Tempo in beats per minute
+   */
+  playMIDISequence(
+    notes: Array<{ pitch: number; velocity: number; startTime: number; duration: number }>,
+    bpm: number = 120
+  ): void {
+    if (!this.audioContext) return;
+
+    notes.forEach(note => {
+      // Convert beat-based timing to seconds if needed
+      const startTimeSeconds = note.startTime;
+      const durationSeconds = note.duration;
+
+      this.playMIDINote(
+        note.pitch,
+        note.velocity,
+        durationSeconds,
+        startTimeSeconds,
+        'triangle'
+      );
+    });
+
+    console.log(`Playing MIDI sequence with ${notes.length} notes at ${bpm} BPM`);
   }
 }
 

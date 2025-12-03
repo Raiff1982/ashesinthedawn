@@ -60,6 +60,11 @@ interface DAWContextType {
   isAudioIOActive: boolean;
   audioIOError: string | null;
   selectedInputDevice: { label: string } | null;
+  selectedInputDeviceId: string | null;
+  selectedOutputDeviceId: string | null;
+  selectInputDevice: (deviceId: string) => Promise<void>;
+  selectOutputDevice: (deviceId: string) => Promise<void>;
+  getAudioContextStatus: () => AudioContextState | string;
   setCurrentProject: (project: Project | null) => void;
   addTrack: (type: Track["type"]) => void;
   selectTrack: (trackId: string) => void;
@@ -197,6 +202,27 @@ interface DAWContextType {
   selectedTracks: Set<string>;
   // Utility
   cpuUsageDetailed: Record<string, number>;
+
+  // Recording state (NEW)
+  recordingTrackId: null | string;
+  recordingStartTime: number;
+  recordingTakeCount: number;
+  recordingMode: 'audio' | 'midi' | 'overdub';
+  punchInEnabled: boolean;
+  punchInTime: number;
+  punchOutTime: number;
+  recordingBlob: Blob | null;
+  recordingError: string | null;
+  
+  // Recording methods (NEW)
+  startRecording: (trackId: string) => Promise<boolean>;
+  stopRecording: () => Promise<Blob | null>;
+  pauseRecording: () => boolean;
+  resumeRecording: () => boolean;
+  setRecordingMode: (mode: 'audio' | 'midi' | 'overdub') => void;
+  setPunchInOut: (punchIn: number, punchOut: number) => void;
+  togglePunchIn: () => void;
+  undoLastRecording: () => void;
 }
 
 const DAWContext = createContext<DAWContextType | undefined>(undefined);
@@ -224,6 +250,17 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   const [codetteSuggestions, setCodetteSuggestions] = useState<
     CodetteSuggestion[]
   >([]);
+  
+  // Recording state
+  const [recordingTrackId, setRecordingTrackId] = useState<string | null>(null);
+  const [recordingStartTime, setRecordingStartTime] = useState(0);
+  const [recordingTakeCount, setRecordingTakeCount] = useState(0);
+  const [recordingMode, setRecordingModeState] = useState<'audio' | 'midi' | 'overdub'>('audio');
+  const [punchInEnabled, setPunchInEnabled] = useState(false);
+  const [punchInTime, setPunchInTime] = useState(0);
+  const [punchOutTime, setPunchOutTime] = useState(30);
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
   
   // Initialize CodetteBridge with error handling using useMemo
   const codetteRef = useRef<any>(null);
@@ -276,14 +313,21 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   // MIDI State
   const [midiDevices] = useState<MidiDevice[]>([]);
   const [midiRoutes, setMidiRoutes] = useState<MidiRoute[]>([]);
-  // Audio I/O State (placeholder for future real-time audio I/O features)
+  
+  // Audio I/O State - Real device management
+  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState<string | null>(null);
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string | null>(null);
+  const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
+  const [audioContextState, setAudioContextState] = useState<AudioContextState>('running');
+  
+  // Audio I/O State (legacy - for interface compatibility)
   const inputLevel = 0;
   const latencyMs = 5;
   const bufferUnderruns = 0;
   const bufferOverruns = 0;
-  const isAudioIOActive = false;
-  const audioIOError: string | null = null;
-  const selectedInputDevice: { label: string } | null = null;
+  const isAudioIOActive = audioContextState === 'running';
+  const audioIOError = audioDeviceError;
+  const selectedInputDevice = selectedInputDeviceId ? { label: selectedInputDeviceId } : null;
   // CPU usage detailed
   const [cpuUsageDetailedState] = useState<Record<string, number>>({
     audio: 2,
@@ -817,11 +861,13 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
       ...plugin,
       id: `${plugin.id || "plugin"}-${uniqueId}-${index}`,
       parameters: { ...plugin.parameters },
-    }));
+    }
+    ));
     const cloneSends = sourceTrack.sends.map((send, index) => ({
       ...send,
       id: `${send.id || "send"}-${uniqueId}-${index}`,
-    }));
+    }
+    ));
 
     const clonedTrack: Track = {
       ...sourceTrack,
@@ -1517,6 +1563,58 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   const closeExportModal = () => setShowExportModal(false);
   const openAudioSettingsModal = () => setShowAudioSettingsModal(true);
   const closeAudioSettingsModal = () => setShowAudioSettingsModal(false);
+
+  /**
+   * Set the selected input device and apply it to the audio engine
+   */
+  const selectInputDevice = async (deviceId: string) => {
+    try {
+      setSelectedInputDeviceId(deviceId);
+      console.log(`[DAWContext] Selected input device: ${deviceId}`);
+      // Device selection is handled by the AudioDeviceManager
+      // The actual audio routing will happen when recording
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      setAudioDeviceError(`Failed to select input device: ${message}`);
+      console.error('[DAWContext] Input device selection error:', error);
+    }
+  };
+
+  /**
+   * Set the selected output device and apply it to the audio engine
+   */
+  const selectOutputDevice = async (deviceId: string) => {
+    try {
+      setSelectedOutputDeviceId(deviceId);
+      
+      // Resume audio context if needed for device switching
+      const audioContext = audioEngineRef.current.getAudioContext();
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioEngineRef.current.resumeAudioContext();
+      }
+      
+      console.log(`[DAWContext] Selected output device: ${deviceId}`);
+      setAudioDeviceError(null);
+      
+      // Update audio context state
+      if (audioContext) {
+        setAudioContextState(audioContext.state);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      setAudioDeviceError(`Failed to select output device: ${message}`);
+      console.error('[DAWContext] Output device selection error:', error);
+    }
+  };
+
+  /**
+   * Get current audio context state for status display
+   */
+  const getAudioContextStatus = () => {
+    const audioContext = audioEngineRef.current.getAudioContext();
+    return audioContext?.state || 'unknown';
+  };
+
   const openAboutModal = () => setShowAboutModal(true);
   const closeAboutModal = () => setShowAboutModal(false);
   const openSaveAsModal = () => setShowSaveAsModal(true);
@@ -1968,6 +2066,12 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         isAudioIOActive,
         audioIOError,
         selectedInputDevice,
+        // Audio Device Selection
+        selectInputDevice,
+        selectOutputDevice,
+        getAudioContextStatus,
+        selectedInputDeviceId,
+        selectedOutputDeviceId,
         // CPU Usage
         cpuUsageDetailed: cpuUsageDetailedState,
         // Codette AI Integration (Phase 1)
@@ -1993,6 +2097,108 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         selectAllTracks,
         deselectAllTracks,
         selectedTracks,
+        // Recording state
+        recordingTrackId: recordingTrackId,
+        recordingStartTime: recordingStartTime,
+        recordingTakeCount: recordingTakeCount,
+        recordingMode: recordingMode,
+        punchInEnabled: punchInEnabled,
+        punchInTime: punchInTime,
+        punchOutTime: punchOutTime,
+        recordingBlob: recordingBlob,
+        recordingError: recordingError,
+        // Recording methods
+        startRecording: async (trackId: string) => {
+          if (isRecording) return false;
+          try {
+            setIsRecording(true);
+            setRecordingTrackId(trackId);
+            setRecordingStartTime(0);
+            setRecordingTakeCount((prev: number) => prev + 1);
+            
+            // Reset track state for recording
+            updateTrack(trackId, {
+              armed: true,
+              inputGain: 0,
+              volume: -6,
+            });
+
+            // Start audio engine recording
+            const success = await audioEngineRef.current.startRecording();
+            return success;
+          } catch (error) {
+            console.error("Recording start error:", error);
+            setIsRecording(false);
+            setRecordingError("Failed to start recording");
+            return false;
+          }
+        },
+        stopRecording: async () => {
+          if (!isRecording) {
+            return null;
+          }
+          
+          try {
+            const blob = await audioEngineRef.current.stopRecording();
+            setIsRecording(false);
+            setRecordingTrackId(null);
+            setRecordingBlob(blob);
+            
+            if (blob) {
+              // Create a new audio track from the recording
+              const recordedFile = new File(
+                [blob],
+                `Recording-${Date.now()}.webm`,
+                { type: "audio/webm" }
+              );
+              await uploadAudioFile(recordedFile);
+              return blob;
+            } else {
+              return null;
+            }
+          } catch (error) {
+            console.error("Recording stop error:", error);
+            setIsRecording(false);
+            setRecordingError("Failed to stop recording");
+            return null;
+          }
+        },
+        pauseRecording: () => {
+          if (!isRecording) return false;
+          try {
+            audioEngineRef.current.pauseRecording();
+            setIsRecording(false);
+            return true;
+          } catch (error) {
+            console.error("Recording pause error:", error);
+            return false;
+          }
+        },
+        resumeRecording: () => {
+          if (isRecording) return false;
+          try {
+            audioEngineRef.current.resumeRecording();
+            setIsRecording(true);
+            return true;
+          } catch (error) {
+            console.error("Recording resume error:", error);
+            return false;
+          }
+        },
+        setRecordingMode: (mode: 'audio' | 'midi' | 'overdub') => {
+          setRecordingModeState(mode);
+        },
+        setPunchInOut: (punchIn: number, punchOut: number) => {
+          setPunchInTime(punchIn);
+          setPunchOutTime(punchOut);
+        },
+        togglePunchIn: () => {
+          setPunchInEnabled((prev: boolean) => !prev);
+        },
+        undoLastRecording: () => {
+          console.log("Undo last recording action");
+          setRecordingTakeCount((prev: number) => Math.max(0, prev - 1));
+        },
       };
 
   // Initialize action system with DAW context

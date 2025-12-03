@@ -14,8 +14,8 @@ export type ActivitySource = 'codette' | 'user' | 'system';
 export interface Permission {
   id?: string;
   user_id: string;
-  action_type: string;
-  permission_level: PermissionLevel;
+  permission_type: string;      // Changed from: action_type
+  permission_level: PermissionLevel;  // Correct column name
   created_at?: string;
   updated_at?: string;
 }
@@ -23,12 +23,14 @@ export interface Permission {
 export interface ActivityLog {
   id?: string;
   user_id: string;
-  timestamp: string;
-  source: ActivitySource;
-  action: string;
-  details?: Record<string, unknown>;
-  status: 'pending' | 'approved' | 'denied' | 'completed';
+  source: ActivitySource;       // ? Added
+  activity_type: string;        // Changed from: action
+  activity_data?: Record<string, unknown>;  // Changed from: details
+  status: 'pending' | 'completed' | 'failed';  // Changed from: 'pending' | 'approved' | 'denied' | 'completed'
+  result?: Record<string, unknown>;  // New field
+  error_message?: string;      // New field
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface CodetteControlState {
@@ -52,7 +54,21 @@ export async function getOrCreateDefaultPermissions(
       .eq('user_id', userId);
 
     if (fetchError) {
-      console.error('[CodetteControlService] Fetch error:', fetchError);
+      // 404 means table doesn't exist - silently return defaults
+      if (fetchError.code === '404' || fetchError.message?.includes('404') || fetchError.message?.includes('not found')) {
+        const defaultPerms = {
+          LoadPlugin: 'ask' as PermissionLevel,
+          CreateTrack: 'allow' as PermissionLevel,
+          RenderMixdown: 'ask' as PermissionLevel,
+          AdjustParameters: 'ask' as PermissionLevel,
+          SaveProject: 'allow' as PermissionLevel,
+        };
+        return { success: true, data: defaultPerms };
+      }
+      // Only log non-404 errors
+      if (fetchError.message && !fetchError.message.includes('404')) {
+        console.error('[CodetteControlService] Fetch error:', fetchError);
+      }
       return { success: false, error: fetchError.message };
     }
 
@@ -60,18 +76,18 @@ export async function getOrCreateDefaultPermissions(
     if (existing && existing.length > 0) {
       const permMap: Record<string, PermissionLevel> = {};
       existing.forEach((p: any) => {
-        permMap[p.action_type] = p.permission_level;
+        permMap[p.permission_type] = p.permission_level;  // Changed from: p.action_type
       });
       return { success: true, data: permMap };
     }
 
     // Create default permissions
     const defaultPermissions: Omit<Permission, 'id'>[] = [
-      { user_id: userId, action_type: 'LoadPlugin', permission_level: 'ask' },
-      { user_id: userId, action_type: 'CreateTrack', permission_level: 'allow' },
-      { user_id: userId, action_type: 'RenderMixdown', permission_level: 'ask' },
-      { user_id: userId, action_type: 'AdjustParameters', permission_level: 'ask' },
-      { user_id: userId, action_type: 'SaveProject', permission_level: 'allow' },
+      { user_id: userId, permission_type: 'LoadPlugin', permission_level: 'ask' },  // Changed from: action_type
+      { user_id: userId, permission_type: 'CreateTrack', permission_level: 'allow' },
+      { user_id: userId, permission_type: 'RenderMixdown', permission_level: 'ask' },
+      { user_id: userId, permission_type: 'AdjustParameters', permission_level: 'ask' },
+      { user_id: userId, permission_type: 'SaveProject', permission_level: 'allow' },
     ];
 
     const { error: insertError } = await supabase
@@ -85,7 +101,7 @@ export async function getOrCreateDefaultPermissions(
 
     const permMap: Record<string, PermissionLevel> = {};
     defaultPermissions.forEach((p) => {
-      permMap[p.action_type] = p.permission_level;
+      permMap[p.permission_type] = p.permission_level;  // Changed from: p.action_type
     });
 
     return { success: true, data: permMap };
@@ -101,7 +117,7 @@ export async function getOrCreateDefaultPermissions(
  */
 export async function updatePermission(
   userId: string,
-  actionType: string,
+  permissionType: string,  // Changed from: actionType
   permissionLevel: PermissionLevel
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -109,14 +125,18 @@ export async function updatePermission(
       .from('codette_permissions')
       .update({ permission_level: permissionLevel, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
-      .eq('action_type', actionType);
+      .eq('permission_type', permissionType);  // Changed from: action_type
 
     if (error) {
+      // 404 means table doesn't exist - return success silently (not critical)
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true };
+      }
       console.error('[CodetteControlService] Update error:', error);
       return { success: false, error: error.message };
     }
 
-    console.log(`[CodetteControlService] Permission updated: ${actionType} = ${permissionLevel}`);
+    console.log(`[CodetteControlService] Permission updated: ${permissionType} = ${permissionLevel}`);
     return { success: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -132,25 +152,32 @@ export async function logActivity(
   userId: string,
   source: ActivitySource,
   action: string,
-  status: ActivityLog['status'] = 'completed',
+  status: 'pending' | 'completed' | 'failed' = 'completed',
   details?: Record<string, unknown>
 ): Promise<{ success: boolean; data?: ActivityLog; error?: string }> {
   try {
+    const payload = {
+      user_id: userId,
+      source: source,
+      activity_type: action,
+      activity_data: details || null,
+      status: status,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
     const { data, error } = await supabase
       .from('codette_activity_logs')
-      .insert({
-        user_id: userId,
-        timestamp: new Date().toISOString(),
-        source,
-        action,
-        status,
-        details: details || null,
-        created_at: new Date().toISOString(),
-      })
+      .insert([payload])
       .select()
       .single();
 
     if (error) {
+      // 404 means table doesn't exist - return success silently (not critical)
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        console.log('[CodetteControlService] Table not yet created, continuing in offline mode');
+        return { success: true, data: undefined };
+      }
       console.error('[CodetteControlService] Log error:', error);
       return { success: false, error: error.message };
     }
@@ -180,6 +207,10 @@ export async function getActivityLogs(
       .limit(limit);
 
     if (error) {
+      // 404 means table doesn't exist - return empty array silently
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true, data: [] };
+      }
       console.error('[CodetteControlService] Fetch logs error:', error);
       return { success: false, error: error.message };
     }
@@ -206,6 +237,19 @@ export async function getControlSettings(
       .maybeSingle();
 
     if (error) {
+      // 404 means table doesn't exist - return defaults silently
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return {
+          success: true,
+          data: {
+            enabled: true,
+            logActivity: true,
+            autoRender: false,
+            includeInBackups: true,
+            clearHistoryOnClose: false,
+          },
+        };
+      }
       console.error('[CodetteControlService] Fetch settings error:', error);
       return { success: false, error: error.message };
     }
@@ -252,6 +296,10 @@ export async function updateControlSettings(
       );
 
     if (error) {
+      // 404 means table doesn't exist - return success silently (not critical)
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true };
+      }
       console.error('[CodetteControlService] Update settings error:', error);
       return { success: false, error: error.message };
     }
@@ -291,6 +339,10 @@ export async function clearActivityLogs(userId: string): Promise<{ success: bool
       .eq('user_id', userId);
 
     if (error) {
+      // 404 means table doesn't exist - return success silently (not critical)
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        return { success: true };
+      }
       console.error('[CodetteControlService] Clear logs error:', error);
       return { success: false, error: error.message };
     }

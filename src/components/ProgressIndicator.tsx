@@ -1,0 +1,38 @@
+/**
+ * ENHANCEMENT #5: Progress Indicators for File Uploads
+ */
+
+import { Loader } from 'lucide-react';
+
+interface ProgressIndicatorProps {
+  progress: number;
+  estimatedTime?: number;
+  fileName?: string;
+}
+
+export function ProgressIndicator({ progress, estimatedTime, fileName }: ProgressIndicatorProps) {
+  const formatTime = (seconds: number) => {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    return `${Math.round(seconds / 60)}m`;
+  };
+
+  return (
+    <div className="space-y-2">
+      {fileName && <div className="text-xs text-gray-300">{fileName}</div>}
+      
+      <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+        <div
+          className="bg-gradient-to-r from-blue-500 to-blue-600 h-full transition-all duration-300 flex items-center justify-end pr-1"
+          style={{ width: `${progress}%` }}
+        >
+          {progress > 0 && progress < 100 && <Loader className="w-1 h-1 animate-spin text-white" />}
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center text-xs text-gray-400">
+        <span>{Math.round(progress)}%</span>
+        {estimatedTime && <span>{formatTime(estimatedTime)} remaining</span>}
+      </div>
+    </div>
+  );
+}

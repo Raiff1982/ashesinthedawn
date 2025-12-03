@@ -138,6 +138,8 @@ CREATE POLICY IF NOT EXISTS "Users can insert their own control settings"
 -- 4. CHAT HISTORY TABLE
 -- ============================================================================
 -- Stores chat conversation history
+-- NOTE: The frontend service (chatHistoryService.ts) uses a load-then-update pattern
+-- instead of upsert to maintain compatibility with both Supabase and local fallback.
 CREATE TABLE IF NOT EXISTS public.chat_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL UNIQUE,
@@ -151,6 +153,11 @@ CREATE INDEX IF NOT EXISTS idx_chat_history_user_id
   ON public.chat_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_history_updated_at 
   ON public.chat_history(updated_at DESC);
+
+-- Unique constraint documentation:
+-- The UNIQUE(user_id) constraint ensures one chat session per user
+-- Frontend service uses: SELECT ? UPDATE OR INSERT pattern (no upsert)
+-- This ensures compatibility with both real Supabase and local storage fallback
 
 -- Enable RLS
 ALTER TABLE public.chat_history ENABLE ROW LEVEL SECURITY;

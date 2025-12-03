@@ -1,11 +1,16 @@
 import { useDAW } from '../contexts/DAWContext';
-import { Sliders, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Sliders, ChevronDown, ChevronUp, Sparkles, Settings } from 'lucide-react';
 import { useState, useRef, useEffect, memo } from 'react';
 import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
 import MixerOptionsTile from './MixerOptionsTile';
 import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
 import { KeyboardMusic, Volume2, Music2, Zap } from 'lucide-react';
+import { EnhancedMixerPanel } from './EnhancedMixerPanel';
+import InputMonitor from './InputMonitor';
+import { RecordingControls } from './RecordingControls';
+import { RecordingStatus } from './RecordingStatus';
+import { PunchInOutPanel } from './PunchInOutPanel';
 
 interface DetachedTileState {
   trackId: string;
@@ -41,6 +46,11 @@ const MixerComponent = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showPluginRack, setShowPluginRack] = useState(false); // Show/hide plugin rack panel
+  const [showAdvancedMixer, setShowAdvancedMixer] = useState(false); // Show/hide advanced mixer panel
+
+  // Recording UI state
+  const [showRecordingPanel, setShowRecordingPanel] = useState(false);
+  const [showPunchPanel, setShowPunchPanel] = useState(false);
 
   // MIDI Quick Actions Handler
   const triggerMIDIAction = (actionId: string) => {
@@ -270,6 +280,16 @@ const MixerComponent = () => {
             )}
             
             <button
+              onClick={() => setShowAdvancedMixer(!showAdvancedMixer)}
+              className={`p-0.5 hover:bg-gray-700 rounded transition-colors flex-shrink-0 ${
+                showAdvancedMixer ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+              title="Show advanced mixer controls (Stereo, Automation, Sends, Metering)"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            <button
               onClick={() => setIsMinimized(!isMinimized)}
               className="p-0.5 hover:bg-gray-700 rounded transition-colors flex-shrink-0"
               title={isMinimized ? "Expand mixer" : "Minimize mixer"}
@@ -439,6 +459,7 @@ const MixerComponent = () => {
                         onUpdate={updateTrack}
                         onAddPlugin={addPluginToTrack}
                         onRemovePlugin={removePluginFromTrack}
+                        togglePluginEnabled={togglePluginEnabled}
                         levels={levels}
                         stripWidth={scaledStripWidth}
                         stripHeight={stripHeight}
@@ -447,7 +468,8 @@ const MixerComponent = () => {
                         onTogglePluginRack={() => setShowPluginRack(!showPluginRack)}
                       />
                     ))
-                )}
+                )
+                }
               </div>
             </div>
 
@@ -467,15 +489,69 @@ const MixerComponent = () => {
               </div>
             )}
 
-            {/* Codette AI via Master Panel - Use TopBar Codette button */}
-            <div className="flex-1 border-t border-gray-700 bg-gray-800 flex flex-col items-center justify-center text-center p-4">
-              <Sparkles className="w-8 h-8 text-purple-400 mb-2" />
-              <p className="text-sm text-gray-300 mb-2">Codette AI Features</p>
-              <p className="text-xs text-gray-500 mb-4">Use the <span className="text-purple-400 font-semibold">Codette</span> button in the top bar to access AI suggestions, analysis, and controls.</p>
-              <div className="text-xs text-gray-600 bg-gray-700 rounded px-3 py-2 max-w-xs">
-                💡 Tip: Select a track and click the Codette button to get track-specific suggestions
+            {/* Recording Panel */}
+            {selectedTrack && (
+              <div className="border-t border-gray-700 bg-gray-800 flex-shrink-0">
+                <div className="grid grid-cols-3 gap-4 p-4">
+                  {/* Input Monitor - Left Column */}
+                  <div className="col-span-1">
+                    <InputMonitor 
+                      trackId={selectedTrack.id}
+                      showLabel={true}
+                      compact={false}
+                      height="h-32"
+                    />
+                  </div>
+
+                  {/* Recording Status - Middle Column */}
+                  <div className="col-span-1 flex items-center justify-center">
+                    <RecordingStatus
+                      isRecording={false}
+                      recordingTime={0}
+                      recordingTakeCount={0}
+                      punchEnabled={false}
+                    />
+                  </div>
+
+                  {/* Recording Controls - Right Column */}
+                  <div className="col-span-1">
+                    <RecordingControls
+                      selectedTrack={selectedTrack}
+                      isRecording={false}
+                      isArmed={selectedTrack.armed || false}
+                      recordingTime={0}
+                      onArm={(armed) => updateTrack(selectedTrack.id, { armed })}
+                      onRecord={() => console.log('Record pressed')}
+                      onStop={() => console.log('Stop pressed')}
+                      recordingMode="audio"
+                      onModeChange={(mode) => console.log('Mode changed:', mode)}
+                    />
+                  </div>
+                </div>
+
+                {/* Punch In/Out Panel - Collapsible */}
+                <div className="border-t border-gray-700">
+                  <button
+                    onClick={() => setShowPunchPanel(!showPunchPanel)}
+                    className="w-full px-4 py-2 text-xs font-medium text-gray-300 hover:text-gray-100 hover:bg-gray-700 transition flex items-center justify-between"
+                  >
+                    <span>⏱️ Punch In/Out Settings</span>
+                    <span>{showPunchPanel ? '▼' : '▶'}</span>
+                  </button>
+                  {showPunchPanel && (
+                    <PunchInOutPanel
+                      punchInTime={0}
+                      punchOutTime={30}
+                      onPunchInChange={(time) => console.log('Punch in:', time)}
+                      onPunchOutChange={(time) => console.log('Punch out:', time)}
+                      enabled={false}
+                      onEnabledChange={(enabled) => console.log('Punch enabled:', enabled)}
+                      maxTime={600}
+                    />
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
