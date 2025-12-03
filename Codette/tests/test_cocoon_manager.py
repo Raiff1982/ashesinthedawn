@@ -3,6 +3,14 @@ import os
 import json
 import shutil
 from datetime import datetime
+import sys
+from pathlib import Path
+
+# Add Codette/src to path for imports
+codette_src = Path(__file__).parent.parent / "src"
+if str(codette_src) not in sys.path:
+    sys.path.insert(0, str(codette_src))
+
 from utils.cocoon_manager import CocoonManager
 
 class TestCocoonManager(unittest.TestCase):

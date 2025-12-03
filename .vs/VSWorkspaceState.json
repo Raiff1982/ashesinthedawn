@@ -2,7 +2,13 @@
   "ActiveTargetSystem": "WSL: Ubuntu",
   "DevContainersInfoBarHidden": true,
   "ExpandedNodes": [
-    ""
+    "",
+    "\\ashesinthedawn-main",
+    "\\ashesinthedawn-main\\Codette",
+    "\\ashesinthedawn-main\\Codette\\tests",
+    "\\Codette",
+    "\\Codette\\tests"
   ],
+  "SelectedNode": "\\Codette\\tests\\test_cocoon_manager.py",
   "PreviewInSolutionExplorer": false
 }
