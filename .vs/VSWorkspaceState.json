@@ -2,7 +2,9 @@
   "ActiveTargetSystem": "WSL: Ubuntu",
   "DevContainersInfoBarHidden": true,
   "ExpandedNodes": [
-    ""
+    "",
+    "\\src",
+    "\\src\\components"
   ],
   "PreviewInSolutionExplorer": false
 }

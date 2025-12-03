@@ -38,6 +38,15 @@ let midiState: MIDIState = {
   clipboard: [],
 };
 
+// MIDI Note name mapping for display
+const MIDI_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+function getMidiNoteName(pitch: number): string {
+  const octave = Math.floor(pitch / 12) - 1;
+  const noteIdx = pitch % 12;
+  return `${MIDI_NOTE_NAMES[noteIdx]}${octave}`;
+}
+
 export function registerMIDIActions() {
   // 44100: Insert Note
   actionRegistry.register(
@@ -57,6 +66,7 @@ export function registerMIDIActions() {
       // Validate MIDI values
       const validatedPitch = Math.max(0, Math.min(127, pitch));
       const validatedVelocity = Math.max(0, Math.min(127, velocity));
+      const noteName = getMidiNoteName(validatedPitch);
 
       const newNote: MIDINote = {
         pitch: validatedPitch,
@@ -68,8 +78,8 @@ export function registerMIDIActions() {
       midiState.selectedNotes.push(newNote);
 
       console.log(
-        `✅ Inserted MIDI note: pitch=${validatedPitch}, velocity=${validatedVelocity}, duration=${length}`,
-        newNote
+        `✅ Inserted MIDI note: ${noteName} (pitch=${validatedPitch}, vel=${validatedVelocity}, dur=${length}s)`,
+        { pitch: validatedPitch, velocity: validatedVelocity, noteName, duration: length, totalNotes: midiState.selectedNotes.length }
       );
     }
   );
@@ -86,9 +96,13 @@ export function registerMIDIActions() {
     },
     async () => {
       const deletedCount = midiState.selectedNotes.length;
+      const deletedNotes = midiState.selectedNotes.map(n => getMidiNoteName(n.pitch));
       midiState.selectedNotes = [];
 
-      console.log(`✅ Deleted ${deletedCount} MIDI note(s)`);
+      console.log(
+        `✅ Deleted ${deletedCount} MIDI note(s): ${deletedNotes.join(', ')}`,
+        { count: deletedCount, notes: deletedNotes }
+      );
     }
   );
 
@@ -114,8 +128,10 @@ export function registerMIDIActions() {
 
       midiState.selectedNotes = quantizedNotes;
 
+      const noteNames = quantizedNotes.map(n => getMidiNoteName(n.pitch));
       console.log(
-        `✅ Quantized ${quantizedNotes.length} MIDI notes: gridSize=${gridSize}, strength=${strength}%`
+        `✅ Quantized ${quantizedNotes.length} note(s) to grid: gridSize=${gridSize}, strength=${strength}% | Notes: ${noteNames.join(', ')}`,
+        { count: quantizedNotes.length, gridSize, strength, notes: noteNames }
       );
     }
   );
@@ -298,8 +314,10 @@ export function registerMIDIActions() {
 
       midiState.selectedNotes = humanizedNotes;
 
+      const noteNames = humanizedNotes.map(n => getMidiNoteName(n.pitch));
       console.log(
-        `✅ Humanized: timing±${timingAmount}ms, velocity±${velocityAmount}% - ${humanizedNotes.length} note(s)`
+        `✅ Humanized ${humanizedNotes.length} note(s): timing±${timingAmount}ms, velocity±${velocityAmount}% | Notes: ${noteNames.join(', ')}`,
+        { count: humanizedNotes.length, timingAmount, velocityAmount, notes: noteNames }
       );
     }
   );

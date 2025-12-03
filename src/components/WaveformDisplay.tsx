@@ -207,18 +207,26 @@ export default function WaveformDisplay({
     seek(ratio * duration);
   };
 
-  // Handle wheel zoom
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom((prev) => Math.max(0.5, Math.min(5, prev * delta)));
-  };
+  // Handle wheel zoom with native event listener to allow preventDefault
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !interactive) return;
+
+    const handleWheelEvent = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setZoom((prev) => Math.max(0.5, Math.min(5, prev * delta)));
+    };
+
+    // Use passive: false to allow preventDefault
+    container.addEventListener('wheel', handleWheelEvent, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheelEvent);
+  }, [interactive]);
 
   return (
     <div
       ref={containerRef}
-      className="w-full bg-gray-900 rounded border border-gray-700 overflow-hidden"
-      onWheel={handleWheel}
+      className="w-full bg-gray-900 rounded border border-gray-700 overflow-hidden relative"
       style={{ height: `${height + (showPeakMeter ? 30 : 0)}px` }}
     >
       {/* Waveform Canvas */}

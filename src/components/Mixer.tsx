@@ -1,14 +1,16 @@
 import { useDAW } from '../contexts/DAWContext';
-import { Sliders, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sliders, ChevronDown, ChevronUp, Sparkles, Settings } from 'lucide-react';
 import { useState, useRef, useEffect, memo } from 'react';
 import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
 import MixerOptionsTile from './MixerOptionsTile';
 import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
-import { CodetteSuggestionsPanel } from './CodetteSuggestionsPanel';
-import CodetteAnalysisPanel from './CodetteAnalysisPanel';
-import CodetteControlPanel from './CodetteControlPanel';
 import { KeyboardMusic, Volume2, Music2, Zap } from 'lucide-react';
+import { EnhancedMixerPanel } from './EnhancedMixerPanel';
+import InputMonitor from './InputMonitor';
+import { RecordingControls } from './RecordingControls';
+import { RecordingStatus } from './RecordingStatus';
+import { PunchInOutPanel } from './PunchInOutPanel';
 
 interface DetachedTileState {
   trackId: string;
@@ -42,14 +44,13 @@ const MixerComponent = () => {
   const [scaledStripWidth, setScaledStripWidth] = useState(DEFAULT_STRIP_WIDTH);
   const [isHoveringMixer, setIsHoveringMixer] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [codetteTab, setCodetteTab] = useState<'suggestions' | 'analysis' | 'control'>('suggestions');
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showPluginRack, setShowPluginRack] = useState(false); // Show/hide plugin rack panel
+  const [showAdvancedMixer, setShowAdvancedMixer] = useState(false); // Show/hide advanced mixer panel
 
-  // Debug: Log when tabs change
-  useEffect(() => {
-    console.log('[Mixer] Codette tab changed to:', codetteTab);
-  }, [codetteTab]);
+  // Recording UI state
+  const [showRecordingPanel, setShowRecordingPanel] = useState(false);
+  const [showPunchPanel, setShowPunchPanel] = useState(false);
 
   // MIDI Quick Actions Handler
   const triggerMIDIAction = (actionId: string) => {
@@ -279,6 +280,16 @@ const MixerComponent = () => {
             )}
             
             <button
+              onClick={() => setShowAdvancedMixer(!showAdvancedMixer)}
+              className={`p-0.5 hover:bg-gray-700 rounded transition-colors flex-shrink-0 ${
+                showAdvancedMixer ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+              title="Show advanced mixer controls (Stereo, Automation, Sends, Metering)"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            <button
               onClick={() => setIsMinimized(!isMinimized)}
               className="p-0.5 hover:bg-gray-700 rounded transition-colors flex-shrink-0"
               title={isMinimized ? "Expand mixer" : "Minimize mixer"}
@@ -448,6 +459,7 @@ const MixerComponent = () => {
                         onUpdate={updateTrack}
                         onAddPlugin={addPluginToTrack}
                         onRemovePlugin={removePluginFromTrack}
+                        togglePluginEnabled={togglePluginEnabled}
                         levels={levels}
                         stripWidth={scaledStripWidth}
                         stripHeight={stripHeight}
@@ -456,7 +468,8 @@ const MixerComponent = () => {
                         onTogglePluginRack={() => setShowPluginRack(!showPluginRack)}
                       />
                     ))
-                )}
+                )
+                }
               </div>
             </div>
 
@@ -476,85 +489,69 @@ const MixerComponent = () => {
               </div>
             )}
 
-            {/* Codette AI Panels */}
-            <div className="flex-1 border-t border-gray-700 bg-gray-800 flex flex-col min-h-0 overflow-hidden">
-              {/* Tab Headers */}
-              <div className="flex items-center gap-2 p-2 border-b border-gray-700 flex-shrink-0 overflow-x-auto">
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    console.log('[Tab Button] Clicking Suggestions tab');
-                    setCodetteTab('suggestions');
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
-                    codetteTab === 'suggestions'
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  type="button"
-                  title="Suggestions"
-                >
-                  💡 Suggestions
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    console.log('[Tab Button] Clicking Analysis tab');
-                    setCodetteTab('analysis');
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
-                    codetteTab === 'analysis'
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  type="button"
-                  title="Analysis"
-                >
-                  📊 Analysis
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    console.log('[Tab Button] Clicking Control tab');
-                    setCodetteTab('control');
-                  }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 flex-shrink-0 ${
-                    codetteTab === 'control'
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50 animate-control-highlight'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  type="button"
-                  title="Control"
-                >
-                  ⚙️ Control
-                </button>
-              </div>
+            {/* Recording Panel */}
+            {selectedTrack && (
+              <div className="border-t border-gray-700 bg-gray-800 flex-shrink-0">
+                <div className="grid grid-cols-3 gap-4 p-4">
+                  {/* Input Monitor - Left Column */}
+                  <div className="col-span-1">
+                    <InputMonitor 
+                      trackId={selectedTrack.id}
+                      showLabel={true}
+                      compact={false}
+                      height="h-32"
+                    />
+                  </div>
 
-              {/* Tab Content - Dynamic height with scroll */}
-              <div className="flex-1 overflow-auto bg-gray-800 min-h-0">
-                {codetteTab === 'suggestions' && (
-                  <div key="suggestions-tab" className="w-full h-full">
-                    <CodetteSuggestionsPanel
-                      trackId={selectedTrack?.id}
-                      context="mixer"
+                  {/* Recording Status - Middle Column */}
+                  <div className="col-span-1 flex items-center justify-center">
+                    <RecordingStatus
+                      isRecording={false}
+                      recordingTime={0}
+                      recordingTakeCount={0}
+                      punchEnabled={false}
                     />
                   </div>
-                )}
-                {codetteTab === 'analysis' && (
-                  <div key="analysis-tab" className="w-full h-full">
-                    <CodetteAnalysisPanel
-                      trackId={selectedTrack?.id}
-                      autoAnalyze={false}
+
+                  {/* Recording Controls - Right Column */}
+                  <div className="col-span-1">
+                    <RecordingControls
+                      selectedTrack={selectedTrack}
+                      isRecording={false}
+                      isArmed={selectedTrack.armed || false}
+                      recordingTime={0}
+                      onArm={(armed) => updateTrack(selectedTrack.id, { armed })}
+                      onRecord={() => console.log('Record pressed')}
+                      onStop={() => console.log('Stop pressed')}
+                      recordingMode="audio"
+                      onModeChange={(mode) => console.log('Mode changed:', mode)}
                     />
                   </div>
-                )}
-                {codetteTab === 'control' && (
-                  <div key="control-tab" className="w-full h-full">
-                    <CodetteControlPanel />
-                  </div>
-                )}
+                </div>
+
+                {/* Punch In/Out Panel - Collapsible */}
+                <div className="border-t border-gray-700">
+                  <button
+                    onClick={() => setShowPunchPanel(!showPunchPanel)}
+                    className="w-full px-4 py-2 text-xs font-medium text-gray-300 hover:text-gray-100 hover:bg-gray-700 transition flex items-center justify-between"
+                  >
+                    <span>⏱️ Punch In/Out Settings</span>
+                    <span>{showPunchPanel ? '▼' : '▶'}</span>
+                  </button>
+                  {showPunchPanel && (
+                    <PunchInOutPanel
+                      punchInTime={0}
+                      punchOutTime={30}
+                      onPunchInChange={(time) => console.log('Punch in:', time)}
+                      onPunchOutChange={(time) => console.log('Punch out:', time)}
+                      enabled={false}
+                      onEnabledChange={(enabled) => console.log('Punch enabled:', enabled)}
+                      maxTime={600}
+                    />
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

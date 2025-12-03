@@ -11,9 +11,6 @@ import {
   Zap,
   Check,
   AlertCircle,
-  Sparkles,
-  BarChart3,
-  Loader,
   KeyboardMusic,
   HardDrive,
   X,
@@ -22,16 +19,15 @@ import {
   File,
   Volume2,
 } from "lucide-react";
-import { useDAW } from "../contexts/DAWContext";
+import { useDAW } from '../contexts/DAWContext';
 import { useTransportClock } from "../hooks/useTransportClock";
 import { useSaveStatus } from "../hooks/useSaveStatus";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { getCodetteBridge } from "../lib/codetteBridgeService";
 import {
   getDirectoryEntries,
   subscribeDirectoryEntries,
-  type DirectoryEntry,
 } from "../lib/projectDirectoryStore";
+import type { DirectoryEntry } from "../lib/projectDirectoryStore";
 
 export default function TopBar() {
   const {
@@ -53,8 +49,7 @@ export default function TopBar() {
     addMarker,
     markers,
     openAudioSettingsModal,
-    selectedTrack,
-    tracks,
+    codetteConnected,
   } = useDAW();
 
   const { state: transport, connected } = useTransportClock();
@@ -101,10 +96,6 @@ export default function TopBar() {
     };
   }, []);
 
-  const [codetteActiveTab, setCodetteActiveTab] = useState<'suggestions' | 'analysis' | 'control'>('suggestions');
-  const [codetteLoading, setCodetteLoading] = useState(false);
-  const [codetteResult, setCodetteResult] = useState<string | null>(null);
-  const [codetteBackendConnected, setCodetteBackendConnected] = useState(false);
   const [projectDirSearch, setProjectDirSearch] = useState('');
   const [showProjectDirDropdown, setShowProjectDirDropdown] = useState(false);
   const [isProjectDirDocked, setIsProjectDirDocked] = useState(true);
@@ -152,102 +143,6 @@ export default function TopBar() {
       navigator.clipboard.writeText(entry.path).catch(() => {
         // Non-critical copy failure
       });
-    }
-  };
-
-  const suggestMixingChain = async () => {
-    if (!selectedTrack) return;
-    setCodetteLoading(true);
-    try {
-      const bridge = getCodetteBridge();
-      const analysis = await bridge.getMixingIntelligence(selectedTrack.type, {
-        level: selectedTrack.volume || -60,
-        peak: (selectedTrack.volume || -60) + 3,
-        plugins: (selectedTrack.inserts || []).map((p: any) => typeof p === 'string' ? p : 'Unknown'),
-      });
-      setCodetteResult(analysis.prediction);
-      setCodetteBackendConnected(true);
-    } catch (error) {
-      setCodetteResult(`Error: ${error instanceof Error ? error.message : 'Analysis failed'}`);
-      setCodetteBackendConnected(false);
-    } finally {
-      setCodetteLoading(false);
-    }
-  };
-
-  const suggestRouting = async () => {
-    setCodetteLoading(true);
-    try {
-      const bridge = getCodetteBridge();
-      const trackTypes = tracks.map((t: any) => t.type);
-      const hasAux = tracks.some((t: any) => t.type === 'aux');
-
-      const analysis = await bridge.getRoutingIntelligence({
-        trackCount: tracks.length,
-        trackTypes,
-        hasAux,
-      });
-      setCodetteResult(analysis.prediction);
-      setCodetteBackendConnected(true);
-    } catch (error) {
-      setCodetteResult(`Error: ${error instanceof Error ? error.message : 'Analysis failed'}`);
-      setCodetteBackendConnected(false);
-    } finally {
-      setCodetteLoading(false);
-    }
-  };
-
-  const analyzeSessionWithBackend = async () => {
-    setCodetteLoading(true);
-    try {
-      const bridge = getCodetteBridge();
-      
-      const trackMetrics = tracks.map((t: any) => ({
-        trackId: t.id,
-        name: t.name,
-        type: t.type,
-        level: t.volume || -60,
-        peak: (t.volume || -60) + 3,
-        plugins: (t.inserts || []).map((p: any) => typeof p === 'string' ? p : 'Unknown'),
-      }));
-
-      const hasClipping = tracks.some((t: any) => (t.volume || -60) > -1);
-      const masterLevel = Math.max(...tracks.map((t: any) => t.volume || -60), -60);
-      const masterPeak = masterLevel + 3;
-
-      const context = {
-        trackCount: tracks.length,
-        totalDuration: 0,
-        sampleRate: 48000,
-        trackMetrics,
-        masterLevel,
-        masterPeak,
-        hasClipping,
-      };
-
-      const prediction = await bridge.analyzeSession(context);
-      setCodetteResult(prediction.prediction);
-      setCodetteBackendConnected(true);
-    } catch (error) {
-      setCodetteResult(`Error: ${error instanceof Error ? error.message : 'Analysis failed'}`);
-      setCodetteBackendConnected(false);
-    } finally {
-      setCodetteLoading(false);
-    }
-  };
-
-  const handleCodetteAction = async () => {
-    switch (codetteActiveTab) {
-      case 'suggestions':
-        await suggestMixingChain();
-        break;
-      case 'analysis':
-        await analyzeSessionWithBackend();
-        break;
-      case 'control':
-        // Use routing suggestions for control tab
-        await suggestRouting();
-        break;
     }
   };
 
@@ -463,86 +358,7 @@ export default function TopBar() {
         )}
       </div>
 
-      {/* Codette AI Quick Controls */}
-      <div className="flex items-center gap-1 px-2 py-1 bg-purple-900/20 rounded border border-purple-700/50">
-        <button
-          onClick={() => {
-            setCodetteActiveTab('suggestions');
-            setCodetteResult(null);
-          }}
-          className={`px-2 py-1 rounded transition-colors text-xs font-medium flex items-center gap-1 ${
-            codetteActiveTab === 'suggestions'
-              ? 'bg-purple-600 text-white'
-              : 'text-purple-300 hover:text-purple-200'
-          }`}
-          title="AI Suggestions"
-        >
-          <Sparkles className="w-3 h-3" />
-          <span className="hidden sm:inline">AI</span>
-        </button>
-        <button
-          onClick={() => {
-            setCodetteActiveTab('analysis');
-            setCodetteResult(null);
-          }}
-          className={`px-2 py-1 rounded transition-colors text-xs font-medium flex items-center gap-1 ${
-            codetteActiveTab === 'analysis'
-              ? 'bg-purple-600 text-white'
-              : 'text-purple-300 hover:text-purple-200'
-          }`}
-          title="Analysis"
-        >
-          <BarChart3 className="w-3 h-3" />
-          <span className="hidden sm:inline">Analyze</span>
-        </button>
-        <button
-          onClick={() => {
-            setCodetteActiveTab('control');
-            setCodetteResult(null);
-          }}
-          className={`px-2 py-1 rounded transition-colors text-xs font-medium flex items-center gap-1 ${
-            codetteActiveTab === 'control'
-              ? 'bg-purple-600 text-white'
-              : 'text-purple-300 hover:text-purple-200'
-          }`}
-          title="Control"
-        >
-          <Sparkles className="w-3 h-3" />
-          <span className="hidden sm:inline">Control</span>
-        </button>
-
-        {/* Execute Button */}
-        <button
-          onClick={handleCodetteAction}
-          disabled={codetteLoading}
-          className="ml-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded text-xs font-medium transition flex items-center gap-1"
-          title="Execute AI Action"
-        >
-          {codetteLoading ? (
-            <>
-              <Loader className="w-3 h-3 animate-spin" />
-              <span className="hidden sm:inline">Working...</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-3 h-3" />
-              <span className="hidden sm:inline">Run</span>
-            </>
-          )}
-        </button>
-
-        {/* Result Indicator */}
-        {codetteResult && (
-          <div className="ml-1 px-2 py-1 bg-purple-900/50 rounded text-xs text-purple-200 max-w-xs truncate">
-            {codetteResult.substring(0, 50)}...
-          </div>
-        )}
-
-        {/* Connection Status */}
-        <div className={`ml-1 w-2 h-2 rounded-full ${codetteBackendConnected ? 'bg-green-400' : 'bg-red-400'}`} />
-      </div>
-
-      {/* MIDI Action Status Display - Enhanced Dropdown */}
+      {/* MIDI Action Status Display */}
       {midiActionLog.length > 0 && (
         <div className="relative">
           <button
@@ -639,6 +455,14 @@ export default function TopBar() {
       >
         <Settings className="w-4 h-4" />
       </button>
+
+      {/* Codette Status Indicator */}
+      <div className="flex items-center gap-2 px-2 py-1 rounded text-xs bg-gray-900 border border-gray-700">
+        <Zap className={`w-3 h-3 ${codetteConnected ? 'text-purple-400' : 'text-gray-500'}`} />
+        <span className={`text-xs font-medium ${codetteConnected ? 'text-purple-400' : 'text-gray-500'}`}>
+          {codetteConnected ? 'AI Ready' : 'AI Offline'}
+        </span>
+      </div>
     </div>
   );
 }

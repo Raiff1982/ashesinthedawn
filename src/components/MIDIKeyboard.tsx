@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { actionRegistry } from '../lib/actionSystem';
 
 interface MIDIKeyboardProps {
   onNoteOn: (pitch: number, velocity: number) => void;
@@ -30,6 +31,22 @@ export const MIDIKeyboard: React.FC<MIDIKeyboardProps> = ({
     (octave: number, noteInOctave: number) => {
       const pitch = getNoteNumber(octave, noteInOctave);
       setActiveNotes(prev => new Set(prev).add(pitch));
+      
+      // Trigger MIDI Insert Note action (44100)
+      try {
+        actionRegistry.execute('44100', {
+          pitch,
+          velocity: 100,
+          startTime: 0,
+          length: 0.5,
+        }).catch((err) => {
+          console.debug('[MIDIKeyboard] Action 44100 execution info:', err?.message);
+        });
+      } catch (err) {
+        console.debug('[MIDIKeyboard] Action execution context:', { actionId: '44100', pitch });
+      }
+      
+      // Call provided callback
       onNoteOn(pitch, 100);
     },
     [onNoteOn]

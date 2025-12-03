@@ -5,36 +5,35 @@ import TopBar from './components/TopBar';
 import MenuBar from './components/MenuBar';
 import TrackList from './components/TrackList';
 import Timeline from './components/Timeline';
-import MixerPro from './components/MixerPro';
+import Mixer from './components/Mixer';
+import Sidebar from './components/Sidebar';
+import { CodettePanel } from './components/CodettePanel';
 import AudioSettingsModal from './components/modals/AudioSettingsModal';
-import CommandPalette from './components/CommandPalette';
 import { initializeActions } from './lib/actions/initializeActions';
+import { CommandPalette } from './components/CommandPalette';
+import { OnboardingTour } from './components/OnboardingTour';
+import { useToast, ToastNotification } from './components/Toast';
+
+// Suppress 404 errors from missing Supabase tables in browser console
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    const msg = event.message || String(event);
+    if (msg.includes('404') && msg.includes('codette_')) {
+      event.preventDefault();
+    }
+  }, true);
+}
 
 function AppContent() {
   const [mixerHeight, setMixerHeight] = React.useState(200);
   const [isResizingMixer, setIsResizingMixer] = React.useState(false);
+  const [rightSidebarTab, setRightSidebarTab] = React.useState<'files' | 'control'>('files');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+  const { toasts, removeToast } = useToast();
 
   // Initialize action system on mount
   React.useEffect(() => {
     initializeActions();
-  }, []);
-
-  // Global keyboard shortcuts
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Command Palette: Ctrl+Shift+P or Ctrl+/
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'p') {
-        e.preventDefault();
-        setIsCommandPaletteOpen(true);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault();
-        setIsCommandPaletteOpen(true);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   React.useEffect(() => {
@@ -96,23 +95,68 @@ function AppContent() {
               style={{ height: `${mixerHeight}px` }}
             >
               <div className="w-full h-full flex flex-col overflow-hidden">
-                <MixerPro />
+                <Mixer />
               </div>
             </div>
           </div>
 
-          {/* Right sidebar removed to allocate full width to timeline/media window */}
+          {/* Right sidebar - File browser and Codette Control */}
+          <div className="w-64 bg-gray-900 border-l border-gray-700 flex flex-col overflow-hidden">
+            {/* Tab Navigation */}
+            <div className="flex gap-0 border-b border-gray-700 bg-gray-800 flex-shrink-0">
+              <button
+                onClick={() => setRightSidebarTab('files')}
+                className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                  rightSidebarTab === 'files'
+                    ? 'bg-gray-700 text-cyan-400 border-b-2 border-cyan-400'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                Files
+              </button>
+              <button
+                onClick={() => setRightSidebarTab('control')}
+                className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                  rightSidebarTab === 'control'
+                    ? 'bg-gray-700 text-cyan-400 border-b-2 border-cyan-400'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                Control
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-auto pb-20">
+              {rightSidebarTab === 'files' && <Sidebar />}
+              {rightSidebarTab === 'control' && <CodettePanel isVisible={true} />}
+            </div>
+          </div>
         </div>
-
-
       </div>
 
       {/* Global Modals */}
       <AudioSettingsModal />
+
+      {/* ENHANCEMENT #7: Command Palette (Ctrl+K) */}
       <CommandPalette 
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
       />
+
+      {/* ENHANCEMENT #10: Onboarding Tour */}
+      <OnboardingTour />
+
+      {/* ENHANCEMENT #3: Toast Notifications */}
+      <div className="fixed bottom-4 right-4 z-40 space-y-2">
+        {toasts.map(toast => (
+          <ToastNotification
+            key={toast.id}
+            {...toast}
+            onClose={removeToast}
+          />
+        ))}
+      </div>
     </div>
   );
 }

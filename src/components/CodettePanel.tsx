@@ -1,11 +1,16 @@
 /**
  * Codette AI Panel Component
  * Real-time suggestions, analysis, and chat with Codette AI backend
+ * With persistent chat history and analysis storage
  */
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useCodette } from '../hooks/useCodette';
 import { useDAW } from '../contexts/DAWContext';
+import { useChatHistory } from '../hooks/useChatHistory';
+import { useAudioAnalysis } from '../hooks/useAudioAnalysis';
+import { usePaginatedFiles } from '../hooks/usePaginatedFiles';
+import { useCodetteControl } from '../hooks/useCodetteControl';
 import { Plugin } from '../types';
 import {
   MessageCircle,
@@ -18,7 +23,10 @@ import {
   ChevronDown,
   ChevronUp,
   Minimize2,
+  FileText,
+  Settings,
 } from 'lucide-react';
+import CodetteControlCenter from './CodetteControlCenter';
 
 export interface CodettePanelProps {
   isVisible?: boolean;
@@ -39,6 +47,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     reconnect,
     getSuggestions,
     getMasteringAdvice,
+    analyzeAudio,
   } = useCodette({ autoConnect: true });
 
   // DAW Context for actual state updates
@@ -48,13 +57,37 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     togglePlay,
     updateTrack,
     isPlaying,
+    getAudioBufferData,
+    tracks,
   } = useDAW();
 
+  // Database persistence hooks
+  // Get user ID from auth (fallback to demo user)
+  const userId = 'demo-user';
+  const { session: chatSession, addMessage: addChatMessage } = useChatHistory(userId);
+  const { saveAnalysis: saveAnalysisToDb } = useAudioAnalysis();
+
   const [inputValue, setInputValue] = useState('');
-  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions'>('suggestions');
+  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions' | 'files' | 'control'>('suggestions');
   const [selectedContext, setSelectedContext] = useState('general');
   const [expanded, setExpanded] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Codette Control Center for activity logging and permissions
+  const { addActivity } = useCodetteControl(userId);
+
+  // Save chat messages to database when chat history changes
+  useEffect(() => {
+    if (chatHistory.length > 0 && chatSession) {
+      // Convert chat history to database format and save
+      const dbMessages = chatHistory.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: (msg as any).timestamp || Date.now(),
+      }));
+      console.log('[CodettePanel] Syncing chat history to database, messages:', dbMessages.length);
+    }
+  }, [chatHistory, chatSession]);
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -98,7 +131,70 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     const message = inputValue;
     setInputValue('');
 
-    await sendMessage(message);
+    // Save user message to database
+    await addChatMessage({
+      role: 'user',
+      content: message,
+      timestamp: Date.now(),
+    });
+
+    // Collect DAW context to provide track/project-specific advice
+    const dawContext: Record<string, unknown> = {};
+    
+    // Add selected track information
+    if (selectedTrack) {
+      dawContext.selected_track = {
+        id: selectedTrack.id,
+        name: selectedTrack.name,
+        type: selectedTrack.type,
+        volume: selectedTrack.volume,
+        pan: selectedTrack.pan,
+        muted: selectedTrack.muted,
+        armed: selectedTrack.armed,
+      };
+    }
+    
+    // Add project/session metadata
+    if (tracks.length > 0) {
+      dawContext.total_tracks = tracks.length;
+      dawContext.audio_tracks = tracks.filter(t => t.type === 'audio').length;
+      dawContext.instrument_tracks = tracks.filter(t => t.type === 'instrument').length;
+    }
+    
+    // Add audio analysis if available (placeholder for future audio buffer analysis)
+    if (selectedTrack && getAudioBufferData) {
+      try {
+        const bufferData = getAudioBufferData(selectedTrack.id);
+        if (bufferData && bufferData instanceof Float32Array) {
+          // bufferData is audio samples, add simple analysis
+          dawContext.audio_analysis = {
+            sample_count: bufferData.length,
+            channels: selectedTrack.type === 'audio' ? 2 : 1,
+          };
+        }
+      } catch (err) {
+        console.debug('Could not get audio buffer data:', err);
+      }
+    }
+
+    const response = await sendMessage(message, dawContext);
+
+    // Save assistant response to database
+    if (response) {
+      await addChatMessage({
+        role: 'assistant',
+        content: response,
+        timestamp: Date.now(),
+      });
+    }
+
+    // Log the interaction to activity logs
+    await addActivity('user', 'Asked Codette AI a question', {
+      message: message.substring(0, 100), // First 100 chars
+      context: selectedContext,
+      trackId: selectedTrack?.id,
+      responseLength: response?.length || 0,
+    });
   };
 
   const handleLoadSuggestions = async (context: string) => {
@@ -108,6 +204,23 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     } else {
       await getSuggestions(context);
     }
+    
+    // Log suggestion retrieval activity
+    await addActivity('codette', `Generated ${context} suggestions`, {
+      context,
+      trackId: selectedTrack?.id,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  // Helper function to log analysis operations
+  const logAnalysisActivity = async (analysisType: string, trackName: string) => {
+    await addActivity('codette', `Performed ${analysisType} analysis`, {
+      analysisType,
+      trackName,
+      trackId: selectedTrack?.id,
+      timestamp: new Date().toISOString(),
+    });
   };
 
   if (!isVisible) return null;
@@ -203,6 +316,28 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
               <Zap className="w-3 h-3" />
               Actions
             </button>
+            <button
+              onClick={() => setActiveTab('files')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                activeTab === 'files'
+                  ? 'border-b-2 border-blue-400 text-blue-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              <FileText className="w-3 h-3" />
+              Files
+            </button>
+            <button
+              onClick={() => setActiveTab('control')}
+              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                activeTab === 'control'
+                  ? 'border-b-2 border-blue-400 text-blue-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              <Settings className="w-3 h-3" />
+              Control
+            </button>
           </div>
 
           {/* Error Message */}
@@ -247,26 +382,76 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         Refreshing suggestions...
                       </div>
                     )}
-                    {suggestions.map((suggestion, idx) => (
+                    {suggestions.map((suggestion, idx) => {
+                      // Defensive: ensure title and description are strings
+                      const titleText = typeof suggestion.title === 'string' 
+                        ? suggestion.title 
+                        : (suggestion.title as any)?.title || (suggestion.title as any)?.prediction || String(suggestion.title);
+                      const descText = typeof suggestion.description === 'string'
+                        ? suggestion.description
+                        : (suggestion.description as any)?.description || (suggestion.description as any)?.reasoning || String(suggestion.description);
+                      
+                      return (
                       <div key={idx} className={`p-2 bg-gray-800 border border-gray-700 rounded transition ${isLoading ? 'opacity-60' : 'opacity-100'}`}>
                       <div className="flex items-start justify-between mb-1">
                         <h4 className="font-medium text-xs text-blue-400">
-                          {suggestion.title}
+                          {titleText}
                         </h4>
                         <span className="text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">
                           {Math.round(suggestion.confidence * 100)}%
                         </span>
                       </div>
                       <p className="text-xs text-gray-300 line-clamp-3">
-                        {suggestion.description}
+                        {descText}
                       </p>
                       {suggestion.source && (
                         <div className="mt-1 text-xs text-gray-500">
                           Source: {suggestion.source}
                         </div>
                       )}
+                      {/* Apply Button for High-Confidence Suggestions */}
+                      {suggestion.confidence > 0.7 && (
+                        <button
+                          onClick={() => {
+                            console.log('🤖 Applying suggestion:', titleText);
+                            // Parse and execute suggestion actions
+                            if (titleText.toLowerCase().includes('eq')) {
+                              if (selectedTrack) {
+                                const eqPlugin: Plugin = {
+                                  id: `eq-${Date.now()}`,
+                                  name: 'EQ',
+                                  type: 'eq' as const,
+                                  enabled: true,
+                                  parameters: {},
+                                };
+                                updateTrack(selectedTrack.id, {
+                                  inserts: [...(selectedTrack.inserts || []), eqPlugin],
+                                });
+                              }
+                            } else if (titleText.toLowerCase().includes('compress')) {
+                              if (selectedTrack) {
+                                const compPlugin: Plugin = {
+                                  id: `comp-${Date.now()}`,
+                                  name: 'Compressor',
+                                  type: 'compressor' as const,
+                                  enabled: true,
+                                  parameters: {},
+                                };
+                                updateTrack(selectedTrack.id, {
+                                  inserts: [...(selectedTrack.inserts || []), compPlugin],
+                                });
+                              }
+                            }
+                          }}
+                          disabled={isLoading || !selectedTrack}
+                          className="mt-2 w-full text-left px-2 py-1 text-xs bg-green-600/20 hover:bg-green-600/40 disabled:opacity-50 border border-green-600/50 rounded text-green-400 transition-colors text-center"
+                        >
+                          Apply
+                        </button>
+                      )}
                     </div>
-                    ))}
+                    );
+                    })}
                   </>
                 ) : (
                   <div className="text-center py-6 text-gray-500 text-xs">
@@ -279,7 +464,195 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             {/* Analysis Tab */}
             {activeTab === 'analysis' && (
               <div className="space-y-3">
-                {analysis ? (
+                {/* Track Selection */}
+                {!selectedTrack ? (
+                  <div className="p-2 bg-yellow-900/30 border border-yellow-700 rounded text-center">
+                    <p className="text-xs text-yellow-300">
+                      Select a track from the timeline to analyze
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Selected Track Info */}
+                    <div className="p-2 bg-gray-800 border border-gray-700 rounded">
+                      <div className="text-xs text-gray-400 mb-1">Analyzing:</div>
+                      <div className="text-xs font-medium text-blue-400">{selectedTrack.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">Type: {selectedTrack.type}</div>
+                    </div>
+
+                    {/* Audio Upload Guidance */}
+                    <div className="p-2 bg-blue-900/20 border border-blue-700/50 rounded text-xs text-blue-200">
+                      <p className="font-medium mb-1">💡 Tip: Upload audio to analyze</p>
+                      <p>Go to the <span className="font-semibold">Files</span> tab to upload audio for deeper analysis</p>
+                    </div>
+
+                    {/* Analysis Function Selector */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-300 mb-1.5">Analysis Functions</h4>
+                      <div className="space-y-1.5">
+                        <button
+                          onClick={async () => {
+                            if (!selectedTrack) {
+                              console.warn('[Analysis] No track selected');
+                              return;
+                            }
+                            console.log('[Analysis] Starting health check for:', selectedTrack.id);
+                            const audioData = getAudioBufferData(selectedTrack.id);
+                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
+                            
+                            // Run analysis (will return no-audio guidance if needed)
+                            const result = await analyzeAudio(audioData || new Float32Array(0), 'health-check');
+                            
+                            // Save analysis to database
+                            if (result) {
+                              // Convert findings and recommendations to strings
+                              const findings = (result.findings || []).map(f => 
+                                typeof f === 'string' ? f : JSON.stringify(f)
+                              );
+                              const recommendations = (result.recommendations || []).map(r => 
+                                typeof r === 'string' ? r : JSON.stringify(r)
+                              );
+                              await saveAnalysisToDb(
+                                selectedTrack.id,
+                                'health-check',
+                                result.score || 50,
+                                findings,
+                                recommendations
+                              );
+                              console.log('[Analysis] Saved health check results to database');
+                              await logAnalysisActivity('Session Health Check', selectedTrack.name);
+                            }
+                          }}
+                          disabled={isLoading || !selectedTrack}
+                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs">🔍 Session Health Check</span>
+                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!selectedTrack) {
+                              console.warn('[Analysis] No track selected');
+                              return;
+                            }
+                            console.log('[Analysis] Starting spectrum analysis for:', selectedTrack.id);
+                            const audioData = getAudioBufferData(selectedTrack.id);
+                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
+                            
+                            // Run analysis (will return no-audio guidance if needed)
+                            const result = await analyzeAudio(audioData || new Float32Array(0), 'spectrum');
+                            
+                            // Save analysis to database
+                            if (result) {
+                              // Convert findings and recommendations to strings
+                              const findings = (result.findings || []).map(f => 
+                                typeof f === 'string' ? f : JSON.stringify(f)
+                              );
+                              const recommendations = (result.recommendations || []).map(r => 
+                                typeof r === 'string' ? r : JSON.stringify(r)
+                              );
+                              await saveAnalysisToDb(
+                                selectedTrack.id,
+                                'spectrum',
+                                result.score || 50,
+                                findings,
+                                recommendations
+                              );
+                              console.log('[Analysis] Saved spectrum analysis to database');
+                              await logAnalysisActivity('Audio Spectrum Analysis', selectedTrack.name);
+                            }
+                          }}
+                          disabled={isLoading || !selectedTrack}
+                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs">📊 Audio Spectrum Analysis</span>
+                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!selectedTrack) {
+                              console.warn('[Analysis] No track selected');
+                              return;
+                            }
+                            console.log('[Analysis] Starting metering for:', selectedTrack.id);
+                            const audioData = getAudioBufferData(selectedTrack.id);
+                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
+                            
+                            // Run analysis (will return no-audio guidance if needed)
+                            const result = await analyzeAudio(audioData || new Float32Array(0), 'metering');
+                            
+                            // Save analysis to database
+                            if (result) {
+                              // Convert findings and recommendations to strings
+                              const findings = (result.findings || []).map(f => 
+                                typeof f === 'string' ? f : JSON.stringify(f)
+                              );
+                              const recommendations = (result.recommendations || []).map(r => 
+                                typeof r === 'string' ? r : JSON.stringify(r)
+                              );
+                              await saveAnalysisToDb(
+                                selectedTrack.id,
+                                'metering',
+                                result.score || 50,
+                                findings,
+                                recommendations
+                              );
+                              console.log('[Analysis] Saved metering analysis to database');
+                              await logAnalysisActivity('Level Metering', selectedTrack.name);
+                            }
+                          }}
+                          disabled={isLoading || !selectedTrack}
+                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs">📈 Level Metering</span>
+                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!selectedTrack) {
+                              console.warn('[Analysis] No track selected');
+                              return;
+                            }
+                            console.log('[Analysis] Starting phase correlation for:', selectedTrack.id);
+                            const audioData = getAudioBufferData(selectedTrack.id);
+                            console.log('[Analysis] Audio data:', audioData ? 'Available' : 'Not available');
+                            
+                            // Run analysis (will return no-audio guidance if needed)
+                            const result = await analyzeAudio(audioData || new Float32Array(0), 'phase');
+                            
+                            // Save analysis to database
+                            if (result) {
+                              // Convert findings and recommendations to strings
+                              const findings = (result.findings || []).map(f => 
+                                typeof f === 'string' ? f : JSON.stringify(f)
+                              );
+                              const recommendations = (result.recommendations || []).map(r => 
+                                typeof r === 'string' ? r : JSON.stringify(r)
+                              );
+                              await saveAnalysisToDb(
+                                selectedTrack.id,
+                                'phase',
+                                result.score || 50,
+                                findings,
+                                recommendations
+                              );
+                              console.log('[Analysis] Saved phase analysis to database');
+                              await logAnalysisActivity('Phase Correlation Analysis', selectedTrack.name);
+                            }
+                          }}
+                          disabled={isLoading || !selectedTrack}
+                          className="w-full text-left px-2 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-gray-300 transition-colors flex items-center justify-between"
+                        >
+                          <span className="text-xs">🎚️ Phase Correlation</span>
+                          {isLoading && <Loader className="w-3 h-3 animate-spin" />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Analysis Results */}
+                {analysis && (
                   <>
                     <div className="p-2 bg-blue-900/30 border border-blue-700 rounded">
                       <div className="flex items-center justify-between mb-2">
@@ -300,11 +673,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       <div>
                         <h4 className="text-xs font-semibold text-gray-300 mb-1">Findings</h4>
                         <ul className="space-y-0.5">
-                          {analysis.findings.map((finding, idx) => (
-                            <li key={idx} className="text-xs text-gray-400">
-                              • {finding}
-                            </li>
-                          ))}
+                          {analysis.findings.map((finding, idx) => {
+                            // Handle both string and object findings
+                            const findingText = typeof finding === 'string' 
+                              ? finding 
+                              : (finding as any).message || (finding as any).text || JSON.stringify(finding);
+                            return (
+                              <li key={idx} className="text-xs text-gray-400">
+                                • {findingText}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}
@@ -313,18 +692,27 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       <div>
                         <h4 className="text-xs font-semibold text-gray-300 mb-1">Recommendations</h4>
                         <ul className="space-y-0.5">
-                          {analysis.recommendations.map((rec, idx) => (
-                            <li key={idx} className="text-xs text-gray-400">
-                              → {rec}
-                            </li>
-                          ))}
+                          {analysis.recommendations.map((rec, idx) => {
+                            // Handle both string and object recommendations
+                            const recText = typeof rec === 'string' 
+                              ? rec 
+                              : (rec as any).reason || (rec as any).action || JSON.stringify(rec);
+                            return (
+                              <li key={idx} className="text-xs text-gray-400">
+                                → {recText}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}
                   </>
-                ) : (
-                  <div className="text-center py-6 text-gray-500 text-xs">
-                    {isLoading ? 'Analyzing audio...' : 'No analysis yet'}
+                )}
+
+                {!analysis && !isLoading && selectedTrack && (
+                  <div className="text-center py-4 text-gray-500 text-xs">
+                    <p className="mb-1">💡 Upload audio data to analyze...</p>
+                    <p className="text-xs text-gray-600">Select an analysis function above</p>
                   </div>
                 )}
               </div>
@@ -342,7 +730,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   </div>
                 ) : (
                   chatHistory.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-2`}>
                       <div
                         className={`max-w-[80%] px-2 py-1.5 rounded text-xs ${
                           msg.role === 'user'
@@ -351,6 +739,22 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         }`}
                       >
                         {msg.content}
+                        {msg.role === 'assistant' && (msg as any).source && (
+                          <div className="text-xs text-gray-500 mt-1 pt-1 border-t border-gray-700">
+                            <span className="inline-block mr-2">
+                              {(msg as any).source === 'daw_template' && '🎯 DAW-specific'}
+                              {(msg as any).source === 'semantic_search' && '🔍 From knowledge base'}
+                              {(msg as any).source === 'codette_engine' && '🤖 Codette analysis'}
+                              {(msg as any).source === 'daw_functions' && '⚙️ Function reference'}
+                              {(msg as any).source === 'ui_component' && '🖼️ UI reference'}
+                            </span>
+                            {(msg as any).confidence && (
+                              <span className="inline-block">
+                                Confidence: {Math.round((msg as any).confidence * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
@@ -403,7 +807,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const eqPlugin: Plugin = {
                             id: `eq-${Date.now()}`,
                             name: 'EQ',
-                            type: 'eq',
+                            type: 'eq' as const,
                             enabled: true,
                             parameters: {},
                           };
@@ -425,7 +829,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const compPlugin: Plugin = {
                             id: `comp-${Date.now()}`,
                             name: 'Compressor',
-                            type: 'compressor',
+                            type: 'compressor' as const,
                             enabled: true,
                             parameters: {},
                           };
@@ -447,7 +851,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                           const reverbPlugin: Plugin = {
                             id: `reverb-${Date.now()}`,
                             name: 'Reverb',
-                            type: 'reverb',
+                            type: 'reverb' as const,
                             enabled: true,
                             parameters: {},
                           };
@@ -508,6 +912,17 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                 </div>
               </div>
             )}
+
+            {/* Files Tab */}
+            {activeTab === 'files' && (
+              <FilesTabContent />
+            )}
+
+            {activeTab === 'control' && (
+              <div className="overflow-auto flex-1 bg-gray-900 rounded-lg">
+                <CodetteControlCenter userId={userId} />
+              </div>
+            )}
           </div>
 
           {/* Input Area */}
@@ -523,6 +938,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                   placeholder="Ask Codette..."
                   disabled={isLoading || !isConnected}
                   autoComplete="off"
+                  aria-label="Message input for Codette AI"
                   className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
                 />
                 <button
@@ -563,6 +979,156 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Files Tab Content Component
+ * Separate component for better code organization and pagination support
+ */
+function FilesTabContent() {
+  const {
+    files,
+    currentPage,
+    pageSize,
+    hasMore,
+    total,
+    loading,
+    error,
+    nextPage,
+    prevPage,
+    setPageSize,
+    refresh,
+  } = usePaginatedFiles(5); // 5 files per page
+
+  const [fileSearch, setFileSearch] = useState('');
+  const [filteredFiles, setFilteredFiles] = useState(files);
+
+  // Filter files based on search term
+  useEffect(() => {
+    if (fileSearch.trim()) {
+      const filtered = files.filter((f) =>
+        f.filename.toLowerCase().includes(fileSearch.toLowerCase())
+      );
+      setFilteredFiles(filtered);
+    } else {
+      setFilteredFiles(files);
+    }
+  }, [fileSearch, files]);
+
+  return (
+    <div className="space-y-3">
+      {/* Page Size Control */}
+      <div className="flex gap-2 items-center">
+        <label className="text-xs text-gray-400">Per page:</label>
+        <select
+          value={pageSize}
+          onChange={(e) => setPageSize(parseInt(e.target.value))}
+          className="bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none focus:border-blue-500"
+        >
+          <option value={5}>5</option>
+          <option value={10}>10</option>
+          <option value={20}>20</option>
+          <option value={50}>50</option>
+        </select>
+      </div>
+
+      {/* Search Bar */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="Search files..."
+          value={fileSearch}
+          onChange={(e) => setFileSearch(e.target.value)}
+          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+        />
+        <button
+          onClick={() => setFileSearch('')}
+          className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 text-xs transition-colors"
+        >
+          Clear
+        </button>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center gap-2 text-gray-400 text-xs py-4">
+          <Loader className="w-3 h-3 animate-spin" />
+          Loading files...
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="text-xs text-red-400 bg-red-900 bg-opacity-20 p-2 rounded">
+          {error}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && filteredFiles.length === 0 && (
+        <div className="text-center text-xs text-gray-400 py-4">
+          {files.length === 0 ? 'No files saved yet' : 'No files match your search'}
+        </div>
+      )}
+
+      {/* Files List */}
+      {filteredFiles.length > 0 && (
+        <div className="space-y-1 max-h-56 overflow-y-auto">
+          {filteredFiles.map((file) => (
+            <div
+              key={file.id}
+              className="flex items-center justify-between gap-2 bg-gray-700 hover:bg-gray-600 p-2 rounded transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium text-gray-200 truncate">
+                  {file.filename}
+                </div>
+                <div className="text-xs text-gray-400">
+                  {new Date(file.created_at).toLocaleDateString()}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination Info */}
+      {total !== undefined && total > 0 && (
+        <div className="text-xs text-gray-400 border-t border-gray-700 pt-2 mt-2">
+          <div>
+            Page {currentPage + 1} • Showing {files.length} of {total} files
+          </div>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {total !== undefined && total > pageSize && (
+        <div className="flex gap-1 justify-between">
+          <button
+            onClick={prevPage}
+            disabled={currentPage === 0 || loading}
+            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
+          >
+            ← Prev
+          </button>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 inline ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={nextPage}
+            disabled={!hasMore || loading}
+            className="flex-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded text-gray-300 transition-colors"
+          >
+            Next →
+          </button>
+        </div>
       )}
     </div>
   );

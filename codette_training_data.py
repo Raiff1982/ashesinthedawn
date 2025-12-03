@@ -2559,6 +2559,177 @@ CODETTE_ABILITIES = {
     }
 }
 
+# ==================== PERSPECTIVE RESPONSE TRAINING ====================
+# Training examples for each DAW perspective to improve response accuracy and relevance
+
+PERSPECTIVE_RESPONSE_TRAINING = {
+    "mix_engineering": {
+        "perspective": "mix_engineering",
+        "icon": "🎚️",
+        "description": "Practical mixing console techniques and signal flow optimization",
+        "focus_areas": [
+            "Gain staging and level optimization",
+            "Fader automation and curves",
+            "Pan and stereo imaging techniques",
+            "Bus/auxiliary mixing and grouping",
+            "Level metering and headroom management"
+        ],
+        "response_style": "Technical, practical, action-oriented with specific dB values",
+        "training_examples": [
+            {
+                "user_input": "How should I organize my mixing?",
+                "accurate_response": "Start with gain staging: Set input faders at -6dB to -9dB for headroom. Group similar instruments (drums, vocals, bass) into buses. Set bus faders at -3dB initial. Route to master at -6dB minimum. This creates a pyramid level structure.",
+                "key_points": ["Specific dB values", "Hierarchical structure", "Actionable steps"],
+                "related_functions": ["setTrackVolume", "updateTrack", "createAuxTrack"]
+            },
+            {
+                "user_input": "What's a good compressor setting for drums?",
+                "accurate_response": "For drum buses: Start with 4:1 ratio, -20dB threshold, 10ms attack (let transient through), 100ms release. This 'glues' drums together. If too aggressive, reduce ratio to 3:1 or raise threshold to -15dB. A/B test with bypass.",
+                "key_points": ["Ratio/threshold/attack/release all specified", "Purpose explained", "Testing method suggested"],
+                "related_functions": ["addPlugin", "bypassPlugin"]
+            },
+            {
+                "user_input": "My mix is too muddy in the midrange",
+                "accurate_response": "Midrange mud (200-500Hz) masks clarity. Solution: Use surgical EQ - cut -4dB at 250Hz on non-bass instruments (vocals, guitars). Use high-pass filter at 80Hz on everything except bass/drums. Check mono compatibility with correlation meter to catch phase issues.",
+                "key_points": ["Specific frequency ranges", "Surgical approach", "Verification method"],
+                "related_functions": ["addPlugin", "setPluginParameter"]
+            }
+        ]
+    },
+    "audio_theory": {
+        "perspective": "audio_theory",
+        "icon": "📊",
+        "description": "Sound physics and audio signal processing fundamentals",
+        "focus_areas": [
+            "Decibel calculations and level mathematics",
+            "Frequency response and phase relationships",
+            "Dynamic range and compression behavior",
+            "Harmonic content and distortion",
+            "Acoustic principles"
+        ],
+        "response_style": "Educational, explanation-based with theory and equations",
+        "training_examples": [
+            {
+                "user_input": "What does the -3dB point mean?",
+                "accurate_response": "The -3dB point (half-power point) is where a filter rolls off to 70.7% of original amplitude. For highpass at 80Hz: frequencies above 80Hz pass at full volume, at 80Hz exactly it's -3dB (70.7%), below 80Hz it rolls off -12dB/octave. This defines the filter's cutoff.",
+                "key_points": ["Definition", "Mathematical basis", "Practical example"],
+                "related_functions": ["addPlugin"]
+            },
+            {
+                "user_input": "How does compression reduce peaks?",
+                "accurate_response": "Compression uses a ratio parameter. At 4:1 ratio with -20dB threshold: input from -20dB to -10dB (10dB increase) produces output of only 2.5dB increase (10dB ÷ 4 = 2.5dB). Makeup gain restores volume. Attack/release control how quickly this happens.",
+                "key_points": ["Ratio math explained", "Step-by-step example", "Time parameters"],
+                "related_functions": ["setPluginParameter"]
+            },
+            {
+                "user_input": "What's phase and why does it matter?",
+                "accurate_response": "Phase describes timing offset between signals (0-360°). Two identical signals 180° out of phase cancel (destructive interference). Mono compatibility check uses correlation: +1.0 means in phase, -1.0 means inverted (cancellation). DAW shows this on correlation meter.",
+                "key_points": ["Physics definition", "Practical effect", "DAW tool reference"],
+                "related_functions": ["addPlugin"]
+            }
+        ]
+    },
+    "creative_production": {
+        "perspective": "creative_production",
+        "icon": "🎵",
+        "description": "Artistic production decisions and creative sound design",
+        "focus_areas": [
+            "Sound design and synthesis exploration",
+            "Creative effect chains and experimental techniques",
+            "Arrangement and composition decisions",
+            "Genre-specific production approaches",
+            "Emotional and artistic intent"
+        ],
+        "response_style": "Inspirational, exploratory, with artistic reasoning",
+        "training_examples": [
+            {
+                "user_input": "How can I make my vocal more interesting?",
+                "accurate_response": "Experiment with creative chains: Try parallel compression (duplicate vocal, heavily compress at 6:1, blend 30% with original) for thickness. Add short reverb tail (Hall, 1.2sec, 15% wet) for space. Automate reverb return to peak at chorus. Consider pitch-shifted delays (up 1 semitone) for ethereal effect.",
+                "key_points": ["Multiple techniques layered", "Specific settings", "Automation idea"],
+                "related_functions": ["createAuxTrack", "addPlugin", "recordAutomation"]
+            },
+            {
+                "user_input": "What's a unique way to process drums?",
+                "accurate_response": "Try bus saturation: Route drums to saturator (push analog vibes), then compress lightly. Or reverse reverb: Record 2-sec reverb tail, reverse it, place before hit for 'swell' effect. Lo-fi approach: Add subtle vinyl emulation and bit-crushing for texture. Genre matters—trap needs punch, ambient needs wash.",
+                "key_points": ["Creative techniques", "Genre awareness", "Experimentation encouraged"],
+                "related_functions": ["createAuxTrack", "addPlugin", "automation"]
+            },
+            {
+                "user_input": "How do I get a professional 'glue' on my mix?",
+                "accurate_response": "Layer multiple gentle compressions: Transparent compressor on mix bus (3:1, slow), subtle saturation adding harmonics (5-10% mix), and minimal EQ (boost presence at 4kHz by +1dB). The combination creates cohesion without obvious compression. Each tool adds 'character' that professional mixes have.",
+                "key_points": ["Layering approach", "Subtle amounts", "Character emphasis"],
+                "related_functions": ["addPlugin", "setPluginParameter"]
+            }
+        ]
+    },
+    "technical_troubleshooting": {
+        "perspective": "technical_troubleshooting",
+        "icon": "🔧",
+        "description": "Problem diagnosis and practical technical solutions",
+        "focus_areas": [
+            "Audio clipping and distortion issues",
+            "CPU optimization and performance",
+            "Routing and signal flow debugging",
+            "Plugin compatibility and crashing",
+            "File format and export issues"
+        ],
+        "response_style": "Diagnostic, systematic, with step-by-step solutions",
+        "training_examples": [
+            {
+                "user_input": "My mix is clipping on the master but tracks look fine",
+                "accurate_response": "Classic mixing problem! Steps: 1) Check all bus summing—buses might be at 0dB, 2) Verify no clips on any track fader during automation, 3) Check insert effects for makeup gain—many compressors add gain, 4) Set headroom: All track faders max -6dB, bus faders -3dB, master -6dB. Recheck master.",
+                "key_points": ["Multiple possible causes", "Systematic diagnosis", "Preventive solution"],
+                "related_functions": ["updateTrack", "addPlugin"]
+            },
+            {
+                "user_input": "Audio sounds distorted, high CPU use, playback stutters",
+                "accurate_response": "Diagnose: 1) Check CPU meter—if over 80%, disable plugins one-by-one to find culprit, 2) Try exporting audio to freeze heavy instruments/effects, 3) Lower audio buffer size (if fine, gradually increase), 4) Disable real-time audio input monitoring if not needed. Test each change.",
+                "key_points": ["Ordered troubleshooting", "Quantifiable metrics", "Reversible solutions"],
+                "related_functions": ["bypassPlugin", "recordAudio"]
+            },
+            {
+                "user_input": "Some tracks aren't routing to the master",
+                "accurate_response": "Verify routing: 1) Click track, check 'Route output' dropdown at bottom of mixer—should show 'Master', 2) Check if track is routed to aux bus instead (valid but must verify aux is routed to master), 3) Listen solo—if no sound, check mute/solo buttons, 4) Verify plugin bypass isn't stuck on.",
+                "key_points": ["Step-by-step navigation", "Alternative explanations", "Verification method"],
+                "related_functions": ["updateTrack", "toggleMute", "toggleSolo"]
+            }
+        ]
+    },
+    "workflow_optimization": {
+        "perspective": "workflow_optimization",
+        "icon": "⚡",
+        "description": "Efficiency improvements and production pipeline optimization",
+        "focus_areas": [
+            "Session template creation and reuse",
+            "Keyboard shortcuts and rapid workflow",
+            "Batch processing and automation",
+            "Time-saving techniques and tricks",
+            "Multi-window and screen optimization"
+        ],
+        "response_style": "Efficiency-focused, time-saving tips, practical optimization",
+        "training_examples": [
+            {
+                "user_input": "How can I set up faster for mixing sessions?",
+                "accurate_response": "Build a mixing template: Create session with standard buses (Drums, Vocals, Instruments, Fx). Pre-insert compressor + EQ on drum/vocal buses. Save as template. On new session: Load template (1 min setup vs 15 min manual). Store favorite plugin chains as presets. Use color-coded tracks: Red=Drums, Blue=Vocals, Green=Music.",
+                "key_points": ["Template concept", "Standardization", "Preset strategy"],
+                "related_functions": ["createAuxTrack", "addPlugin", "saveSession"]
+            },
+            {
+                "user_input": "What shortcuts should I learn first?",
+                "accurate_response": "Essential workflow shortcuts: Space = play/stop, X = solo selected, M = mute selected, 1-9 = track select, F = focus selected track, Z = zoom to fit. Learn these in first week. Medium-term: Learn DAW's arrange view shortcuts (Command-click to select groups). Muscle memory = 2-3x faster sessions.",
+                "key_points": ["Prioritized list", "Beginner focus", "Time/effort estimate"],
+                "related_functions": ["togglePlay", "toggleSolo", "toggleMute"]
+            },
+            {
+                "user_input": "How do I organize complex sessions with 50+ tracks?",
+                "accurate_response": "Use folder tracks: Group 8-12 related tracks into folders (e.g., 'Drums' folder has kick, snare, hihat, toms). Color-code folder by type. Use custom track names with numbers: 'D01-Kick', 'D02-Snare' for instant location. Add divider tracks as visual separators. Create summing buses for folder groups. This cuts mixing time 30%.",
+                "key_points": ["Organization system", "Naming convention", "Visual structure"],
+                "related_functions": ["addTrack", "createAuxTrack", "updateTrack"]
+            }
+        ]
+    }
+}
+
 # ==================== EXPORT ====================
 
 # Create global instance
@@ -2586,4 +2757,6 @@ def get_training_context() -> Dict[str, Any]:
         "daw_functions": DAW_FUNCTIONS,
         "ui_components": UI_COMPONENTS,
         "codette_abilities": CODETTE_ABILITIES,
+        # NEW: Response training examples
+        "response_templates": PERSPECTIVE_RESPONSE_TRAINING,
     }

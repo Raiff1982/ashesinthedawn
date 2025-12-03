@@ -7,6 +7,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { actionRegistry } from '../lib/actionSystem';
 import type { ActionMetadata } from '../lib/actionSystem';
+import { Search, Command } from 'lucide-react';
+import { useDAW } from '../contexts/DAWContext';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -14,11 +16,30 @@ interface CommandPaletteProps {
   onExecute?: (actionId: string) => void;
 }
 
+interface CommandItem {
+  id: string;
+  name: string;
+  category: string;
+  shortcut?: string;
+  action: () => void;
+}
+
 export function CommandPalette({ isOpen, onClose, onExecute }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ActionMetadata[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { addTrack, togglePlay, undo, redo } = useDAW();
+
+  const commands: CommandItem[] = [
+    { id: 'play', name: 'Play', category: 'Transport', shortcut: 'Space', action: togglePlay },
+    { id: 'add-audio', name: 'Add Audio Track', category: 'Track', shortcut: 'Ctrl+Alt+A', action: () => addTrack('audio') },
+    { id: 'add-instrument', name: 'Add Instrument Track', category: 'Track', shortcut: 'Ctrl+Alt+I', action: () => addTrack('instrument') },
+    { id: 'add-midi', name: 'Add MIDI Track', category: 'Track', shortcut: 'Ctrl+Alt+M', action: () => addTrack('midi') },
+    { id: 'add-aux', name: 'Add Aux Track', category: 'Track', shortcut: 'Ctrl+Alt+U', action: () => addTrack('aux') },
+    { id: 'undo', name: 'Undo', category: 'Edit', shortcut: 'Ctrl+Z', action: undo },
+    { id: 'redo', name: 'Redo', category: 'Edit', shortcut: 'Ctrl+Y', action: redo },
+  ];
 
   // Focus input when opened
   useEffect(() => {
@@ -69,67 +90,69 @@ export function CommandPalette({ isOpen, onClose, onExecute }: CommandPalettePro
     onClose();
   };
 
+  const filtered = commands.filter(cmd =>
+    cmd.name.toLowerCase().includes(query.toLowerCase()) ||
+    cmd.category.toLowerCase().includes(query.toLowerCase())
+  );
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-20">
-      {/* Modal container */}
-      <div className="w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-lg shadow-2xl">
-        {/* Search input */}
-        <div className="p-4 border-b border-gray-700">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/50">
+      <div 
+        className="bg-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4 overflow-hidden"
+      >
+        {/* Search Input */}
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-700">
+          <Search className="w-4 h-4 text-gray-500" />
           <input
             ref={inputRef}
-            type="text"
-            placeholder="Search actions... (type command name)"
+            autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="w-full bg-gray-800 text-gray-100 px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => {
+              handleKeyDown(e as any);
+              if (e.key === 'Escape') onClose();
+              if (e.key === 'Enter' && filtered.length > 0) {
+                filtered[0].action();
+                onClose();
+                setQuery('');
+              }
+            }}
+            placeholder="Type a command..."
+            className="flex-1 bg-transparent text-white outline-none text-sm"
           />
         </div>
 
         {/* Results */}
-        <div className="max-h-96 overflow-y-auto">
-          {results.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">
-              <p>No actions found</p>
-              <p className="text-sm mt-2">Try searching for common actions like "play", "record", "mute"</p>
-            </div>
+        <div className="max-h-64 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="p-4 text-center text-sm text-gray-400">No commands found</div>
           ) : (
-            results.map((action, idx) => (
-              <div
-                key={action.id}
-                onClick={() => handleExecute(action.id)}
-                className={`px-4 py-3 cursor-pointer border-l-2 transition-colors ${
-                  idx === selectedIndex
-                    ? 'bg-blue-600/20 border-blue-500 text-blue-100'
-                    : 'border-transparent text-gray-300 hover:bg-gray-800/50'
-                }`}
+            filtered.map(cmd => (
+              <button
+                key={cmd.id}
+                onClick={() => {
+                  cmd.action();
+                  onClose();
+                  setQuery('');
+                }}
+                className="w-full px-4 py-2 text-left hover:bg-gray-700 flex justify-between items-center text-sm text-gray-200 transition border-b border-gray-700 last:border-b-0"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="font-medium">{action.name}</div>
-                    {action.description && (
-                      <div className="text-xs text-gray-400 mt-1">{action.description}</div>
-                    )}
-                  </div>
-                  {action.accel && (
-                    <div className="ml-4 px-2 py-1 bg-gray-700/50 rounded text-xs text-gray-300 font-mono">
-                      {action.accel}
-                    </div>
-                  )}
+                <div className="flex flex-col">
+                  <span className="font-medium">{cmd.name}</span>
+                  <span className="text-xs text-gray-500">{cmd.category}</span>
                 </div>
-              </div>
+                {cmd.shortcut && <kbd className="text-xs bg-gray-900 px-2 py-1 rounded text-gray-400">{cmd.shortcut}</kbd>}
+              </button>
             ))
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-gray-700 bg-gray-850 text-xs text-gray-400">
-          <div className="flex justify-between">
-            <span>↑↓ Navigate • Enter to execute • Esc to close</span>
-            <span>{results.length} actions</span>
-          </div>
+        <div className="px-4 py-2 border-t border-gray-700 flex items-center gap-2 text-xs text-gray-500 bg-gray-850">
+          <Command className="w-3 h-3" />
+          <span>Press ESC to close</span>
         </div>
       </div>
     </div>

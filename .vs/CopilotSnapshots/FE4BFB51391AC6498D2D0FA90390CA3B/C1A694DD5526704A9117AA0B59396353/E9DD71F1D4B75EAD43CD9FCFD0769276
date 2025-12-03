@@ -1,0 +1,56 @@
+﻿/**
+ * Integration Hook for All UX Enhancements
+ * Centralized error handling, loading states, and user feedback
+ */
+
+import { useCallback } from 'react';
+import { useErrors } from '../hooks/useErrors';
+import { useToast } from '../components/UX/Toast';
+import { useLoadingState } from './useLoadingState';
+import { createFileTooBigError, createNoTrackSelectedError, createClippingWarning } from '../lib/errorHandling';
+
+export function useUXEnhancements() {
+  const { errors } = useErrors();
+  const { addToast } = useToast();
+  const { withLoading } = useLoadingState();
+
+  const handleFileUpload = useCallback(
+    async (file: File, onUpload: (file: File) => Promise<boolean>) => {
+      // ENHANCEMENT #2: Smart error messages
+      if (file.size > 100 * 1024 * 1024) {
+        console.error(createFileTooBigError(file.name, file.size));
+        return;
+      }
+
+      // ENHANCEMENT #10: Long operation feedback
+      await withLoading('file-upload', async () => {
+        const success = await onUpload(file);
+        if (success) {
+          // ENHANCEMENT #5: Toast notification
+          addToast(`Imported ${file.name} successfully! 🎉`, 'success');
+        }
+      });
+    },
+    [addToast, withLoading]
+  );
+
+  const validateTrackOperation = useCallback(
+    (selectedTrack: any) => {
+      if (!selectedTrack) {
+        // ENHANCEMENT #2: Friendly error message
+        console.error(createNoTrackSelectedError());
+        return false;
+      }
+      return true;
+    },
+    []
+  );
+
+  return {
+    handleFileUpload,
+    validateTrackOperation,
+    showClippingWarning: (trackName: string) =>
+      console.error(createClippingWarning(trackName)),
+    errors,
+  };
+}

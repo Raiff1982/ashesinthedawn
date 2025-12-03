@@ -600,9 +600,31 @@ Keep peaks around -6dB during mixing.
   }
 
   /**
+   * Format Codette response by preserving multi-perspective analysis
+   * Keep all perspectives intact for comprehensive AI reasoning display
+   */
+  private formatCodetteResponse(response: string): string {
+    // DO NOT strip perspective markers or content
+    // The multi-perspective response is the complete AI reasoning
+    // Example format preserved:
+    // **neural_network**: Pattern analysis suggests...
+    // **newtonian_logic**: Logic dictates...
+    // **davinci_synthesis**: As Leonardo merged...
+    // **resilient_kindness**: Let's explore this with...
+    // **quantum_logic**: Quantum probability...
+    
+    // Only clean up duplicate/redundant headers if present
+    const cleaned = response
+      .replace(/🧠 \*\*Codette's Multi-Perspective Analysis\*\*\n\n/g, '') // Remove header if present
+      .trim();
+
+    return cleaned;
+  }
+
+  /**
    * Send chat message to Codette backend
    */
-  async sendMessage(message: string): Promise<string> {
+  async sendMessage(message: string, dawContext?: Record<string, unknown>): Promise<string> {
     try {
       // First, add user message to history
       this.chatHistory.push({
@@ -616,8 +638,9 @@ Keep peaks around -6dB during mixing.
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: message,
-          perspective: 'neuralnets',
+          perspective: 'mix_engineering',
           context: this.chatHistory.slice(-5),
+          daw_context: dawContext || null,
         }),
       });
 
@@ -626,7 +649,10 @@ Keep peaks around -6dB during mixing.
       }
 
       const data = await response.json();
-      const responseText = data.response || data.message || 'No response received';
+      let responseText = data.response || data.message || 'No response received';
+
+      // Clean up multi-perspective analysis format
+      responseText = this.formatCodetteResponse(responseText);
 
       // Add assistant response to history
       this.chatHistory.push({

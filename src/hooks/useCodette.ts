@@ -10,14 +10,15 @@ import { useDAW } from '../contexts/DAWContext';
 
 export interface Suggestion extends CodetteSuggestion {
   source?: string;
+  actionItems?: Record<string, unknown>[];
 }
 
 export interface AnalysisResult {
   trackId: string;
   analysisType: string;
   score: number;
-  findings: string[];
-  recommendations: string[];
+  findings: (string | Record<string, unknown>)[];
+  recommendations: (string | Record<string, unknown>)[];
   reasoning: string;
   metrics: Record<string, number>;
 }
@@ -26,6 +27,13 @@ export interface CodetteChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp?: number;
+  source?: string; // Where advice came from: daw_template, semantic_search, codette_engine, etc.
+  confidence?: number; // Overall confidence (0-1)
+  ml_score?: {
+    relevance?: number;
+    specificity?: number;
+    certainty?: number;
+  };
 }
 
 export interface UseCodetteOptions {
@@ -46,7 +54,7 @@ export interface UseCodetteReturn {
   error: Error | null;
 
   // Chat Methods
-  sendMessage: (message: string) => Promise<string | null>;
+  sendMessage: (message: string, dawContext?: Record<string, unknown>) => Promise<string | null>;
   clearHistory: () => void;
 
   // Analysis Methods
@@ -109,19 +117,46 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
 
   // Real implementation: Send message
   const sendMessage = useCallback(
-    async (message: string): Promise<string | null> => {
+    async (message: string, dawContext?: Record<string, unknown>): Promise<string | null> => {
       setIsLoading(true);
       setError(null);
 
       try {
-        // Engine handles message history internally, just get response
-        const response = await codetteEngine.current.sendMessage(message);
-        
-        // Update chat history from engine to ensure consistency
-        const history = codetteEngine.current.getHistory();
-        setChatHistory(history);
+        // Add user message to chat history immediately
+        setChatHistory(prev => [...prev, {
+          role: 'user',
+          content: message,
+          timestamp: Date.now(),
+        }]);
 
-        return response;
+        // Send to backend with DAW context
+        const response = await fetch(`${apiUrl}/codette/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message,
+            daw_context: dawContext || {},
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const assistantMessage: CodetteChatMessage = {
+          role: 'assistant',
+          content: data.response || data.message || 'No response',
+          timestamp: Date.now(),
+          source: data.source || 'fallback',
+          confidence: data.confidence,
+          ml_score: data.ml_score,
+        };
+
+        // Add assistant response to chat history
+        setChatHistory(prev => [...prev, assistantMessage]);
+
+        return assistantMessage.content;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
@@ -131,7 +166,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         setIsLoading(false);
       }
     },
-    []
+    [apiUrl, onError]
   );
 
   // Real implementation: Analyze audio
@@ -144,11 +179,58 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
       setError(null);
 
       try {
-        const result = await codetteEngine.current.analyzeSessionHealth(tracks);
+        // Validate that we have audio data
+        if (!_audioData || (_audioData instanceof Float32Array && _audioData.length === 0)) {
+          const noAudioResult: AnalysisResult = {
+            trackId: selectedTrack?.id || 'unknown',
+            analysisType: _contentType,
+            score: 0,
+            findings: ['No audio data provided'],
+            recommendations: ['Upload audio data to analyze', 'Or record/generate audio on this track'],
+            reasoning: 'Analysis requires audio content to examine',
+            metrics: { samples: 0, duration: 0 },
+          };
+          setAnalysis(noAudioResult);
+          return noAudioResult;
+        }
+
+        const response = await fetch(`${apiUrl}/codette/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            track_id: selectedTrack?.id,
+            track_type: selectedTrack?.type,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Handle nested analysis object from backend
+        const analysis = data.analysis || {};
+        const score = analysis.quality_score !== undefined 
+          ? Math.round(analysis.quality_score * 100)
+          : (data.score || 0);
+        
+        const result: AnalysisResult = {
+          trackId: data.trackId || selectedTrack?.id || 'unknown',
+          analysisType: data.analysis_type || 'general',
+          score: score,
+          findings: analysis.findings || data.findings || [],
+          recommendations: analysis.recommendations || data.recommendations || [],
+          reasoning: analysis.reasoning || data.reasoning || '',
+          metrics: analysis.metrics || data.metrics || {},
+        };
+        
+        console.log('[useCodette] Analysis result:', result);
         setAnalysis(result);
         return result;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
+        console.error('[useCodette] Analysis error:', error);
         setError(error);
         onError?.(error);
         return null;
@@ -156,7 +238,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         setIsLoading(false);
       }
     },
-    [tracks, onError]
+    [selectedTrack, apiUrl, onError]
   );
 
   // Real implementation: Get suggestions
@@ -166,18 +248,38 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
       setError(null);
 
       try {
-        let suggestions: CodetteSuggestion[] = [];
+        // Call the backend API for suggestions
+        const response = await fetch(`${apiUrl}/codette/suggest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            context: {
+              type: context,
+              track_type: selectedTrack?.type || 'audio',
+              track_name: selectedTrack?.name || 'Unknown',
+            },
+            limit: 5,
+          }),
+        });
 
-        if (context === 'mixing') {
-          suggestions = await codetteEngine.current.teachMixingTechniques('vocals');
-        } else if (context === 'mastering') {
-          suggestions = await codetteEngine.current.suggestEnhancements('vocals');
-        } else {
-          // General suggestions - combine multiple abilities
-          const issues = await codetteEngine.current.detectIssues(tracks);
-          suggestions = issues;
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
         }
 
+        const data = await response.json();
+        const rawSuggestions = data.suggestions || [];
+        
+        // Transform backend suggestions to frontend format
+        const suggestions: Suggestion[] = rawSuggestions.map((item: any) => ({
+          type: item.type || 'optimization',
+          title: item.title || item.prediction || 'Suggestion',
+          description: item.description || item.reasoning || item.prediction || 'No description available',
+          confidence: item.confidence || 0.5,
+          relatedAbility: item.relatedAbility,
+          source: item.source,
+          actionItems: item.actionItems,
+        }));
+        
         setSuggestions(suggestions);
         return suggestions;
       } catch (err) {
@@ -189,7 +291,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         setIsLoading(false);
       }
     },
-    [tracks, onError]
+    [selectedTrack, apiUrl, onError]
   );
 
   // Real implementation: Get mastering advice

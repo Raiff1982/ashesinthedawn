@@ -4,12 +4,16 @@
  * 
  * Backend endpoints:
  * - http://localhost:8000/ (FastAPI unified server)
+ * 
+ * Authentication: Includes Supabase credentials for backend verification
  */
 
 export interface CodetteBridgeConfig {
   backendUrl: string;
   timeout: number;
   retryAttempts: number;
+  supabaseUrl?: string;
+  supabaseKey?: string;
 }
 
 export interface CodettePrediction {
@@ -44,6 +48,8 @@ class CodetteBridgeService {
       backendUrl: import.meta.env.VITE_CODETTE_API || 'http://localhost:8000',
       timeout: parseInt(import.meta.env.VITE_CODETTE_TIMEOUT || '10000'),
       retryAttempts: parseInt(import.meta.env.VITE_CODETTE_RETRIES || '3'),
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+      supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
       ...config,
     };
 
@@ -75,6 +81,22 @@ class CodetteBridgeService {
   }
 
   /**
+   * Build request headers with Supabase authentication
+   */
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Add Supabase authentication if available
+    if (this.config.supabaseKey) {
+      headers['Authorization'] = `Bearer ${this.config.supabaseKey}`;
+    }
+
+    return headers;
+  }
+
+  /**
    * Check if backend is healthy
    */
   async healthCheck(): Promise<CodetteResponse> {
@@ -97,6 +119,95 @@ class CodetteBridgeService {
    */
   isConnected(): boolean {
     return this.isHealthy;
+  }
+
+  /**
+   * Transform backend analysis response into action items
+   */
+  private transformToActionItems(analysis: any): Array<{
+    action: string;
+    parameter: string;
+    value: number | string;
+    priority: 'high' | 'medium' | 'low';
+  }> {
+    const actionItems: Array<{
+      action: string;
+      parameter: string;
+      value: number | string;
+      priority: 'high' | 'medium' | 'low';
+    }> = [];
+
+    if (!analysis) return actionItems;
+
+    // Parse recommendations to extract action items
+    const recommendations = analysis.recommendations || [];
+    const findings = analysis.findings || [];
+
+    // Check for specific conditions and generate actions
+    if (findings.some((f: string) => f.toLowerCase().includes('clipping'))) {
+      actionItems.push({
+        action: 'fix_clipping',
+        parameter: 'all_tracks',
+        value: -3,
+        priority: 'high',
+      });
+    }
+
+    if (findings.some((f: string) => f.toLowerCase().includes('low level'))) {
+      actionItems.push({
+        action: 'boost_level',
+        parameter: 'gain',
+        value: 6,
+        priority: 'medium',
+      });
+    }
+
+    if (recommendations.some((r: string) => r.toLowerCase().includes('eq'))) {
+      actionItems.push({
+        action: 'add_effect',
+        parameter: 'eq',
+        value: 'EQ',
+        priority: 'medium',
+      });
+    }
+
+    if (recommendations.some((r: string) => r.toLowerCase().includes('compress'))) {
+      actionItems.push({
+        action: 'add_effect',
+        parameter: 'compressor',
+        value: 'Compressor',
+        priority: 'medium',
+      });
+    }
+
+    if (recommendations.some((r: string) => r.toLowerCase().includes('aux'))) {
+      actionItems.push({
+        action: 'create_aux_track',
+        parameter: 'routing',
+        value: 'Aux Bus',
+        priority: 'low',
+      });
+    }
+
+    return actionItems;
+  }
+
+  /**
+   * Transform analysis data into prediction format
+   */
+  private transformAnalysisToPrediction(data: any, type: string, timestamp: number): CodettePrediction {
+    const analysis = data.analysis || data;
+    const recommendations = analysis.recommendations || [];
+    
+    return {
+      id: `${type}_${timestamp}`,
+      type: type as any,
+      prediction: recommendations.join(' ') || analysis.findings?.join(' ') || 'Analysis complete',
+      confidence: analysis.quality_score || 0.7,
+      actionItems: this.transformToActionItems(analysis),
+      reasoning: `${type} analysis of DAW state`,
+      timestamp,
+    };
   }
 
   /**
@@ -125,16 +236,8 @@ class CodetteBridgeService {
 
     const response = await this.makeRequest('POST', '/codette/analyze', context);
     if (response.success && response.data) {
-      const data = response.data as any;
-      const prediction: CodettePrediction = {
-        id: `session_${Date.now()}`,
-        type: 'session',
-        prediction: data.prediction,
-        confidence: data.confidence,
-        actionItems: data.actionItems || [],
-        reasoning: 'Full session analysis',
-        timestamp: Date.now(),
-      };
+      const timestamp = Date.now();
+      const prediction = this.transformAnalysisToPrediction(response.data, 'session', timestamp);
       this.analysisCache.set(cacheKey, prediction);
       return prediction;
     }
@@ -154,17 +257,8 @@ class CodetteBridgeService {
       metrics,
     });
     if (response.success && response.data) {
-      // Transform flat response into CodettePrediction format
-      const data = response.data as any;
-      return {
-        id: `mixing_${Date.now()}`,
-        type: 'mixing',
-        prediction: data.prediction,
-        confidence: data.confidence,
-        actionItems: data.actionItems || [],
-        reasoning: `Analysis for ${trackType} track`,
-        timestamp: Date.now(),
-      };
+      const timestamp = Date.now();
+      return this.transformAnalysisToPrediction(response.data, 'mixing', timestamp);
     }
     throw new Error(response.error || 'Mixing analysis failed');
   }
@@ -179,16 +273,8 @@ class CodetteBridgeService {
   }): Promise<CodettePrediction> {
     const response = await this.makeRequest('POST', '/codette/analyze', context);
     if (response.success && response.data) {
-      const data = response.data as any;
-      return {
-        id: `routing_${Date.now()}`,
-        type: 'routing',
-        prediction: data.prediction,
-        confidence: data.confidence,
-        actionItems: data.actionItems || [],
-        reasoning: 'Routing analysis',
-        timestamp: Date.now(),
-      };
+      const timestamp = Date.now();
+      return this.transformAnalysisToPrediction(response.data, 'routing', timestamp);
     }
     throw new Error(response.error || 'Routing analysis failed');
   }
@@ -266,13 +352,66 @@ class CodetteBridgeService {
   }
 
   /**
+   * Get suggestions for a track (primary method used by DAW)
+   * Backend returns: { suggestions: [{ type, title, description, confidence }, ...], confidence, timestamp }
+   */
+  async getSuggestions(context: {
+    type: string;
+    track_type: string;
+    mood: string;
+  }): Promise<{ suggestions: Array<{ id: string; title: string; description: string; type: string; confidence: number; parameters: Record<string, any> }> }> {
+    try {
+      // Wrap context in request object as backend expects
+      const requestBody = { context, limit: 5 };
+      
+      // Make direct fetch call to bypass makeRequest data transformation
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+      const response = await fetch(`${this.config.backendUrl}/codette/suggest`, {
+        method: 'POST',
+        headers: this.buildHeaders(),
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json() as any;
+      
+      // Backend returns { suggestions: [...], confidence, timestamp }
+      if (data.suggestions && Array.isArray(data.suggestions)) {
+        return {
+          suggestions: data.suggestions.map((s: any) => ({
+            id: s.id || `suggestion-${Date.now()}-${Math.random()}`,
+            title: s.title || 'Suggestion',
+            description: s.description || '',
+            type: s.type || 'effect',
+            confidence: s.confidence || 0.8,
+            parameters: s.parameters || {},
+          })),
+        };
+      }
+      
+      return { suggestions: [] };
+    } catch (error) {
+      console.error('Failed to get suggestions:', error);
+      return { suggestions: [] };
+    }
+  }
+
+  /**
    * Stream real-time analysis (if backend supports it)
    */
   async *streamAnalysis(context: Record<string, unknown>): AsyncGenerator<CodettePrediction, void, unknown> {
     try {
       const response = await fetch(`${this.config.backendUrl}/codette/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.buildHeaders(),
         body: JSON.stringify(context),
       });
 
@@ -323,7 +462,7 @@ class CodetteBridgeService {
         const response = await fetch(`${this.config.backendUrl}${endpoint}`, {
           method,
           headers: {
-            'Content-Type': 'application/json',
+            ...this.buildHeaders(),
             'X-Codette-Request': 'true',
           },
           body: body ? JSON.stringify(body) : undefined,

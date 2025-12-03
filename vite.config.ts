@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   plugins: [react()],
   optimizeDeps: {
     exclude: ['lucide-react'],
@@ -18,7 +24,7 @@ export default defineConfig({
           // Lazy-load heavy components
           'chunk-codette': [
             './src/components/CodettePanel.tsx',
-            './src/components/CodetteControlPanel.tsx',
+            './src/components/EnhancedCodetteControlPanel.tsx',
             './src/components/CodetteAdvancedTools.tsx',
             './src/components/CodetteTeachingGuide.tsx',
           ],

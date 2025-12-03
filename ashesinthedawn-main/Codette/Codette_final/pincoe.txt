@@ -1,1 +1,0 @@
-https://prod-1-data.ke.pinecone.io
