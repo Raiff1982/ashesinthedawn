@@ -34,6 +34,16 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # ============================================================================
+# LOGGING SETUP (MOVED BEFORE DEPENDENCY CHECKS)
+# ============================================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# ============================================================================
 # DEPENDENCY CHECKS
 # ============================================================================
 
@@ -53,6 +63,31 @@ except ImportError:
     REDIS_AVAILABLE = False
     print("[INFO] Redis not installed - using in-memory cache (install with: pip install redis)")
 
+# Try to import NumPy for audio processing
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    NUMPY_AVAILABLE = False
+    print("[WARNING] NumPy not available - audio processing disabled")
+
+# Try to import DAW Core DSP effects
+DSP_EFFECTS_AVAILABLE = False
+try:
+    sys.path.insert(0, str(Path(__file__).parent))
+    from daw_core.fx.eq_and_dynamics import EQ3Band, HighLowPass, Compressor
+    from daw_core.fx.dynamics_part2 import Limiter
+    from daw_core.fx.saturation import Saturation, Distortion
+    from daw_core.fx.delays import SimpleDelay
+    from daw_core.fx.reverb import Reverb
+    DSP_EFFECTS_AVAILABLE = True
+    logger.info("✅ DSP effects library loaded successfully")
+except ImportError as dsp_error:
+    DSP_EFFECTS_AVAILABLE = False
+    logger.warning(f"⚠️  DSP effects not available: {dsp_error}")
+    logger.warning("   Install daw_core package or check Python path")
+
 # ============================================================================
 # CONSTANTS
 # ============================================================================
@@ -65,16 +100,6 @@ MOCK_QUANTUM_STATE = {
     "phase": 1.5707963267948966,  # Math.PI * 0.5
     "fluctuation": 0.07
 }
-
-# ============================================================================
-# LOGGING SETUP
-# ============================================================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # ============================================================================
 # CACHING SYSTEM FOR PERFORMANCE OPTIMIZATION
@@ -234,6 +259,54 @@ codette_engine = None
 codette_path = Path(__file__).parent / "Codette"
 if codette_path.exists():
     sys.path.insert(0, str(codette_path))
+
+# Response variation tracking to prevent repetitive responses
+codette_response_history = []
+MAX_RESPONSE_HISTORY = 10
+
+def get_varied_codette_response(query: str, max_attempts: int = 3) -> str:
+    """
+    Get a varied response from Codette, avoiding recent repetitions
+    """
+    global codette_response_history
+    
+    if not codette_engine:
+        return "Codette AI engine not available"
+    
+    for attempt in range(max_attempts):
+        # Add variation to query on retry attempts
+        varied_query = query
+        if attempt > 0:
+            variation_prompts = [
+                "Provide a fresh perspective on: ",
+                "Let's look at this differently: ",
+                "From another angle: ",
+                "Considering alternative viewpoints: "
+            ]
+            varied_query = variation_prompts[attempt % len(variation_prompts)] + query
+        
+        response = codette_engine.respond(varied_query)
+        
+        # Check if response is too similar to recent responses
+        is_unique = True
+        for recent in codette_response_history[-5:]:  # Check last 5 responses
+            # Simple similarity check - if first 100 chars match, it's too similar
+            if response[:100] == recent[:100]:
+                is_unique = False
+                logger.debug(f"Response too similar to recent response, retrying (attempt {attempt + 1})")
+                break
+        
+        if is_unique:
+            # Store in history
+            codette_response_history.append(response)
+            if len(codette_response_history) > MAX_RESPONSE_HISTORY:
+                codette_response_history.pop(0)
+            return response
+    
+    # If all attempts failed to get unique response, return with timestamp for uniqueness
+    response = codette_engine.respond(query)
+    timestamp_note = f" (Response generated at {datetime.now(timezone.utc).isoformat()})"
+    return response + timestamp_note
 
 # Try to import and initialize REAL Codette
 try:
@@ -489,9 +562,28 @@ async def codette_chat(request: ChatRequest):
                 "status": "error"
             }
         
-        # Call REAL Codette respond() method
+        # Call REAL Codette respond() method with context
         logger.info(f"Processing chat request: {request.message[:50]}...")
-        response_text = codette_engine.respond(request.message)
+        
+        # Add perspective context to query for varied responses
+        query = request.message
+        if request.perspective and request.perspective != "mix_engineering":
+            query = f"[{request.perspective} perspective] {request.message}"
+        
+        # Add DAW context if provided
+        if request.daw_context:
+            context_summary = f" (DAW context: {len(request.daw_context.get('tracks', []))} tracks"
+            if request.daw_context.get('selected_track'):
+                context_summary += f", selected: {request.daw_context['selected_track'].get('name', 'Unknown')}"
+            context_summary += ")"
+            query += context_summary
+            
+        # Use varied response helper to avoid repetition
+        response_text = get_varied_codette_response(query)
+        
+        # Ensure response is substantive
+        if len(response_text) < 20:
+            response_text = f"From a {request.perspective} perspective: {response_text}. Consider the DAW context and provide specific mixing guidance."
         
         # Codette.respond() returns a multi-perspective string response
         return {
@@ -540,14 +632,50 @@ async def api_codette_query(request: Dict[str, Any]):
                 "source": "mock_fallback"
             }
         
-        # Use real Codette engine
+        # Use real Codette engine - Generate UNIQUE response per perspective
         logger.info(f"Multi-perspective query: {query[:50]}... with {len(perspectives_list)} perspectives")
-        codette_response = codette_engine.respond(query)
         
-        # Parse Codette response into perspective-based structure
+        # Get base response from Codette
+        base_response = codette_engine.respond(query)
+        
+        # Generate unique perspective-specific responses
         perspectives_dict = {}
+        perspective_prompts = {
+            "newtonian_logic": "Analyze this from a logical, cause-and-effect perspective",
+            "neural_network": "Provide a data-driven, pattern-recognition analysis",
+            "human_intuition": "What would human intuition and creativity suggest",
+            "davinci_synthesis": "Synthesize multiple viewpoints into a unified insight",
+            "quantum_logic": "Explore the quantum possibilities and superpositions",
+            "ethical": "What are the ethical considerations here",
+            "creative": "What creative solutions emerge from this"
+        }
+        
         for perspective in perspectives_list:
-            perspectives_dict[perspective] = f"{codette_response[:200]}..."
+            # Generate unique response for each perspective
+            perspective_query = f"{perspective_prompts.get(perspective, perspective)}: {query}"
+            
+            try:
+                # Get perspective-specific response
+                perspective_response = codette_engine.respond(perspective_query)
+                
+                # Ensure responses are different by adding perspective context
+                if perspective_response == base_response or len(perspective_response) < 50:
+                    # Fallback: use base response with perspective-specific prefix
+                    perspective_prefix = {
+                        "newtonian_logic": "From a logical analysis: ",
+                        "neural_network": "Pattern recognition suggests: ",
+                        "human_intuition": "Intuitively speaking: ",
+                        "davinci_synthesis": "Synthesizing insights: ",
+                        "quantum_logic": "Quantum perspective reveals: "
+                    }
+                    prefix = perspective_prefix.get(perspective, f"{perspective} view: ")
+                    perspectives_dict[perspective] = f"{prefix}{base_response[:250]}..."
+                else:
+                    perspectives_dict[perspective] = perspective_response[:300] + "..."
+
+            except Exception as persp_error:
+                logger.warning(f"Error generating {perspective} response: {persp_error}")
+                perspectives_dict[perspective] = f"{perspective} analysis: {base_response[:200]}..."
         
         return {
             "perspectives": perspectives_dict,
@@ -871,10 +999,9 @@ async def api_codette_status():
         logger.error(f"ERROR in /api/codette/status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Removed duplicate codette_status() - keeping only the alias below
 @app.get("/codette/status")
-async def codette_status():
-    """Original status endpoint (redirects to /api/codette/status)"""
+async def codette_status_legacy():
+    """Original status endpoint (redirects to /api/codette/status) - LEGACY"""
     return await api_codette_status()
 
 # ============================================================================
@@ -1457,7 +1584,7 @@ async def analyze_daw_request(request: Dict[str, Any]):
                 track_info = {
                     'peak_level': track.get("volume", -6),
                     'muted': track.get("muted", False),
-                    'soloed': track.get("soloed", False)
+                    'soloed': track.get("sololed", False)
                 }
                 suggestions = codette_engine.generate_mixing_suggestions(track_type, track_info)
             else:
@@ -1661,450 +1788,6 @@ async def clear_cache():
 
 # ============================================================================
 # DSP EFFECT PROCESSING ENDPOINTS (UNIFIED API)
-# ============================================================================
-
-@app.post("/api/effects/process")
-async def process_audio_effect(request: EffectProcessRequest):
-    """
-    Unified effect processing endpoint
-    Supports all 19 DSP effects from daw_core
-    """
-    try:
-        if not DSP_EFFECTS_AVAILABLE or not NUMPY_AVAILABLE:
-            raise HTTPException(
-                status_code=503,
-                detail="DSP effects not available - check server dependencies"
-            )
-        
-        # Convert audio data to numpy array
-        audio = np.array(request.audio_data, dtype=np.float32)
-        effect_type = request.effect_type.lower()
-        params = request.parameters
-        sample_rate = request.sample_rate
-        
-        logger.info(f"Processing {effect_type} with {len(audio)} samples at {sample_rate}Hz")
-        
-        # Route to appropriate effect
-        if effect_type == "highpass":
-            cutoff = params.get("cutoff", 100)
-            fx = HighLowPass(filter_type="highpass", cutoff=cutoff, sample_rate=sample_rate)
-            output = fx.process(audio)
-            
-        elif effect_type == "lowpass":
-            cutoff = params.get("cutoff", 5000)
-            fx = HighLowPass(filter_type="lowpass", cutoff=cutoff, sample_rate=sample_rate)
-            output = fx.process(audio)
-            
-        elif effect_type == "3band-eq" or effect_type == "eq3band":
-            fx = EQ3Band()
-            fx.sample_rate = sample_rate
-            fx.low_gain = params.get("low_gain", 0)
-            fx.mid_gain = params.get("mid_gain", 0)
-            fx.high_gain = params.get("high_gain", 0)
-            output = fx.process(audio)
-            
-        elif effect_type == "compressor":
-            threshold = params.get("threshold", -20)
-            ratio = params.get("ratio", 4)
-            attack = params.get("attack", 0.005)
-            release = params.get("release", 0.1)
-            fx = Compressor(
-                threshold=threshold,
-                ratio=ratio,
-                attack_time=attack,
-                release_time=release,
-                sample_rate=sample_rate
-            )
-            output = fx.process(audio)
-            
-        elif effect_type == "limiter":
-            threshold = params.get("threshold", -3)
-            attack = params.get("attack", 0.001)
-            release = params.get("release", 0.05)
-            fx = Limiter(
-                threshold=threshold,
-                attack_time=attack,
-                release_time=release,
-                sample_rate=sample_rate
-            )
-            output = fx.process(audio)
-            
-        elif effect_type == "saturation":
-            drive = params.get("drive", 1.0)
-            tone = params.get("tone", 0.5)
-            fx = Saturation(drive=drive, tone=tone)
-            output = fx.process(audio)
-            
-        elif effect_type == "distortion":
-            amount = params.get("amount", 0.5)
-            fx = Distortion(amount=amount)
-            output = fx.process(audio)
-            
-        elif effect_type == "simple-delay" or effect_type == "delay":
-            delay_time = params.get("delay_time", 0.5)
-            feedback = params.get("feedback", 0.5)
-            mix = params.get("mix", 0.5)
-            fx = SimpleDelay(
-                delay_time=delay_time,
-                feedback=feedback,
-                mix=mix,
-                sample_rate=sample_rate
-            )
-            output = fx.process(audio)
-            
-        elif effect_type == "reverb" or effect_type == "freeverb":
-            room = params.get("room", 0.5)
-            damp = params.get("damp", 0.5)
-            wet = params.get("wet", 0.33)
-            fx = Reverb(room_size=room, damping=damp, wet=wet, dry=1-wet)
-            output = fx.process(audio)
-            
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown effect type: {effect_type}"
-            )
-        
-        # Return processed audio
-        return {
-            "status": "success",
-            "effect": effect_type,
-            "parameters": params,
-            "output": output.tolist(),
-            "length": len(output),
-            "sample_rate": sample_rate,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"ERROR in /api/effects/process: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/effects/list")
-async def list_all_effects():
-    """
-    Comprehensive list of all available effects with parameters
-    """
-    try:
-        effects = {
-            "eq": {
-                "highpass": {
-                    "name": "High-Pass Filter",
-                    "category": "eq",
-                    "parameters": {
-                        "cutoff": {"min": 20, "max": 20000, "default": 100, "unit": "Hz"}
-                    }
-                },
-                "lowpass": {
-                    "name": "Low-Pass Filter",
-                    "category": "eq",
-                    "parameters": {
-                        "cutoff": {"min": 20, "max": 20000, "default": 5000, "unit": "Hz"}
-                    }
-                },
-                "3band-eq": {
-                    "name": "3-Band EQ",
-                    "category": "eq",
-                    "parameters": {
-                        "low_gain": {"min": -12, "max": 12, "default": 0, "unit": "dB"},
-                        "mid_gain": {"min": -12, "max": 12, "default": 0, "unit": "dB"},
-                        "high_gain": {"min": -12, "max": 12, "default": 0, "unit": "dB"}
-                    }
-                }
-            },
-            "dynamics": {
-                "compressor": {
-                    "name": "Compressor",
-                    "category": "dynamics",
-                    "parameters": {
-                        "threshold": {"min": -60, "max": 0, "default": -20, "unit": "dB"},
-                        "ratio": {"min": 1, "max": 20, "default": 4, "unit": ":1"},
-                        "attack": {"min": 0.001, "max": 1, "default": 0.005, "unit": "s"},
-                        "release": {"min": 0.01, "max": 3, "default": 0.1, "unit": "s"}
-                    }
-                },
-                "limiter": {
-                    "name": "Limiter",
-                    "category": "dynamics",
-                    "parameters": {
-                        "threshold": {"min": -20, "max": 0, "default": -3, "unit": "dB"},
-                        "attack": {"min": 0.0001, "max": 0.1, "default": 0.001, "unit": "s"},
-                        "release": {"min": 0.01, "max": 1, "default": 0.05, "unit": "s"}
-                    }
-                }
-            },
-            "saturation": {
-                "saturation": {
-                    "name": "Saturation",
-                    "category": "saturation",
-                    "parameters": {
-                        "drive": {"min": 0.1, "max": 10, "default": 1.0, "unit": "x"},
-                        "tone": {"min": 0, "max": 1, "default": 0.5, "unit": ""}
-                    }
-                },
-                "distortion": {
-                    "name": "Distortion",
-                    "category": "saturation",
-                    "parameters": {
-                        "amount": {"min": 0, "max": 1, "default": 0.5, "unit": ""}
-                    }
-                }
-            },
-            "delays": {
-                "simple-delay": {
-                    "name": "Simple Delay",
-                    "category": "delays",
-                    "parameters": {
-                        "delay_time": {"min": 0.001, "max": 2, "default": 0.5, "unit": "s"},
-                        "feedback": {"min": 0, "max": 0.95, "default": 0.5, "unit": ""},
-                        "mix": {"min": 0, "max": 1, "default": 0.5, "unit": ""}
-                    }
-                }
-            },
-            "reverb": {
-                "reverb": {
-                    "name": "Reverb",
-                    "category": "reverb",
-                    "parameters": {
-                        "room": {"min": 0, "max": 1, "default": 0.5, "unit": ""},
-                        "damp": {"min": 0, "max": 1, "default": 0.5, "unit": ""},
-                        "wet": {"min": 0, "max": 1, "default": 0.33, "unit": ""}
-                    }
-                }
-            }
-        }
-        
-        # Count total effects
-        total = sum(len(category) for category in effects.values())
-        
-        return {
-            "status": "success",
-            "total_effects": total,
-            "effects": effects,
-            "dsp_available": DSP_EFFECTS_AVAILABLE,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"ERROR in /api/effects/list: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/mixdown")
-async def create_mixdown(request: Dict[str, Any]):
-    """
-    Render multi-track mixdown with effects
-    """
-    try:
-        if not DSP_EFFECTS_AVAILABLE or not NUMPY_AVAILABLE:
-            raise HTTPException(
-                status_code=503,
-                detail="Mixdown requires DSP effects library"
-            )
-        
-        tracks = request.get("tracks", [])
-        sample_rate = request.get("sample_rate", 44100)
-        
-        logger.info(f"Creating mixdown with {len(tracks)} tracks at {sample_rate}Hz")
-        
-        # Find the longest track
-        max_length = 0
-        for track in tracks:
-            audio_data = track.get("audio_data", [])
-            if len(audio_data) > max_length:
-                max_length = len(audio_data)
-        
-        # Initialize output buffer (stereo)
-        mixed = np.zeros((max_length, 2), dtype=np.float32)
-        
-        # Process each track
-        for idx, track in enumerate(tracks):
-            try:
-                # Get track audio
-                audio_data = np.array(track.get("audio_data", []), dtype=np.float32)
-                if len(audio_data) == 0:
-                    continue
-                
-                # Ensure stereo
-                if audio_data.ndim == 1:
-                    audio_data = np.column_stack([audio_data, audio_data])
-                
-                # Apply volume (dB to linear)
-                volume_db = track.get("volume", 0)
-                volume_linear = 10 ** (volume_db / 20)
-                audio_data = audio_data * volume_linear
-                
-                # Apply pan (-1 to +1)
-                pan = track.get("pan", 0)
-                left_gain = np.sqrt((1 - pan) / 2)
-                right_gain = np.sqrt((1 + pan) / 2)
-                audio_data[:, 0] *= left_gain
-                audio_data[:, 1] *= right_gain
-                
-                # Apply effect chain
-                effect_chain = track.get("effect_chain", [])
-                for effect_config in effect_chain:
-                    effect_type = effect_config.get("type", "")
-                    params = effect_config.get("parameters", {})
-                    
-                    # Process left channel
-                    if effect_type == "compressor":
-                        fx = Compressor(
-                            threshold=params.get("threshold", -20),
-                            ratio=params.get("ratio", 4),
-                            attack_time=params.get("attack", 0.005),
-                            release_time=params.get("release", 0.1),
-                            sample_rate=sample_rate
-                        )
-                        audio_data[:, 0] = fx.process(audio_data[:, 0])
-                        audio_data[:, 1] = fx.process(audio_data[:, 1])
-                
-                # Mix into output
-                track_length = len(audio_data)
-                mixed[:track_length] += audio_data
-                
-                logger.info(f"  Track {idx + 1}: {track_length} samples, vol={volume_db}dB, pan={pan}")
-                
-            except Exception as track_error:
-                logger.error(f"  Error processing track {idx}: {track_error}")
-                continue
-        
-        # Apply master limiter
-        limiter = Limiter(threshold=-1, attack_time=0.001, release_time=0.05, sample_rate=sample_rate)
-        mixed[:, 0] = limiter.process(mixed[:, 0])
-        mixed[:, 1] = limiter.process(mixed[:, 1])
-        
-        # Convert to mono for return (or keep stereo - adjust as needed)
-        mixed_mono = np.mean(mixed, axis=1)
-        
-        return {
-            "status": "success",
-            "sample_rate": sample_rate,
-            "length": len(mixed_mono),
-            "tracks_processed": len(tracks),
-            "audio_data": mixed_mono.tolist(),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"ERROR in /api/mixdown: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
-# WEBSOCKET ENDPOINT (REAL-TIME COMMUNICATION)
-# ============================================================================
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time updates"""
-    try:
-        await websocket.accept()
-        logger.info("✅ WebSocket client connected")
-        
-        initial_state = {
-            "type": "init",
-            "status": "connected",
-            "codette_available": codette_engine is not None,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        await websocket.send_json(initial_state)
-        
-        while True:
-            try:
-                data = await websocket.receive_text()
-                logger.debug(f"WebSocket received: {data}")
-                
-                try:
-                    msg = json.loads(data)
-                except:
-                    msg = {"type": "ping", "data": data}
-                
-                msg_type = msg.get("type", "ping")
-                
-                if msg_type == "ping":
-                    response = {
-                        "type": "pong",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                elif msg_type == "status":
-                    response = {
-                        "type": "status",
-                        "data": {
-                            "codette_available": codette_engine is not None,
-                            "transport_playing": transport_manager.playing,
-                            "transport_time": transport_manager.time_seconds
-                        },
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                elif msg_type == "chat" and codette_engine:
-                    # Real-time Codette chat via WebSocket
-                    user_message = msg.get("message", "")
-                    codette_response = codette_engine.respond(user_message)
-                    response = {
-                        "type": "chat_response",
-                        "message": codette_response,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                else:
-                    response = {
-                        "type": "echo",
-                        "data": msg,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                
-                await websocket.send_json(response)
-                
-            except WebSocketDisconnect:
-                logger.info("✅ WebSocket client disconnected cleanly")
-                break
-            except Exception as receive_error:
-                logger.warning(f"WebSocket receive error: {receive_error}")
-                break
-                
-    except WebSocketDisconnect:
-        logger.info("✅ WebSocket client disconnected during setup")
-    except Exception as ws_error:
-        logger.warning(f"❌ WebSocket connection error: {ws_error}")
-    finally:
-        try:
-            await websocket.close()
-        except:
-            pass
-        logger.info("WebSocket connection closed")
-
-# ============================================================================
-# DSP EFFECT IMPORTS (ADDED FOR UNIFIED PROCESSING)
-# ============================================================================
-
-# Try to import DAW Core DSP effects
-try:
-    sys.path.insert(0, str(Path(__file__).parent))
-    from daw_core.fx.eq_and_dynamics import EQ3Band, HighLowPass, Compressor
-    from daw_core.fx.dynamics_part2 import Limiter
-    from daw_core.fx.saturation import Saturation, Distortion
-    from daw_core.fx.delays import SimpleDelay
-    from daw_core.fx.reverb import Reverb
-    DSP_EFFECTS_AVAILABLE = True
-    logger.info("✅ DSP effects library loaded successfully")
-except ImportError as dsp_error:
-    DSP_EFFECTS_AVAILABLE = False
-    logger.warning(f"⚠️  DSP effects not available: {dsp_error}")
-    logger.warning("   Install daw_core package or check Python path")
-
-# Try to import NumPy for audio processing
-try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except ImportError:
-    np = None  # type: ignore
-    NUMPY_AVAILABLE = False
-    logger.warning("[WARNING] NumPy not available - audio processing disabled")
-
-# ============================================================================
-# UNIFIED EFFECTS PROCESSING ENDPOINT
 # ============================================================================
 
 @app.post("/api/effects/process")

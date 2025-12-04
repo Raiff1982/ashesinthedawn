@@ -4,7 +4,7 @@
  * Integrated with DSP Bridge for real-time processing
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDAW } from '../contexts/DAWContext';
 import { Sliders, Power, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
