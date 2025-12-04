@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Codette AI Unified Server
 Combined FastAPI server for CoreLogic Studio DAW integration
@@ -209,13 +209,7 @@ context_cache = ContextCache(ttl_seconds=300)
 # FASTAPI APP SETUP
 # ============================================================================
 
-# Fixed CORS configuration - removed wildcard with credentials
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:5174", 
-    "http://localhost:5175",
-    "http://localhost:3000"
-]
+ALLOWED_ORIGINS = ["http://localhost:5173", "http://localhost:3000", "*"]
 
 app = FastAPI(
     title="Codette AI Unified Server",
@@ -226,7 +220,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,  # Set to False for development with multiple origins
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -853,27 +847,17 @@ async def api_get_history(limit: int = 50):
 async def api_codette_status():
     """Get Codette system status (with /api prefix)"""
     try:
-        # Safe attribute access with hasattr check
-        memory_size = 0
-        if codette_engine:
-            try:
-                if hasattr(codette_engine, 'memory'):
-                    memory_size = len(codette_engine.memory)
-            except (AttributeError, TypeError):
-                memory_size = 0
-        
         return {
             "status": "ok",
             "codette_available": codette_engine is not None,
             "engine_type": "codette_new.Codette" if codette_engine else "None",
-            "memory_size": memory_size,
+            "memory_size": len(codette_engine.memory) if codette_engine else 0,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
         logger.error(f"ERROR in /api/codette/status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Removed duplicate codette_status() - keeping only the alias below
 @app.get("/codette/status")
 async def codette_status():
     """Original status endpoint (redirects to /api/codette/status)"""
@@ -1725,15 +1709,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 await websocket.send_json(response)
                 
-            except WebSocketDisconnect:
-                logger.info("✅ WebSocket client disconnected cleanly")
-                break
             except Exception as receive_error:
-                logger.warning(f"WebSocket receive error: {receive_error}")
+                logger.debug(f"WebSocket receive error: {receive_error}")
                 break
                 
-    except WebSocketDisconnect:
-        logger.info("✅ WebSocket client disconnected during setup")
     except Exception as ws_error:
         logger.warning(f"❌ WebSocket connection error: {ws_error}")
     finally:
@@ -1741,7 +1720,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
         except:
             pass
-        logger.info("WebSocket connection closed")
+        logger.info("❌ WebSocket client disconnected")
 
 # ============================================================================
 # RUN SERVER

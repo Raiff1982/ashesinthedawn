@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import nltk
 import numpy as np
 import sympy as sp
@@ -219,15 +219,15 @@ class Codette:
         if track_info:
             peak_level = track_info.get('peak_level', -6)
             if peak_level > -3:
-                suggestions.append("?? Peak level is too high - reduce gain for proper headroom")
+                suggestions.append("⚠️ Peak level is too high - reduce gain for proper headroom")
             elif peak_level < -12:
-                suggestions.append("?? Track level is low - increase gain for better signal-to-noise ratio")
+                suggestions.append("💡 Track level is low - increase gain for better signal-to-noise ratio")
             
             # Check if muted/soloed
             if track_info.get('muted'):
-                suggestions.append("?? Track is currently muted - unmute to hear changes")
+                suggestions.append("🔇 Track is currently muted - unmute to hear changes")
             if track_info.get('soloed'):
-                suggestions.append("?? Track is soloed - remember to check in full mix context")
+                suggestions.append("🎧 Track is soloed - remember to check in full mix context")
         
         return suggestions
     

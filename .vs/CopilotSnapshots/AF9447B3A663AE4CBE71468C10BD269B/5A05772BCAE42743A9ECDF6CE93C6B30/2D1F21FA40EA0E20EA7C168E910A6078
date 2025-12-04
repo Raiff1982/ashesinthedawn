@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Codette AI Unified Server
 Combined FastAPI server for CoreLogic Studio DAW integration
@@ -209,13 +209,7 @@ context_cache = ContextCache(ttl_seconds=300)
 # FASTAPI APP SETUP
 # ============================================================================
 
-# Fixed CORS configuration - removed wildcard with credentials
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:5174", 
-    "http://localhost:5175",
-    "http://localhost:3000"
-]
+ALLOWED_ORIGINS = ["http://localhost:5173", "http://localhost:3000", "*"]
 
 app = FastAPI(
     title="Codette AI Unified Server",
@@ -226,7 +220,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,  # Set to False for development with multiple origins
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -575,47 +569,30 @@ async def api_codette_analyze(request: AudioAnalysisRequest):
         
         # Build analysis query for Codette
         track_name = request.track_data.get("track_name", "Unknown") if request.track_data else "Unknown"
-        track_type = request.track_data.get("track_type", "audio") if request.track_data else "audio"
         analysis_type = request.analysis_type or "spectrum"
         
         query = f"Analyze this {analysis_type} data for track '{track_name}' and provide mixing recommendations"
         
-        # Get Codette's multi-perspective analysis
+        # Get Codette's analysis
         codette_response = codette_engine.respond(query)
         
-        # Use Codette's intelligent problem detection if audio data provided
-        problems_detected = []
-        if request.audio_data:
-            mix_analysis = {
-                'peak_level': request.audio_data.get("peak_level", -6.0),
-                'rms_level': request.audio_data.get("rms_level", -18.0),
-                'duration': request.audio_data.get("duration", 0),
-                'sample_rate': request.audio_data.get("sample_rate", 44100)
-            }
-            problems_detected = codette_engine.detect_mixing_problems(mix_analysis)
-        
-        # Get track-specific recommendations
-        track_info = {
-            'peak_level': request.audio_data.get("peak_level", -6.0) if request.audio_data else -6.0,
-            'muted': request.track_data.get("muted", False) if request.track_data else False,
-            'soloed': request.track_data.get("soloed", False) if request.track_data else False
-        }
-        mixing_suggestions = codette_engine.generate_mixing_suggestions(track_type, track_info)
-        
-        # Compile comprehensive analysis
+        # Parse response into structured analysis
         analysis = {
             "analysis_type": analysis_type,
             "codette_insights": codette_response,
-            "problems_detected": problems_detected,
-            "mixing_suggestions": mixing_suggestions,
-            "quality_score": 0.85 if not problems_detected else max(0.5, 0.85 - len(problems_detected) * 0.1),
-            "recommendations": mixing_suggestions[:3]
+            "quality_score": 0.75,
+            "recommendations": [
+                "Review Codette's multi-perspective analysis above",
+                "Apply suggested improvements to track"
+            ]
         }
         
         if request.audio_data:
+            peak = request.audio_data.get("peak_level", -6.0)
+            rms = request.audio_data.get("rms_level", -18.0)
             analysis["metrics"] = {
-                "peak_level": request.audio_data.get("peak_level", -6.0),
-                "rms_level": request.audio_data.get("rms_level", -18.0),
+                "peak_level": peak,
+                "rms_level": rms,
                 "duration": request.audio_data.get("duration", 0),
                 "sample_rate": request.audio_data.get("sample_rate", 44100)
             }
@@ -853,27 +830,17 @@ async def api_get_history(limit: int = 50):
 async def api_codette_status():
     """Get Codette system status (with /api prefix)"""
     try:
-        # Safe attribute access with hasattr check
-        memory_size = 0
-        if codette_engine:
-            try:
-                if hasattr(codette_engine, 'memory'):
-                    memory_size = len(codette_engine.memory)
-            except (AttributeError, TypeError):
-                memory_size = 0
-        
         return {
             "status": "ok",
             "codette_available": codette_engine is not None,
             "engine_type": "codette_new.Codette" if codette_engine else "None",
-            "memory_size": memory_size,
+            "memory_size": len(codette_engine.memory) if codette_engine else 0,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
         logger.error(f"ERROR in /api/codette/status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Removed duplicate codette_status() - keeping only the alias below
 @app.get("/codette/status")
 async def codette_status():
     """Original status endpoint (redirects to /api/codette/status)"""
@@ -1425,26 +1392,23 @@ async def analyze_daw_request(request: Dict[str, Any]):
         
         logger.info(f"Analyzing DAW project with {len(tracks)} tracks")
         
-        # Use Codette for intelligent DAW context analysis
+        # Use Codette for intelligent analysis
         if codette_engine:
-            daw_context = {
-                'tracks': tracks,
-                'project_name': request.get("project_name", "Untitled"),
-                'bpm': request.get("bpm", 120)
-            }
-            context_analysis = codette_engine.analyze_daw_context(daw_context)
-            
             query = f"Analyze a DAW project with {len(tracks)} tracks and suggest improvements"
             codette_analysis = codette_engine.respond(query)
         else:
-            context_analysis = {
-                'track_count': len(tracks),
-                'recommendations': ["Install Codette AI for intelligent analysis"]
-            }
             codette_analysis = "Project analysis unavailable without Codette AI"
         
-        # Perform per-track analysis with real intelligence
-        track_analysis = []
+        # Simulated analysis results
+        analysis_results = {
+            "track_analysis": [],
+            "overall_tempo_bpm": 120,
+            "genre_suggestions": ["Pop", "Rock", "Electronic"],
+            "mood_tags": ["Upbeat", "Energetic"],
+            "codette_insights": codette_analysis
+        }
+        
+        # Perform per-track analysis
         for track in tracks:
             track_id = track.get("id")
             if not track_id:
@@ -1454,42 +1418,20 @@ async def analyze_daw_request(request: Dict[str, Any]):
             track_name = track.get("name", f"Track {track_id}")
             track_type = track.get("type", "audio")
             
-            # Get intelligent track-specific recommendations
-            if codette_engine:
-                track_info = {
-                    'peak_level': track.get("volume", -6),
-                    'muted': track.get("muted", False),
-                    'soloed': track.get("soloed", False)
-                }
-                suggestions = codette_engine.generate_mixing_suggestions(track_type, track_info)
-            else:
-                suggestions = [f"Add EQ to {track_type} track", f"Apply compression to {track_name}"]
-            
-            # Intelligent track analysis
-            track_analysis.append({
+            # Intelligent track-specific recommendations
+            track_analysis = {
                 "id": track_id,
                 "name": track_name,
                 "type": track_type,
-                "recommended_plugins": ["EQ", "Compressor", "Reverb"],
-                "suggested_improvements": suggestions[:2],
+                "recommended_plugins": ["Reverb", "EQ", "Compressor"],
+                "suggested_improvements": [
+                    f"Consider adding EQ to balance {track_type} frequencies",
+                    f"Apply gentle compression for consistent {track_type} level"
+                ],
                 "quality_score": 0.78
-            })
-            logger.info(f" - Analyzed track {track_id}: {track_name}")
-        
-        # Compile comprehensive analysis results
-        analysis_results = {
-            "track_analysis": track_analysis,
-            "overall_tempo_bpm": request.get("bpm", 120),
-            "genre_suggestions": ["Electronic", "Pop", "Rock"],
-            "mood_tags": ["Energetic", "Dynamic"],
-            "codette_insights": codette_analysis,
-            "context_analysis": context_analysis,
-            "project_health": {
-                "track_count": len(tracks),
-                "potential_issues": context_analysis.get('potential_issues', []),
-                "recommendations": context_analysis.get('recommendations', [])
             }
-        }
+            analysis_results["track_analysis"].append(track_analysis)
+            logger.info(f" - Analyzed track {track_id}: {track_analysis}")
         
         return {
             "status": "success",
@@ -1498,6 +1440,51 @@ async def analyze_daw_request(request: Dict[str, Any]):
         }
     except Exception as e:
         logger.error(f"ERROR in /api/prompt/analyze: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/analyze/session")
+async def analyze_session(request: Dict[str, Any]):
+    """Analyze full DAW session/project with Codette AI"""
+    try:
+        tracks = request.get("tracks", [])
+        project_name = request.get("project_name", "Untitled Project")
+        
+        # Use Codette for comprehensive session analysis
+        if codette_engine:
+            query = f"Analyze music production session '{project_name}' with {len(tracks)} tracks"
+            codette_analysis = codette_engine.respond(query)
+        else:
+            codette_analysis = "Session analysis requires Codette AI"
+        
+        analysis = {
+            "overall_health": 0.85,
+            "issues": [],
+            "recommendations": [
+                "Good gain staging throughout",
+                "Consider adding more spatial effects",
+                "Balance low-end frequencies",
+                "Check for phase issues"
+            ],
+            "codette_insights": codette_analysis,
+            "track_count": len(tracks),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Check for common issues
+        if len(tracks) == 0:
+            analysis["issues"].append("No tracks in session")
+            analysis["overall_health"] = 0.0
+        elif len(tracks) > 50:
+            analysis["issues"].append("High track count may impact performance")
+            analysis["overall_health"] -= 0.15
+        
+        return {
+            "status": "success",
+            "analysis": analysis,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"ERROR in /api/analyze/session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
@@ -1725,15 +1712,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 await websocket.send_json(response)
                 
-            except WebSocketDisconnect:
-                logger.info("✅ WebSocket client disconnected cleanly")
-                break
             except Exception as receive_error:
-                logger.warning(f"WebSocket receive error: {receive_error}")
+                logger.debug(f"WebSocket receive error: {receive_error}")
                 break
                 
-    except WebSocketDisconnect:
-        logger.info("✅ WebSocket client disconnected during setup")
     except Exception as ws_error:
         logger.warning(f"❌ WebSocket connection error: {ws_error}")
     finally:
@@ -1741,7 +1723,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
         except:
             pass
-        logger.info("WebSocket connection closed")
+        logger.info("❌ WebSocket client disconnected")
 
 # ============================================================================
 # RUN SERVER

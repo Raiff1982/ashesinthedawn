@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Codette AI Unified Server
 Combined FastAPI server for CoreLogic Studio DAW integration
@@ -1725,15 +1725,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 await websocket.send_json(response)
                 
-            except WebSocketDisconnect:
-                logger.info("✅ WebSocket client disconnected cleanly")
-                break
             except Exception as receive_error:
-                logger.warning(f"WebSocket receive error: {receive_error}")
+                logger.debug(f"WebSocket receive error: {receive_error}")
                 break
                 
-    except WebSocketDisconnect:
-        logger.info("✅ WebSocket client disconnected during setup")
     except Exception as ws_error:
         logger.warning(f"❌ WebSocket connection error: {ws_error}")
     finally:
@@ -1741,7 +1736,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
         except:
             pass
-        logger.info("WebSocket connection closed")
+        logger.info("❌ WebSocket client disconnected")
 
 # ============================================================================
 # RUN SERVER
