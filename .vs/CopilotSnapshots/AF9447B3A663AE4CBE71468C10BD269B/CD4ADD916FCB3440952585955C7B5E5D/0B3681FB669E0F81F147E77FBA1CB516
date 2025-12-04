@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Zap, MoreVertical, ChevronDown } from 'lucide-react';
 import { useDAW } from '../contexts/DAWContext';
 
@@ -60,7 +60,7 @@ export default function MIDISettings() {
           <p className="text-sm font-medium text-gray-100">{selectedTrack.name}</p>
         </div>
       ) : (
-        <div className="px-4 py-3 bg-gray-800/50 border-gray-700">
+        <div className="px-4 py-3 bg-gray-800/50 border-b border-gray-700">
           <p className="text-xs text-gray-500">Select a track to configure MIDI</p>
         </div>
       )}
@@ -126,25 +126,3 @@ export default function MIDISettings() {
                       {/* FIX: Added onChange handler */}
                       <select
                         id={`midi-channel-${route.id}`}
-                        name={`midi-channel-${route.id}`}
-                        value={route.channel}
-                        onChange={(e) => handleChannelChange(route.id, parseInt(e.target.value))}
-                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-300"
-                      >
-                        {Array.from({ length: 16 }, (_, i) => (
-                          <option key={i + 1} value={i + 1}>
-                            Channel {i + 1}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

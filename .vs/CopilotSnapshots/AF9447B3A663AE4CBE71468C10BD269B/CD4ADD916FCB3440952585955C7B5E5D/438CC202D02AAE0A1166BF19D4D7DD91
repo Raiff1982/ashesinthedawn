@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Effect Parameter Panel
  * UI component for displaying and editing effect parameters
  * Integrated with DSP Bridge for real-time processing
@@ -58,7 +58,7 @@ export default function EffectParameterPanel({ trackId }: EffectParameterPanelPr
     <div className="space-y-2">
       {effects.map((effect) => (
         <div
-          key={effect.effectId}
+          key={effect.id}
           className={`border rounded-lg ${
             effect.enabled ? 'border-blue-500 bg-gray-800' : 'border-gray-700 bg-gray-850'
           }`}
@@ -66,7 +66,7 @@ export default function EffectParameterPanel({ trackId }: EffectParameterPanelPr
           {/* Effect Header */}
           <div className="flex items-center gap-2 p-3">
             <button
-              onClick={() => toggleEffect(effect.effectId, !effect.enabled)}
+              onClick={() => toggleEffect(effect.id, !effect.enabled)}
               className={`p-1 rounded ${
                 effect.enabled
                   ? 'bg-blue-600 text-white'
@@ -91,12 +91,12 @@ export default function EffectParameterPanel({ trackId }: EffectParameterPanelPr
             <button
               onClick={() =>
                 setExpandedEffectId(
-                  expandedEffectId === effect.effectId ? null : effect.effectId
+                  expandedEffectId === effect.id ? null : effect.id
                 )
               }
               className="p-1 rounded hover:bg-gray-700"
             >
-              {expandedEffectId === effect.effectId ? (
+              {expandedEffectId === effect.id ? (
                 <ChevronUp className="w-4 h-4 text-gray-400" />
               ) : (
                 <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -104,7 +104,7 @@ export default function EffectParameterPanel({ trackId }: EffectParameterPanelPr
             </button>
 
             <button
-              onClick={() => removeEffect(effect.effectId)}
+              onClick={() => removeEffect(effect.id)}
               className="p-1 rounded hover:bg-red-600 text-red-400 hover:text-white"
               title="Remove effect"
             >
@@ -113,7 +113,7 @@ export default function EffectParameterPanel({ trackId }: EffectParameterPanelPr
           </div>
 
           {/* Effect Parameters */}
-          {expandedEffectId === effect.effectId && (
+          {expandedEffectId === effect.id && (
             <div className="border-t border-gray-700 p-3 space-y-3">
               {/* Wet/Dry Mix */}
               <div>
@@ -128,7 +128,7 @@ export default function EffectParameterPanel({ trackId }: EffectParameterPanelPr
                   step="0.01"
                   value={effect.wetDry}
                   onChange={(e) =>
-                    handleWetDryChange(effect.effectId, parseFloat(e.target.value))
+                    handleWetDryChange(effect.id, parseFloat(e.target.value))
                   }
                   className="w-full"
                 />
@@ -138,11 +138,11 @@ export default function EffectParameterPanel({ trackId }: EffectParameterPanelPr
               {Object.entries(effect.parameters).map(([paramName, paramValue]) => (
                 <EffectParameter
                   key={paramName}
-                  effectId={effect.effectId}
+                  effectId={effect.id}
                   effectType={effect.effectType}
                   paramName={paramName}
                   paramValue={paramValue as number}
-                  onChange={(value) => handleParameterChange(effect.effectId, paramName, value)}
+                  onChange={(value) => handleParameterChange(effect.id, paramName, value)}
                 />
               ))}
 

@@ -1,4 +1,4 @@
-{
+﻿{
   "compilerOptions": {
     "target": "ESNext",
     "useDefineForClassFields": true,
@@ -20,7 +20,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "suppressImplicitAnyIndexErrors": true,
+    "suppressNoImplicitAnyIndexErrors": true
   },
   "include": ["src"]
 }
