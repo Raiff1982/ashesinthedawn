@@ -1,12 +1,5 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-  useMemo,
-} from "react";
-import {
+import * as React from "react";
+import type {
   Track,
   Project,
   LogicCoreMode,
@@ -17,22 +10,15 @@ import {
   Bus,
   MidiDevice,
   MidiRoute,
+  AudioContextState,
 } from "../types";
-import { getAudioEngine } from "../lib/audioEngine";
-import { getCodetteBridge, CodetteSuggestion } from "../lib/codetteBridge";
-import { setDAWContext } from "../lib/actions/initializeActions";
+import { CodetteSuggestion, getCodetteBridge } from "../lib/codetteBridge";
 import { supabase } from "../lib/supabase";
-import {
-  saveProjectToStorage,
-  loadProjectFromStorage,
-  clearProjectStorage,
-  createAutoSaveInterval,
-} from "../lib/projectStorage";
-import {
-  downloadProjectFile,
-  importProjectFromFile,
-  openFileDialog,
-} from "../lib/projectImportExport";
+import { useEffectChainAPI, EffectChainContextAPI } from "../lib/effectChainContextAdapter";
+import { getAudioEngine } from "../lib/audioEngine";
+
+// Create context (may be undefined before provider mounts)
+const DAWContext = React.createContext<DAWContextType | undefined>(undefined);
 
 interface DAWContextType {
   currentProject: Project | null;
@@ -47,11 +33,11 @@ interface DAWContextType {
   cpuUsage: number;
   isUploadingFile: boolean;
   uploadError: string | null;
-  deletedTracks: Track[]; // Trash
+  deletedTracks: Track[];
   canUndo: boolean;
   canRedo: boolean;
   markers: Marker[];
-  loopRegion: LoopRegion;
+  loopRegion: LoopRegion | null;
   metronomeSettings: MetronomeSettings;
   inputLevel: number;
   latencyMs: number;
@@ -63,16 +49,9 @@ interface DAWContextType {
   selectedInputDeviceId: string | null;
   selectedOutputDeviceId: string | null;
   selectInputDevice: (deviceId: string) => Promise<void>;
-  selectOutputDevice: (deviceId: string) => Promise<void>;
+  selectOutputDevice: (deviceId: string) => Promise<void>
   getAudioContextStatus: () => AudioContextState | string;
   setCurrentProject: (project: Project | null) => void;
-  addTrack: (type: Track["type"]) => void;
-  selectTrack: (trackId: string) => void;
-  updateTrack: (trackId: string, updates: Partial<Track>) => void;
-  deleteTrack: (trackId: string) => void; // Soft delete to trash
-  duplicateTrack: (trackId: string) => Promise<Track | null>;
-  restoreTrack: (trackId: string) => void; // Restore from trash
-  permanentlyDeleteTrack: (trackId: string) => void; // Hard delete
   togglePlay: () => void;
   toggleRecord: () => void;
   stop: () => void;
@@ -81,30 +60,23 @@ interface DAWContextType {
   saveProject: () => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
   uploadAudioFile: (file: File) => Promise<boolean>;
-  getWaveformData: (trackId: string) => number[];
-  getAudioDuration: (trackId: string) => number;
+  getWaveformData: (_trackId: string) => number[];
+  getAudioDuration: (_trackId: string) => number;
   getAudioBufferData: (trackId: string) => Float32Array | null;
   getAudioLevels: () => Uint8Array | null;
   seek: (timeSeconds: number) => void;
   setTrackInputGain: (trackId: string, gainDb: number) => void;
   addPluginToTrack: (trackId: string, plugin: Plugin) => void;
   removePluginFromTrack: (trackId: string, pluginId: string) => void;
-  togglePluginEnabled: (
-    trackId: string,
-    pluginId: string,
-    enabled: boolean
-  ) => void;
+  togglePluginEnabled: (trackId: string, pluginId: string, enabled: boolean) => void;
   undo: () => void;
   redo: () => void;
-  // Phase 3: Markers
   addMarker: (time: number, name: string) => void;
   deleteMarker: (markerId: string) => void;
   updateMarker: (markerId: string, updates: Partial<Marker>) => void;
-  // Phase 3: Looping
   setLoopRegion: (startTime: number, endTime: number) => void;
   toggleLoop: () => void;
   clearLoopRegion: () => void;
-  // Phase 3: Metronome
   toggleMetronome: () => void;
   setMetronomeVolume: (volume: number) => void;
   setMetronomeBeatSound: (sound: MetronomeSettings["beatSound"]) => void;
@@ -121,7 +93,6 @@ interface DAWContextType {
   showAboutModal: boolean;
   openAboutModal: () => void;
   closeAboutModal: () => void;
-  // Additional Modals
   showSaveAsModal: boolean;
   openSaveAsModal: () => void;
   closeSaveAsModal: () => void;
@@ -140,12 +111,10 @@ interface DAWContextType {
   showShortcutsModal: boolean;
   openShortcutsModal: () => void;
   closeShortcutsModal: () => void;
-  // Export
   exportAudio: (format: string, quality: string) => Promise<void>;
-  // Project Import/Export
   exportProjectAsFile: () => void;
   importProjectFromFile: () => Promise<void>;
-  // Bus/Routing functions
+  // Bus/Routing
   buses: Bus[];
   createBus: (name: string) => void;
   deleteBus: (busId: string) => void;
@@ -161,31 +130,19 @@ interface DAWContextType {
   createMIDIRoute: (sourceDeviceId: string, targetTrackId: string) => void;
   deleteMIDIRoute: (routeId: string) => void;
   getMIDIRoutesForTrack: (trackId: string) => MidiRoute[];
-  // Codette AI Integration (Phase 1)
+  // Codette AI Integration
   codetteConnected: boolean;
   codetteLoading: boolean;
   codetteSuggestions: CodetteSuggestion[];
-  getSuggestionsForTrack: (
-    trackId: string,
-    context?: string
-  ) => Promise<CodetteSuggestion[]>;
-  applyCodetteSuggestion: (
-    trackId: string,
-    suggestion: CodetteSuggestion
-  ) => Promise<boolean>;
+  getSuggestionsForTrack: (trackId: string, context?: string) => Promise<CodetteSuggestion[]>;
+  applyCodetteSuggestion: (trackId: string, suggestion: CodetteSuggestion) => Promise<boolean>;
   analyzeTrackWithCodette: (trackId: string) => Promise<any>;
   syncDAWStateToCodette: () => Promise<boolean>;
-  // Codette Transport Control (Phase 3)
   codetteTransportPlay: () => Promise<any>;
   codetteTransportStop: () => Promise<any>;
   codetteTransportSeek: (timeSeconds: number) => Promise<any>;
   codetteSetTempo: (bpm: number) => Promise<any>;
-  codetteSetLoop: (
-    enabled: boolean,
-    startTime?: number,
-    endTime?: number
-  ) => Promise<any>;
-  // WebSocket Status (Phase 4)
+  codetteSetLoop: (enabled: boolean, startTime?: number, endTime?: number) => Promise<any>;
   getWebSocketStatus: () => { connected: boolean; reconnectAttempts: number };
   getCodetteBridgeStatus: () => {
     connected: boolean;
@@ -193,17 +150,15 @@ interface DAWContextType {
     isReconnecting: boolean;
   };
   // Clipboard Operations
-  clipboardData: { type: 'track' | 'clip' | null; data: any };
+  clipboardData: { type: 'track' | 'clip' | null; data: any | null };
   cutTrack: (trackId: string) => void;
   copyTrack: (trackId: string) => void;
   pasteTrack: () => void;
   selectAllTracks: () => void;
   deselectAllTracks: () => void;
   selectedTracks: Set<string>;
-  // Utility
   cpuUsageDetailed: Record<string, number>;
-
-  // Recording state (NEW)
+  // Recording state
   recordingTrackId: null | string;
   recordingStartTime: number;
   recordingTakeCount: number;
@@ -213,8 +168,7 @@ interface DAWContextType {
   punchOutTime: number;
   recordingBlob: Blob | null;
   recordingError: string | null;
-  
-  // Recording methods (NEW)
+  // Recording methods
   startRecording: (trackId: string) => Promise<boolean>;
   stopRecording: () => Promise<Blob | null>;
   pauseRecording: () => boolean;
@@ -223,1025 +177,382 @@ interface DAWContextType {
   setPunchInOut: (punchIn: number, punchOut: number) => void;
   togglePunchIn: () => void;
   undoLastRecording: () => void;
+  // Effect Chain Management
+  effectChainsByTrack: EffectChainContextAPI['effectChainsByTrack'];
+  getTrackEffects: EffectChainContextAPI['getTrackEffects'];
+  addEffectToTrack: EffectChainContextAPI['addEffectToTrack'];
+  removeEffectFromTrack: EffectChainContextAPI['removeEffectFromTrack'];
+  updateEffectParameter: EffectChainContextAPI['updateEffectParameter'];
+  enableDisableEffect: EffectChainContextAPI['enableDisableEffect'];
+  setEffectWetDry: EffectChainContextAPI['setEffectWetDry'];
+  getEffectChainForTrack: EffectChainContextAPI['getEffectChainForTrack'];
+  processTrackEffects: EffectChainContextAPI['processTrackEffects'];
+  hasActiveEffects: EffectChainContextAPI['hasActiveEffects'];
+  // Track management methods
+  addTrack: (type: Track["type"]) => void;
+  selectTrack: (trackId: string) => void;
+  updateTrack: (trackId: string, updates: Partial<Track>) => void;
+  deleteTrack: (trackId: string) => void;
+  duplicateTrack: (trackId: string) => Promise<Track | null>;
+  restoreTrack: (trackId: string) => void;
+  permanentlyDeleteTrack: (trackId: string) => void;
 }
 
-const DAWContext = createContext<DAWContextType | undefined>(undefined);
-
+// DAW Provider component
 export function DAWProvider({ children }: { children: React.ReactNode }) {
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [logicCoreMode, setLogicCoreMode] = useState<LogicCoreMode>("ON");
-  const [deletedTracks, setDeletedTracks] = useState<Track[]>([]); // Trash
-  const [undoHistory, setUndoHistory] = useState<Track[][]>([]); // Undo stack
-  const [redoHistory, setRedoHistory] = useState<Track[][]>([]); // Redo stack
-  const [voiceControlActive, setVoiceControlActive] = useState(false);
-  const [isUploadingFile, setIsUploadingFile] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  // Clipboard State
-  const [clipboardData, setClipboardData] = useState<{ type: 'track' | 'clip' | null; data: any }>({ type: null, data: null });
-  const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
-  // Codette AI Integration (Phase 1)
-  const [codetteConnected, setCodetteConnected] = useState(false);
-  const [codetteLoading, setCodetteLoading] = useState(false);
-  const [codetteSuggestions, setCodetteSuggestions] = useState<
-    CodetteSuggestion[]
-  >([]);
-  
-  // Recording state
-  const [recordingTrackId, setRecordingTrackId] = useState<string | null>(null);
-  const [recordingStartTime, setRecordingStartTime] = useState(0);
-  const [recordingTakeCount, setRecordingTakeCount] = useState(0);
-  const [recordingMode, setRecordingModeState] = useState<'audio' | 'midi' | 'overdub'>('audio');
-  const [punchInEnabled, setPunchInEnabled] = useState(false);
-  const [punchInTime, setPunchInTime] = useState(0);
-  const [punchOutTime, setPunchOutTime] = useState(30);
-  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
-  const [recordingError, setRecordingError] = useState<string | null>(null);
-  
-  // Initialize CodetteBridge with error handling using useMemo
-  const codetteRef = useRef<any>(null);
-  
-  useMemo(() => {
-    try {
-      const bridgeInstance = getCodetteBridge();
-      codetteRef.current = bridgeInstance;
-    } catch (err) {
-      console.error("[DAWContext] Failed to initialize CodetteBridge:", err);
-      codetteRef.current = null;
-    }
-  }, []);
-
-  // Initialize action system (REAPER-like command palette)
-  useEffect(() => {
-    // This effect body will be filled once the context is created below
-  }, []);
-  
-  // Phase 3: New state
-  const [markers, setMarkers] = useState<Marker[]>([]);
-  const [loopRegion, setLoopRegion] = useState<LoopRegion>({
-    enabled: false,
-    startTime: 0,
-    endTime: 0,
-  });
-  const [metronomeSettings, setMetronomeSettings] = useState<MetronomeSettings>(
-    {
-      enabled: false,
-      volume: 0.3,
-      beatSound: "click",
-      accentFirst: true,
-    }
-  );
-  // Modal State
-  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showAudioSettingsModal, setShowAudioSettingsModal] = useState(false);
-  const [showAboutModal, setShowAboutModal] = useState(false);
-  const [showSaveAsModal, setShowSaveAsModal] = useState(false);
-  const [showOpenProjectModal, setShowOpenProjectModal] = useState(false);
-  const [showMidiSettingsModal, setShowMidiSettingsModal] = useState(false);
-  const [showMixerOptionsModal, setShowMixerOptionsModal] = useState(false);
-  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
-  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
-  // Bus/Routing State
-  const [buses, setBuses] = useState<Bus[]>([]);
-  // Plugin State
-  const [loadedPlugins] = useState<Map<string, Plugin[]>>(new Map());
-  // MIDI State
-  const [midiDevices] = useState<MidiDevice[]>([]);
-  const [midiRoutes, setMidiRoutes] = useState<MidiRoute[]>([]);
-  
-  // Audio I/O State - Real device management
-  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState<string | null>(null);
-  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string | null>(null);
-  const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
-  const [audioContextState, setAudioContextState] = useState<AudioContextState>('running');
-  
-  // Audio I/O State (legacy - for interface compatibility)
-  const inputLevel = 0;
-  const latencyMs = 5;
-  const bufferUnderruns = 0;
-  const bufferOverruns = 0;
-  const isAudioIOActive = audioContextState === 'running';
-  const audioIOError = audioDeviceError;
-  const selectedInputDevice = selectedInputDeviceId ? { label: selectedInputDeviceId } : null;
-  // CPU usage detailed
-  const [cpuUsageDetailedState] = useState<Record<string, number>>({
-    audio: 2,
-    ui: 3,
-    effects: 4,
-    metering: 1,
-    other: 2,
-  });
-  const zoom = 1;
-  const cpuUsage = 12;
-  const audioEngineRef = useRef(getAudioEngine());
-
-  // Initialize project from storage on mount
-  useEffect(() => {
-    const savedProject = loadProjectFromStorage();
-    if (savedProject) {
-      setCurrentProject(savedProject);
-      console.log("[DAWContext] Project restored from localStorage");
-    }
-  }, []); // Run only once on mount
-
-  // Auto-save project whenever it changes
-  useEffect(() => {
-    if (!currentProject) return;
-
-    const cleanup = createAutoSaveInterval(currentProject, (success) => {
-      if (success) {
-        console.debug("[DAWContext] Project auto-saved");
-      }
-    });
-
-    return cleanup;
-  }, [currentProject]);
-
-  useEffect(() => {
-    if (currentProject) {
-      // Ensure master track exists
-      const hasMasterTrack = currentProject.tracks?.some(
-        (t) => t.type === "master"
-      );
-      let tracksToSet = currentProject.tracks || [];
-
-      if (!hasMasterTrack) {
-        const masterTrack: Track = {
-          id: "master-main",
-          name: "Master",
-          type: "master",
-          color: "#6366f1",
-          muted: false,
-          soloed: false,
-          armed: false,
-          inputGain: 0,
-          volume: 0,
-          pan: 0,
-          stereoWidth: 100,
-          phaseFlip: false,
-          inserts: [],
-          sends: [],
-          routing: "Master",
-          automationMode: "off",
-        };
-        tracksToSet = [...tracksToSet, masterTrack];
-      }
-
-      setTracks(tracksToSet);
-    }
-  }, [currentProject]);
-
-  // Initialize Codette connection (Phase 1 & Phase 4: WebSocket)
-  useEffect(() => {
-    const bridge = codetteRef.current;
-    
-    if (!bridge) {
-      console.warn("[DAWContext] CodetteBridge not initialized");
-      return;
-    }
-
-    const handleConnected = () => setCodetteConnected(true);
-    const handleDisconnected = () => setCodetteConnected(false);
-
-    // WebSocket event handlers (Phase 4)
-    const handleTransportChanged = (transportState: any) => {
-      console.debug("[DAWContext] Received transport update from WebSocket:", transportState);
-      // Note: seek() will be defined later in the component, so we can't call it here
-      // The WebSocket sync is primarily for monitoring, not for triggering actions
-    };
-
-    const handleSuggestionReceived = (suggestion: any) => {
-      console.debug("[DAWContext] Received suggestion from WebSocket:", suggestion);
-      setCodetteSuggestions((prev) => [suggestion, ...prev].slice(0, 5)); // Keep latest 5
-    };
-
-    const handleAnalysisComplete = (analysis: any) => {
-      console.debug("[DAWContext] Analysis complete from WebSocket:", analysis);
-      // Analysis data received, UI handles this via component re-renders
-    };
-
-    const handleWsConnected = (connected: boolean) => {
-      console.debug("[DAWContext] WebSocket status changed:", connected);
-      // Could trigger additional sync when WS connects
-    };
-
-    bridge.on("connected", handleConnected);
-    bridge.on("disconnected", handleDisconnected);
-    bridge.on("transport_changed", handleTransportChanged);
-    bridge.on("suggestion_received", handleSuggestionReceived);
-    bridge.on("analysis_complete", handleAnalysisComplete);
-    bridge.on("ws_connected", handleWsConnected);
-
-    // Initial health check
-    bridge.healthCheck().then((connected: boolean) => {
-      setCodetteConnected(connected);
-    });
-
-    return () => {
-      bridge.off("connected", handleConnected);
-      bridge.off("disconnected", handleDisconnected);
-      bridge.off("transport_changed", handleTransportChanged);
-      bridge.off("suggestion_received", handleSuggestionReceived);
-      bridge.off("analysis_complete", handleAnalysisComplete);
-      bridge.off("ws_connected", handleWsConnected);
-    };
-  }, []);
-
-  // Sync DAW state to Codette periodically (Phase 1)
-  useEffect(() => {
-    if (!codetteConnected || !isPlaying || !codetteRef.current) return;
-
-    const syncInterval = setInterval(() => {
-      const bridge = codetteRef.current;
-      if (!bridge) return;
-      bridge
-        .syncState(tracks, currentTime, isPlaying, 120) // Default to 120 BPM for now
-        .catch((err: unknown) => {
-          console.debug("[DAWContext] Sync failed:", err);
-        });
-    }, 5000); // Sync every 5 seconds during playback
-
-    return () => clearInterval(syncInterval);
-  }, [codetteConnected, tracks, currentTime, isPlaying]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      const interval = setInterval(() => {
-        setCurrentTime((prev) => prev + 0.1);
-      }, 100);
-      return () => clearInterval(interval);
-    }
-  }, [isPlaying]);
-
-  // Sync track volume, pan, and effects during playback for real-time updates
-  useEffect(() => {
-    if (isPlaying) {
-      tracks.forEach((track) => {
-        // Use smooth sync methods for real-time parameter updates
-        audioEngineRef.current.syncTrackVolume(track.id, track.volume);
-        audioEngineRef.current.syncTrackPan(track.id, track.pan);
-        audioEngineRef.current.setStereoWidth(
-          track.id,
-          track.stereoWidth || 100
-        );
-        audioEngineRef.current.setPhaseFlip(track.id, track.phaseFlip || false);
-        // Ensure input gain (pre-fader) is synced as well
-        if (typeof track.inputGain === "number") {
-          audioEngineRef.current.setTrackInputGain(track.id, track.inputGain);
-        }
-      });
-    }
-  }, [tracks, isPlaying]);
-
-  // Sync transport state to Codette (Phase 3)
-  useEffect(() => {
-    if (!codetteConnected) return;
-
-    const syncTransportInterval = setInterval(async () => {
-      const bridge = codetteRef.current;
-
-      try {
-        // Get current Codette transport state
-        const transportState = await bridge.getTransportState();
-
-        // If Codette's playback state differs from ours, sync it
-        if (transportState.is_playing !== isPlaying) {
-          if (transportState.is_playing && !isPlaying) {
-            // Codette playing, React not - start playback
-            console.debug(
-              "[DAWContext] Transport sync: Starting playback from Codette"
-            );
-            // Call internal play logic
-            const audioEngine = audioEngineRef.current;
-            tracks.forEach((track) => {
-              if (!track.muted && track.type !== "master") {
-                audioEngine.playAudio(
-                  track.id,
-                  currentTime,
-                  track.volume,
-                  track.pan,
-                  track.inserts
-                );
-              }
-            });
-            setIsPlaying(true);
-          } else if (!transportState.is_playing && isPlaying) {
-            // React playing, Codette not - stop playback
-            console.debug(
-              "[DAWContext] Transport sync: Stopping playback from Codette"
-            );
-            audioEngineRef.current.stopAllAudio();
-            setIsPlaying(false);
-          }
-        }
-
-        // Sync seek position if they differ significantly (>0.5 seconds)
-        if (
-          Math.abs(transportState.current_time - currentTime) > 0.5 &&
-          transportState.current_time !== currentTime
-        ) {
-          console.debug(
-            "[DAWContext] Transport sync: Seeking to",
-            transportState.current_time
-          );
-          seek(transportState.current_time);
-        }
-      } catch (error) {
-        console.debug("[DAWContext] Transport sync failed:", error);
-      }
-    }, 1000); // Check transport state every 1 second
-
-    return () => clearInterval(syncTransportInterval);
-  }, [codetteConnected, isPlaying, currentTime]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    const engineRef = audioEngineRef.current;
-    return () => {
-      engineRef?.dispose();
-    };
-  }, []);
-
-  // Branching function: Get sequential track number for a given type
-  const getTrackNumberForType = (type: Track["type"]): number => {
-    const tracksOfType = tracks.filter((t) => t.type === type);
-    return tracksOfType.length + 1;
-  };
-
-  // Branching function: Get random color from palette
-  const getRandomTrackColor = (): string => {
-    const colors = [
-      "#3b82f6",
-      "#ef4444",
-      "#10b981",
-      "#f59e0b",
-      "#8b5cf6",
-      "#ec4899",
-      "#14b8a6",
-      "#6366f1",
-    ];
-    return colors[Math.floor(Math.random() * colors.length)];
-  };
-
-  // Branching function: Create audio track
-  const createAudioTrack = (): Track => {
-    const trackNum = getTrackNumberForType("audio");
-    return {
-      id: `track-${Date.now()}`,
-      name: `Audio ${trackNum}`,
-      type: "audio",
-      color: getRandomTrackColor(),
-      muted: false,
-      soloed: false,
-      armed: false,
-      inputGain: 0,
-      volume: 0,
-      pan: 0,
-      stereoWidth: 100,
-      phaseFlip: false,
-      inserts: [],
-      sends: [],
-      routing: "Master",
-      automationMode: "off",
-    } as Track;
-  };
-
-  // Branching function: Create instrument track
-  const createInstrumentTrack = (): Track => {
-    const trackNum = getTrackNumberForType("instrument");
-    return {
-      id: `track-${Date.now()}`,
-      name: `Instrument ${trackNum}`,
-      type: "instrument",
-      color: getRandomTrackColor(),
-      muted: false,
-      soloed: false,
-      armed: false,
-      inputGain: 0,
-      volume: 0,
-      pan: 0,
-      stereoWidth: 100,
-      phaseFlip: false,
-      inserts: [],
-      sends: [],
-      routing: "Master",
-      automationMode: "off",
-    } as Track;
-  };
-
-  // Branching function: Create MIDI track
-  const createMidiTrack = (): Track => {
-    const trackNum = getTrackNumberForType("midi");
-    return {
-      id: `track-${Date.now()}`,
-      name: `MIDI ${trackNum}`,
-      type: "midi",
-      color: getRandomTrackColor(),
-      muted: false,
-      soloed: false,
-      armed: false,
-      inputGain: 0,
-      volume: 0,
-      pan: 0,
-      stereoWidth: 100,
-      phaseFlip: false,
-      inserts: [],
-      sends: [],
-      routing: "Master",
-      automationMode: "off",
-    } as Track;
-  };
-
-  // Branching function: Create aux track
-  const createAuxTrack = (): Track => {
-    const trackNum = getTrackNumberForType("aux");
-    return {
-      id: `track-${Date.now()}`,
-      name: `Aux ${trackNum}`,
-      type: "aux",
-      color: getRandomTrackColor(),
-      muted: false,
-      soloed: false,
-      armed: false,
-      inputGain: 0,
-      volume: 0,
-      pan: 0,
-      stereoWidth: 100,
-      phaseFlip: false,
-      inserts: [],
-      sends: [],
-      routing: "Master",
-      automationMode: "off",
-    } as Track;
-  };
-
-  // Branching function: Create VCA track
-  const createVcaTrack = (): Track => {
-    const trackNum = getTrackNumberForType("vca");
-    return {
-      id: `track-${Date.now()}`,
-      name: `VCA ${trackNum}`,
-      type: "vca",
-      color: getRandomTrackColor(),
-      muted: false,
-      soloed: false,
-      armed: false,
-      inputGain: 0,
-      volume: 0,
-      pan: 0,
-      stereoWidth: 100,
-      phaseFlip: false,
-      inserts: [],
-      sends: [],
-      routing: "Master",
-      automationMode: "off",
-    } as Track;
-  };
-
-  // Main branching router: Add track based on type
-  const addTrack = (type: Track["type"]) => {
-    let newTrack: Track;
-
-    switch (type) {
-      case "audio":
-        newTrack = createAudioTrack();
-        break;
-      case "instrument":
-        newTrack = createInstrumentTrack();
-        break;
-      case "midi":
-        newTrack = createMidiTrack();
-        break;
-      case "aux":
-        newTrack = createAuxTrack();
-        break;
-      case "vca":
-        newTrack = createVcaTrack();
-        break;
-      case "master":
-        // Master track is managed separately, should not be added here
-        console.warn("Master track should not be added via addTrack()");
-        return;
-      default:
-        // Fallback to audio track
-        newTrack = createAudioTrack();
-    }
-
-    setTracks((prev) => [...prev, newTrack]);
-    // Auto-select the newly added track
-    setSelectedTrack(newTrack);
-  };
-
-  const selectTrack = (trackId: string) => {
-    const track = tracks.find((t) => t.id === trackId);
-    setSelectedTrack(track || null);
-  };
-
-  const updateTrack = (trackId: string, updates: Partial<Track>) => {
-    setTracks((prev) =>
-      prev.map((t) => (t.id === trackId ? { ...t, ...updates } : t))
-    );
-  };
-
-  const deleteTrack = (trackId: string) => {
-    // SOFT DELETE: Move to trash, don't permanently remove
-    const trackToDelete = tracks.find((t) => t.id === trackId);
-    if (trackToDelete) {
-      // Save to undo history
-      setUndoHistory((prev) => [...prev, tracks]);
-      setRedoHistory([]); // Clear redo when new action taken
-
-      // Move to trash
-      setTracks((prev) => prev.filter((t) => t.id !== trackId));
-      setDeletedTracks((prev) => [
-        ...prev,
-        { ...trackToDelete, deleted_at: new Date().toISOString() },
-      ]);
-
-      // Deselect if selected
-      if (selectedTrack?.id === trackId) {
-        setSelectedTrack(null);
-      }
-
-      console.log(`Track "${trackToDelete.name}" moved to trash`);
-    }
-  };
-
-  // Restore track from trash
-  const restoreTrack = (trackId: string) => {
-    const trackToRestore = deletedTracks.find((t) => t.id === trackId);
-    if (trackToRestore) {
-      // Save to undo history
-      setUndoHistory((prev) => [...prev, tracks]);
-      setRedoHistory([]);
-
-      // Restore from trash (remove any deletion metadata)
-      setTracks((prev) => [...prev, trackToRestore]);
-      setDeletedTracks((prev) => prev.filter((t) => t.id !== trackId));
-
-      console.log(`Track "${trackToRestore.name}" restored from trash`);
-    }
-  };
-
-  // Permanently delete track (irreversible - use with caution)
-  const permanentlyDeleteTrack = (trackId: string) => {
-    setDeletedTracks((prev) => prev.filter((t) => t.id !== trackId));
-    console.log(`Track permanently deleted`);
-  };
-
-  // Undo last action
-  const undo = () => {
-    if (undoHistory.length > 0) {
-      const previousState = undoHistory[undoHistory.length - 1];
-      setRedoHistory((prev) => [...prev, tracks]);
-      setTracks(previousState);
-      setUndoHistory((prev) => prev.slice(0, -1));
-      setSelectedTrack(null);
-      console.log("Undo performed");
-    }
-  };
-
-  // Redo last undone action
-  const redo = () => {
-    if (redoHistory.length > 0) {
-      const nextState = redoHistory[redoHistory.length - 1];
-      setUndoHistory((prev) => [...prev, tracks]);
-      setTracks(nextState);
-      setRedoHistory((prev) => prev.slice(0, -1));
-      setSelectedTrack(null);
-      console.log("Redo performed");
-    }
-  };
-
-  // Clipboard Operations
-  const cutTrack = (trackId: string) => {
-    const trackToCut = tracks.find((t) => t.id === trackId);
-    if (trackToCut) {
-      setClipboardData({ type: 'track', data: JSON.parse(JSON.stringify(trackToCut)) });
-      deleteTrack(trackId);
-      console.log(`Track "${trackToCut.name}" cut to clipboard`);
-    }
-  };
-
-  const copyTrack = (trackId: string) => {
-    const trackToCopy = tracks.find((t) => t.id === trackId);
-    if (trackToCopy) {
-      setClipboardData({ type: 'track', data: JSON.parse(JSON.stringify(trackToCopy)) });
-      console.log(`Track "${trackToCopy.name}" copied to clipboard`);
-    }
-  };
-
-  const pasteTrack = () => {
-    if (clipboardData.type === 'track' && clipboardData.data) {
-      const pastedTrack = {
-        ...clipboardData.data,
-        id: `track-${Date.now()}`,
-        name: `${clipboardData.data.name} (Copy)`,
-      };
-      setTracks((prev) => [...prev, pastedTrack]);
-      setSelectedTrack(pastedTrack);
-      console.log(`Track "${pastedTrack.name}" pasted from clipboard`);
-    }
-  };
-
-  const duplicateTrack = async (trackId: string): Promise<Track | null> => {
-    const sourceTrack = tracks.find((t) => t.id === trackId);
-    if (!sourceTrack) {
-      console.warn(`[DAWContext] Cannot duplicate missing track ${trackId}`);
-      return null;
-    }
-
-    const uniqueId = `track-${Date.now()}`;
-    const clonePlugins = sourceTrack.inserts.map((plugin, index) => ({
-      ...plugin,
-      id: `${plugin.id || "plugin"}-${uniqueId}-${index}`,
-      parameters: { ...plugin.parameters },
-    }
-    ));
-    const cloneSends = sourceTrack.sends.map((send, index) => ({
-      ...send,
-      id: `${send.id || "send"}-${uniqueId}-${index}`,
-    }
-    ));
-
-    const clonedTrack: Track = {
-      ...sourceTrack,
-      id: uniqueId,
-      name: `${sourceTrack.name} Copy`,
-      inserts: clonePlugins,
-      sends: cloneSends,
-      childTrackIds: sourceTrack.childTrackIds
-        ? [...sourceTrack.childTrackIds]
-        : undefined,
-    };
-
-    setUndoHistory((prev) => [...prev, tracks]);
-    setRedoHistory([]);
-    setTracks((prev) => [...prev, clonedTrack]);
-    setSelectedTrack(clonedTrack);
-
-    if (sourceTrack.type !== "master") {
-      try {
-        await audioEngineRef.current.duplicateTrackAudioBuffer(
-          sourceTrack.id,
-          clonedTrack.id
-        );
-      } catch (error) {
-        console.warn("[DAWContext] Failed to duplicate audio buffer:", error);
-      }
-    }
-
-    console.log(`Track "${sourceTrack.name}" duplicated as "${clonedTrack.name}"`);
-    return clonedTrack;
-  };
-
-  const selectAllTracks = () => {
-    const allTrackIds = new Set(tracks.map((t) => t.id));
-    setSelectedTracks(allTrackIds);
-    console.log(`Selected all ${tracks.length} tracks`);
-  };
-
-  const deselectAllTracks = () => {
-    setSelectedTracks(new Set());
-    console.log('Deselected all tracks');
-  };
-
-  // Set input gain (pre-fader) for a track both in state and audio engine
-  const setTrackInputGain = (trackId: string, gainDb: number) => {
-    setTracks((prev) =>
-      prev.map((t) => (t.id === trackId ? { ...t, inputGain: gainDb } : t))
-    );
-    try {
-      audioEngineRef.current.setTrackInputGain(trackId, gainDb);
-    } catch (error: unknown) {
-      // audio engine might not be initialized yet — that's fine
-      console.debug("setTrackInputGain error:", error);
-    }
-  };
-
-  // Add a plugin to a track's insert chain
-  const addPluginToTrack = (trackId: string, plugin: Plugin) => {
-    setTracks((prev) =>
-      prev.map((t) =>
-        t.id === trackId ? { ...t, inserts: [...t.inserts, plugin] } : t
-      )
-    );
-    // Update selected track if it was modified
-    if (selectedTrack?.id === trackId) {
-      setSelectedTrack((prev) =>
-        prev ? { ...prev, inserts: [...prev.inserts, plugin] } : null
-      );
-    }
-    // Auto-restart playback if playing to apply new plugin
-    if (isPlaying) {
-      audioEngineRef.current.stopAllAudio();
-      setTimeout(() => {
-        tracks.forEach((track) => {
-          if (
-            !track.muted &&
-            (track.type === "audio" || track.type === "instrument")
-          ) {
-            audioEngineRef.current.playAudio(
-              track.id,
-              currentTime,
-              track.volume,
-              track.pan,
-              track.id === trackId ? [...track.inserts, plugin] : track.inserts
-            );
-          }
-        });
-      }, 50);
-    }
-  };
-
-  // Remove a plugin from a track's insert chain
-  const removePluginFromTrack = (trackId: string, pluginId: string) => {
-    setTracks((prev) =>
-      prev.map((t) =>
-        t.id === trackId
-          ? { ...t, inserts: t.inserts.filter((p) => p.id !== pluginId) }
-          : t
-      )
-    );
-    // Update selected track if it was modified
-    if (selectedTrack?.id === trackId) {
-      setSelectedTrack((prev) =>
-        prev
-          ? { ...prev, inserts: prev.inserts.filter((p) => p.id !== pluginId) }
-          : null
-      );
-    }
-    // Auto-restart playback if playing to apply plugin removal
-    if (isPlaying) {
-      audioEngineRef.current.stopAllAudio();
-      setTimeout(() => {
-        tracks.forEach((track) => {
-          if (
-            !track.muted &&
-            (track.type === "audio" || track.type === "instrument")
-          ) {
-            const newInserts = track.id === trackId
-              ? track.inserts.filter((p) => p.id !== pluginId)
-              : track.inserts;
-            audioEngineRef.current.playAudio(
-              track.id,
-              currentTime,
-              track.volume,
-              track.pan,
-              newInserts
-            );
-          }
-        });
-      }, 50);
-    }
-  };
-
-  // Toggle plugin enabled/disabled
-  const togglePluginEnabled = (
-    trackId: string,
-    pluginId: string,
-    enabled: boolean
-  ) => {
-    setTracks((prev) =>
-      prev.map((t) =>
-        t.id === trackId
-          ? {
-              ...t,
-              inserts: t.inserts.map((p) =>
-                p.id === pluginId ? { ...p, enabled } : p
-              ),
-            }
-          : t
-      )
-    );
-    // Update selected track if it was modified
-    if (selectedTrack?.id === trackId) {
-      setSelectedTrack((prev) =>
-        prev
-          ? {
-              ...prev,
-              inserts: prev.inserts.map((p) =>
-                p.id === pluginId ? { ...p, enabled } : p
-              ),
-            }
-          : null
-      );
-    }
-    // Auto-restart playback if playing to apply plugin enable/disable change
-    if (isPlaying) {
-      audioEngineRef.current.stopAllAudio();
-      setTimeout(() => {
-        tracks.forEach((track) => {
-          if (
-            !track.muted &&
-            (track.type === "audio" || track.type === "instrument")
-          ) {
-            const newInserts = track.id === trackId
-              ? track.inserts.map((p) =>
-                  p.id === pluginId ? { ...p, enabled } : p
-                )
-              : track.inserts;
-            audioEngineRef.current.playAudio(
-              track.id,
-              currentTime,
-              track.volume,
-              track.pan,
-              newInserts
-            );
-          }
-        });
-      }, 50);
-    }
-  };
-
-  const togglePlay = () => {
-    if (!isPlaying) {
-      // Starting playback
+  // Singleton refs
+  const audioEngineRef = React.useRef(getAudioEngine());
+  const audioEngineInitializedRef = React.useRef(false);
+  const codetteBridgeRef = React.useRef(getCodetteBridge());
+
+  // Initialize AudioEngine on mount
+  React.useEffect(() => {
+    if (!audioEngineInitializedRef.current) {
       audioEngineRef.current
         .initialize()
         .then(() => {
-          // Play all non-muted audio and instrument tracks from current time
-          tracks.forEach((track) => {
-            if (
-              !track.muted &&
-              (track.type === "audio" || track.type === "instrument")
-            ) {
-              // playAudio expects linear volume (0-1), convert from dB
-              audioEngineRef.current.playAudio(
-                track.id,
-                currentTime,
-                track.volume,
-                track.pan,
-                track.inserts
-              );
-            }
-          });
-          setIsPlaying(true);
+          console.log("[DAWContext] AudioEngine initialized successfully");
+          audioEngineInitializedRef.current = true;
         })
-        .catch((err) => console.error("Audio init failed:", err));
-    } else {
-      // Pausing playback
-      audioEngineRef.current.stopAllAudio();
-      setIsPlaying(false);
+        .catch((error) => {
+          console.error("[DAWContext] Failed to initialize AudioEngine:", error);
+        });
+    }
+  }, []);
+
+  // Core State
+  const [currentProject, setCurrentProject] = React.useState<Project | null>(null);
+  const [tracks, setTracks] = React.useState<Track[]>([]);
+  const [selectedTrack, setSelectedTrack] = React.useState<Track | null>(null);
+  const [isPlaying, setIsPlaying] = React.useState<boolean>(false);
+  const [isRecording, setIsRecording] = React.useState<boolean>(false);
+  const [currentTime, setCurrentTime] = React.useState<number>(0);
+  const [zoom, _setZoom] = React.useState<number>(1);
+  const [logicCoreMode, setLogicCoreMode] = React.useState<LogicCoreMode>("ON");
+  const [voiceControlActive, setVoiceControlActive] = React.useState<boolean>(false);
+  const [cpuUsage, _setCpuUsage] = React.useState<number>(0);
+  const [isUploadingFile, setIsUploadingFile] = React.useState<boolean>(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const [deletedTracks, _setDeletedTracks] = React.useState<Track[]>([]);
+  const [canUndo, _setCanUndo] = React.useState<boolean>(false);
+  const [canRedo, _setCanRedo] = React.useState<boolean>(false);
+  const [markers, _setMarkers] = React.useState<Marker[]>([]);
+  const [loopRegion, _setLoopRegion] = React.useState<LoopRegion | null>(null);
+  const [metronomeSettings, _setMetronomeSettings] = React.useState<MetronomeSettings>({
+    enabled: false,
+    volume: 1,
+    beatSound: "click",
+    accentFirst: false,
+  });
+
+  // Audio I/O State
+  const [selectedInputDeviceId, _setSelectedInputDeviceId] = React.useState<string | null>(null);
+  const [selectedOutputDeviceId, _setSelectedOutputDeviceId] = React.useState<string | null>(null);
+  const [inputLevel, _setInputLevel] = React.useState<number>(0);
+  const [latencyMs, _setLatencyMs] = React.useState<number>(0);
+  const [bufferUnderruns, _setBufferUnderruns] = React.useState<number>(0);
+  const [bufferOverruns, _setBufferOverruns] = React.useState<number>(0);
+  const [isAudioIOActive, _setIsAudioIOActive] = React.useState<boolean>(false);
+  const [audioIOError, _setAudioIOError] = React.useState<string | null>(null);
+
+  // MIDI State
+  const [midiDevices] = React.useState<MidiDevice[]>([]);
+  
+  // Effect Chain API
+  const effectChainAPI = useEffectChainAPI();
+  
+  // Recording state
+  const [recordingTrackId, _setRecordingTrackId] = React.useState<string | null>(null);
+  const [recordingStartTime, _setRecordingStartTime] = React.useState<number>(0);
+  const [recordingTakeCount, _setRecordingTakeCount] = React.useState<number>(0);
+  const [recordingModeState, setRecordingModeState] = React.useState<'audio' | 'midi' | 'overdub'>('audio');
+  const [punchInEnabled, _setPunchInEnabled] = React.useState<boolean>(false);
+  const [punchInTime, _setPunchInTime] = React.useState<number>(0);
+  const [punchOutTime, _setPunchOutTime] = React.useState<number>(0);
+  const [recordingBlob, _setRecordingBlob] = React.useState<Blob | null>(null);
+  const [recordingError, _setRecordingError] = React.useState<string | null>(null);
+
+  // Codette AI State
+  const [codetteConnected, setCodetteConnected] = React.useState<boolean>(false);
+  const [codetteLoading, setCodetteLoading] = React.useState<boolean>(false);
+  const [codetteSuggestions, setCodetteSuggestions] = React.useState<CodetteSuggestion[]>([]);
+
+  // Modal State Management
+  const [showNewProjectModal, setShowNewProjectModal] = React.useState<boolean>(false);
+  const [showExportModal, setShowExportModal] = React.useState<boolean>(false);
+  const [showAudioSettingsModal, setShowAudioSettingsModal] = React.useState<boolean>(false);
+  const [showAboutModal, setShowAboutModal] = React.useState<boolean>(false);
+  const [showSaveAsModal, setShowSaveAsModal] = React.useState<boolean>(false);
+  const [showOpenProjectModal, setShowOpenProjectModal] = React.useState<boolean>(false);
+  const [showMidiSettingsModal, setShowMidiSettingsModal] = React.useState<boolean>(false);
+  const [showMixerOptionsModal, setShowMixerOptionsModal] = React.useState<boolean>(false);
+  const [showPreferencesModal, setShowPreferencesModal] = React.useState<boolean>(false);
+  const [showShortcutsModal, setShowShortcutsModal] = React.useState<boolean>(false);
+
+  // Bus and MIDI routing state
+  const [buses, setBuses] = React.useState<Bus[]>([]);
+  const [midiRoutes, setMidiRoutes] = React.useState<MidiRoute[]>([]);
+  const [selectedTracks, setSelectedTracks] = React.useState<Set<string>>(new Set());
+  const [clipboardData, setClipboardData] = React.useState<{ type: 'track' | 'clip' | null; data: any | null }>({ type: null, data: null });
+
+  // Unique ID counters
+  const trackIdCounterRef = React.useRef<number>(0);
+  const markerIdCounterRef = React.useRef<number>(0);
+
+  const getUniqueTrackId = () => `track-${++trackIdCounterRef.current}`;
+  const getUniqueMarkerId = () => `marker-${Date.now()}-${++markerIdCounterRef.current}`;
+
+  // Playback timer
+  const playTimerRef = React.useRef<number | null>(null);
+  const lastTickRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    if (isPlaying) {
+      lastTickRef.current = performance.now();
+      const tick = () => {
+        const now = performance.now();
+        const last = lastTickRef.current ?? now;
+        const deltaSec = (now - last) / 1000;
+        lastTickRef.current = now;
+        setCurrentTime((prev) => prev + deltaSec);
+        playTimerRef.current = requestAnimationFrame(tick);
+      };
+      playTimerRef.current = requestAnimationFrame(tick);
+    } else if (playTimerRef.current) {
+      cancelAnimationFrame(playTimerRef.current);
+      playTimerRef.current = null;
+      lastTickRef.current = null;
+    }
+    return () => {
+      if (playTimerRef.current) {
+        cancelAnimationFrame(playTimerRef.current);
+        playTimerRef.current = null;
+      }
+    };
+  }, [isPlaying]);
+
+  // Monitor Codette connection status
+  React.useEffect(() => {
+    const checkConnection = () => {
+      try {
+        const bridge = codetteBridgeRef.current;
+        const status = bridge.getConnectionStatus();
+        setCodetteConnected(status.connected);
+      } catch (error) {
+        console.debug("[DAWContext] Failed to check Codette connection:", error);
+        setCodetteConnected(false);
+      }
+    };
+    
+    checkConnection();
+    const interval = setInterval(checkConnection, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Demo waveform and duration cache
+  const waveformCacheRef = React.useRef<Map<string, number[]>>(new Map());
+  const durationCacheRef = React.useRef<Map<string, number>>(new Map());
+
+  const ensureDemoDataForTrack = (trackId: string) => {
+    if (!waveformCacheRef.current.has(trackId)) {
+      const length = 4096;
+      const data = Array.from({ length }, (_, i) => {
+        const t = (i / length) * Math.PI * 4;
+        return Math.abs(Math.sin(t) * 0.6 + Math.sin(t * 2) * 0.3 + Math.sin(t * 3) * 0.1 + Math.random() * 0.05);
+      });
+      waveformCacheRef.current.set(trackId, data);
+    }
+    if (!durationCacheRef.current.has(trackId)) {
+      durationCacheRef.current.set(trackId, 60);
     }
   };
 
-  const toggleRecord = () => {
-    if (!isRecording) {
-      // Starting recording - initialize audio engine first
-      audioEngineRef.current
-        .initialize()
-        .then(async () => {
-          const success = await audioEngineRef.current.startRecording();
-          if (success) {
-            setIsRecording(true);
-            // Start playback if not already playing
-            if (!isPlaying) {
-              togglePlay();
-            }
-          } else {
-            console.error(
-              "Failed to start recording - getUserMedia may have been denied"
-            );
-          }
-        })
-        .catch((err) => console.error("Audio init failed during record:", err));
-    } else {
-      // Stopping recording - capture the blob and create a track
-      audioEngineRef.current
-        .stopRecording()
-        .then((blob) => {
-          if (blob) {
-            // Create a new audio track from the recording
-            const recordedFile = new File(
-              [blob],
-              `Recording-${Date.now()}.webm`,
-              { type: "audio/webm" }
-            );
-            uploadAudioFile(recordedFile);
-            console.log("Recording saved and imported as new track");
-          }
-          setIsRecording(false);
-        })
-        .catch((err) => console.error("Error stopping recording:", err));
-    }
-  };
-
+  // Basic helper functions
+  const getAudioContextStatus = () => "running";
+  const togglePlay = () => setIsPlaying((prev) => !prev);
+  const toggleRecord = () => setIsRecording((prev) => !prev);
   const stop = () => {
-    // Stop recording first if active
-    if (isRecording) {
-      audioEngineRef.current
-        .stopRecording()
-        .then((blob) => {
-          if (blob) {
-            // Auto-save recording as new track
-            const recordedFile = new File(
-              [blob],
-              `Recording-${Date.now()}.webm`,
-              { type: "audio/webm" }
-            );
-            uploadAudioFile(recordedFile);
-          }
-        })
-        .catch((err) => console.error("Error stopping recording:", err));
-      setIsRecording(false);
-    }
-
-    // Stop all playback
-    audioEngineRef.current.stopAllAudio();
     setIsPlaying(false);
-
-    // Reset timeline to beginning
+    setIsRecording(false);
     setCurrentTime(0);
   };
+  const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
 
-  const seek = (timeSeconds: number) => {
-    setCurrentTime(timeSeconds);
-
-    if (isPlaying) {
-      // If playing, stop all audio and restart from new position
-      audioEngineRef.current.stopAllAudio();
-
-      // Resume playback from seek time
-      tracks.forEach((track) => {
-        if (
-          !track.muted &&
-          (track.type === "audio" || track.type === "instrument")
-        ) {
-          audioEngineRef.current.playAudio(
-            track.id,
-            timeSeconds,
-            track.volume,
-            track.pan,
-            track.inserts
-          );
-        }
-      });
+  const saveProject = async () => {
+    if (!currentProject) return;
+    setIsUploadingFile(true);
+    try {
+      await supabase
+        .from("projects")
+        .insert([{ ...currentProject, id: undefined }])
+        .single();
+      setCurrentProject(currentProject);
+    } catch (error) {
+      console.error("Error saving project:", error);
+      setUploadError("Error saving project. Please try again.");
+    } finally {
+      setIsUploadingFile(false);
     }
-    // If not playing, just update currentTime - playback will start from this position when play is pressed
   };
 
-  // Codette transport control methods (Phase 3)
+  const loadProject = async (projectId: string) => {
+    setIsUploadingFile(true);
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", projectId)
+        .single();
+      if (error) throw error;
+      setCurrentProject(data);
+    } catch (error) {
+      console.error("Error loading project:", error);
+      setUploadError("Error loading project. Please try again.");
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
+
+  const uploadAudioFile = async (file: File): Promise<boolean> => {
+    if (!selectedTrack) {
+      setUploadError("Please select a track first");
+      return false;
+    }
+    const validTypes: string[] = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/flac", "audio/aac"];
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|flac|aac)$/i)) {
+      setUploadError("Unsupported audio format. Use MP3, WAV, OGG, FLAC, or AAC.");
+      return false;
+    }
+    const maxSize = 100 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setUploadError("File too large. Maximum size is 100MB.");
+      return false;
+    }
+    setIsUploadingFile(true);
+    setUploadError(null);
+    try {
+      const success = await audioEngineRef.current.loadAudioFile(selectedTrack.id, file);
+      if (!success) {
+        setUploadError("Failed to decode audio file");
+        return false;
+      }
+      const waveform = audioEngineRef.current.getWaveformData(selectedTrack.id);
+      const duration = audioEngineRef.current.getAudioDuration(selectedTrack.id);
+      waveformCacheRef.current.set(selectedTrack.id, waveform);
+      durationCacheRef.current.set(selectedTrack.id, duration);
+      console.log(`[DAWContext] Audio file loaded: ${duration.toFixed(2)}s, ${waveform.length} waveform samples`);
+      return true;
+    } catch (error) {
+      console.error("Error uploading audio file:", error);
+      setUploadError(error instanceof Error ? error.message : "Unknown error occurred");
+      return false;
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
+
+  const getWaveformData = (trackId: string): number[] => {
+    try {
+      const waveform = audioEngineRef.current.getWaveformData(trackId);
+      if (waveform && waveform.length > 0) {
+        return waveform;
+      }
+    } catch (error) {
+      console.debug("[DAWContext] AudioEngine waveform retrieval failed:", error);
+    }
+    return waveformCacheRef.current.get(trackId) || [];
+  };
+
+  const getAudioDuration = (trackId: string): number => {
+    try {
+      const duration = audioEngineRef.current.getAudioDuration(trackId);
+      if (duration > 0) {
+        return duration;
+      }
+    } catch (error) {
+      console.debug("[DAWContext] AudioEngine duration retrieval failed:", error);
+    }
+    return durationCacheRef.current.get(trackId) || 0;
+  };
+
+  const getAudioBufferData = (trackId: string): Float32Array | null => {
+    try {
+      return audioEngineRef.current.getAudioBufferData(trackId);
+    } catch (error) {
+      console.debug("[DAWContext] AudioEngine buffer retrieval failed:", error);
+      return null;
+    }
+  };
+
+  // Codette AI functions
+  const syncDAWStateToCodette = async (): Promise<boolean> => {
+    try {
+      const bridge = codetteBridgeRef.current;
+      const result = await bridge.syncState(
+        tracks,
+        currentTime,
+        isPlaying,
+        currentProject?.bpm || 120
+      );
+      console.log("[DAWContext] DAW state synced to Codette:", result);
+      return result.synced;
+    } catch (error) {
+      console.error("[DAWContext] Failed to sync DAW state to Codette:", error);
+      return false;
+    }
+  };
+
   const codetteTransportPlay = async () => {
     try {
-      const bridge = codetteRef.current;
+      const bridge = codetteBridgeRef.current;
       const state = await bridge.transportPlay();
-      if (state.is_playing && !isPlaying) {
-        togglePlay();
-      }
+      togglePlay();
+      console.log("[DAWContext] Codette transport play:", state);
       return state;
     } catch (error) {
       console.error("[DAWContext] Codette transport play failed:", error);
-      throw error;
+      return null;
     }
   };
 
   const codetteTransportStop = async () => {
     try {
-      const bridge = codetteRef.current;
+      const bridge = codetteBridgeRef.current;
       const state = await bridge.transportStop();
-      if (!state.is_playing && isPlaying) {
-        stop();
-      }
+      stop();
+      console.log("[DAWContext] Codette transport stop:", state);
       return state;
     } catch (error) {
       console.error("[DAWContext] Codette transport stop failed:", error);
-      throw error;
+      return null;
     }
   };
 
   const codetteTransportSeek = async (timeSeconds: number) => {
     try {
-      const bridge = codetteRef.current;
+      const bridge = codetteBridgeRef.current;
       const state = await bridge.transportSeek(timeSeconds);
       seek(timeSeconds);
+      console.log("[DAWContext] Codette transport seek:", state);
       return state;
     } catch (error) {
       console.error("[DAWContext] Codette transport seek failed:", error);
-      throw error;
+      return null;
     }
   };
 
   const codetteSetTempo = async (bpm: number) => {
     try {
-      const bridge = codetteRef.current;
+      const bridge = codetteBridgeRef.current;
       const state = await bridge.setTempo(bpm);
-      // Store BPM in current project if available
       if (currentProject) {
-        handleSetCurrentProject({
-          ...currentProject,
-          bpm: bpm,
-        });
+        setCurrentProject({ ...currentProject, bpm });
       }
+      console.log("[DAWContext] Codette set tempo:", state);
       return state;
     } catch (error) {
       console.error("[DAWContext] Codette set tempo failed:", error);
-      throw error;
+      return null;
     }
   };
 
@@ -1251,595 +562,44 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     endTime: number = 10
   ) => {
     try {
-      const bridge = codetteRef.current;
+      const bridge = codetteBridgeRef.current;
       const state = await bridge.setLoop(enabled, startTime, endTime);
-      // Update local loop region
-      setLoopRegion({
-        enabled: enabled,
-        startTime: startTime,
-        endTime: endTime,
-      });
+      _setLoopRegion({ enabled, startTime, endTime });
+      console.log("[DAWContext] Codette set loop:", state);
       return state;
     } catch (error) {
       console.error("[DAWContext] Codette set loop failed:", error);
-      throw error;
+      return null;
     }
   };
 
-  const getWaveformData = (trackId: string): number[] => {
-    return audioEngineRef.current.getWaveformData(trackId);
-  };
-
-  const getAudioDuration = (trackId: string): number => {
-    return audioEngineRef.current.getAudioDuration(trackId);
-  };
-
-  const getAudioBufferData = (trackId: string): Float32Array | null => {
-    return audioEngineRef.current.getAudioBufferData(trackId);
-  };
-
-  const getAudioLevels = (): Uint8Array | null => {
-    return audioEngineRef.current.getAudioLevels();
-  };
-
-  const toggleVoiceControl = () => {
-    setVoiceControlActive((prev) => !prev);
-  };
-
-  // Wrapper for setCurrentProject that also saves to localStorage
-  const handleSetCurrentProject = (project: Project | null) => {
-    setCurrentProject(project);
-    if (project) {
-      saveProjectToStorage(project);
-    } else {
-      clearProjectStorage();
-    }
-  };
-
-  const uploadAudioFile = async (file: File): Promise<boolean> => {
-    setIsUploadingFile(true);
-    setUploadError(null);
-
-    try {
-      // Validate file type
-      const validTypes = [
-        "audio/mpeg",
-        "audio/wav",
-        "audio/ogg",
-        "audio/aac",
-        "audio/flac",
-        "audio/mp4",
-      ];
-      if (
-        !validTypes.includes(file.type) &&
-        !file.name.match(/\.(mp3|wav|ogg|aac|flac|m4a)$/i)
-      ) {
-        setUploadError("Invalid audio file format");
-        setIsUploadingFile(false);
-        return false;
-      }
-
-      // Validate file size (max 100MB - configurable via APP_CONFIG if needed)
-      const maxFileSize = 100 * 1024 * 1024; // 100MB limit
-      if (file.size > maxFileSize) {
-        setUploadError("File size exceeds 100MB limit");
-        setIsUploadingFile(false);
-        return false;
-      }
-
-      const colors = [
-        "#3b82f6",
-        "#ef4444",
-        "#10b981",
-        "#f59e0b",
-        "#8b5cf6",
-        "#ec4899",
-        "#14b8a6",
-        "#6366f1",
-      ];
-      const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-      const newTrack: Track = {
-        id: `track-${Date.now()}`,
-        name: file.name.replace(/\.[^/.]+$/, ""),
-        type: "audio",
-        color: randomColor,
-        muted: false,
-        soloed: false,
-        armed: false,
-        inputGain: 0,
-        volume: 0,
-        pan: 0,
-        stereoWidth: 100,
-        phaseFlip: false,
-        inserts: [],
-        sends: [],
-        routing: "Master",
-      };
-
-      // Load audio into engine
-      const audioLoaded = await audioEngineRef.current.loadAudioFile(
-        newTrack.id,
-        file
-      );
-      if (!audioLoaded) {
-        setUploadError("Failed to decode audio file");
-        setIsUploadingFile(false);
-        return false;
-      }
-
-      setTracks((prev) => [...prev, newTrack]);
-      setIsUploadingFile(false);
-      return true;
-    } catch (error: unknown) {
-      console.error("Upload error:", error);
-      setUploadError("Failed to upload file");
-      setIsUploadingFile(false);
-      return false;
-    }
-  };
-
-  const saveProject = async () => {
-    if (!currentProject) return;
-
-    // Save to localStorage (primary storage)
-    const success = saveProjectToStorage(currentProject);
-    
-    if (success) {
-      console.log("[DAWContext] Project saved to localStorage");
-    } else {
-      console.error("[DAWContext] Failed to save project to localStorage");
-    }
-
-    // Optional: attempt Supabase save if available, but don't block
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      
-      if (!user) {
-        console.log("[DAWContext] No Supabase user, skipping cloud save");
-        return;
-      }
-
-      const sessionData = {
-        tracks: currentProject.tracks,
-        bpm: currentProject.bpm,
-        timeSignature: currentProject.timeSignature,
-      };
-
-      const { error } = await supabase.from("projects").upsert({
-        id: currentProject.id,
-        user_id: user.id,
-        name: currentProject.name,
-        sample_rate: currentProject.sampleRate,
-        bit_depth: currentProject.bitDepth,
-        bpm: currentProject.bpm,
-        time_signature: currentProject.timeSignature,
-        session_data: sessionData,
-        updated_at: new Date().toISOString(),
-      });
-
-      if (error) {
-        console.warn("[DAWContext] Supabase save failed (non-critical):", error);
-      } else {
-        console.log("[DAWContext] Project also saved to Supabase");
-      }
-    } catch (error) {
-      console.warn("[DAWContext] Supabase save unavailable (non-critical):", error);
-    }
-  };
-
-  const loadProject = async (projectId: string) => {
-    // Try localStorage first
-    const localProject = loadProjectFromStorage();
-    
-    if (localProject && localProject.id === projectId) {
-      setCurrentProject(localProject);
-      console.log("[DAWContext] Project loaded from localStorage:", projectId);
-      return;
-    }
-
-    // Try Supabase as fallback
-    try {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .eq("id", projectId)
-        .maybeSingle();
-
-      if (error || !data) {
-        console.warn("[DAWContext] Project not found in Supabase:", error);
-        return;
-      }
-
-      const project: Project = {
-        id: data.id,
-        name: data.name,
-        sampleRate: data.sample_rate,
-        bitDepth: data.bit_depth,
-        bpm: data.bpm,
-        timeSignature: data.time_signature,
-        tracks: data.session_data?.tracks || [],
-        buses: [],
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-      };
-
-      setCurrentProject(project);
-      console.log("[DAWContext] Project loaded from Supabase:", projectId);
-    } catch (error) {
-      console.warn("[DAWContext] Supabase load unavailable:", error);
-    }
-  };
-
-  // Phase 3: Marker functions
-  const addMarker = (time: number, name: string = "Marker") => {
-    const newMarker: Marker = {
-      id: `marker-${Date.now()}`,
-      name,
-      time,
-      color: "#3b82f6",
-      locked: false,
-    };
-    setMarkers((prev) => [...prev, newMarker].sort((a, b) => a.time - b.time));
-  };
-
-  const deleteMarker = (markerId: string) => {
-    setMarkers((prev) => prev.filter((m) => m.id !== markerId));
-  };
-
-  const updateMarker = (markerId: string, updates: Partial<Marker>) => {
-    setMarkers((prev) =>
-      prev
-        .map((m) => (m.id === markerId ? { ...m, ...updates } : m))
-        .sort((a, b) => a.time - b.time)
-    );
-  };
-
-  // Phase 3: Loop functions
-  // Phase 3: Loop functions with audio engine sync
-  const setLoopRegionFn = (startTime: number, endTime: number) => {
-    setLoopRegion({
-      enabled: loopRegion.enabled,
-      startTime,
-      endTime,
-    });
-    // Sync with audio engine
-    audioEngineRef.current.setLoopRegion(
-      startTime,
-      endTime,
-      loopRegion.enabled
-    );
-  };
-
-  const toggleLoop = () => {
-    const newLoopState = !loopRegion.enabled;
-    setLoopRegion((prev) => ({ ...prev, enabled: newLoopState }));
-    // Sync loop state with audio engine
-    audioEngineRef.current.setLoopRegion(
-      loopRegion.startTime,
-      loopRegion.endTime,
-      newLoopState
-    );
-    console.log(`Loop ${newLoopState ? "enabled" : "disabled"}`);
-  };
-
-  const clearLoopRegion = () => {
-    setLoopRegion({
-      enabled: false,
-      startTime: 0,
-      endTime: 0,
-    });
-    audioEngineRef.current.setLoopRegion(0, 0, false);
-  };
-
-  // Phase 3: Metronome functions with audio engine sync
-  const toggleMetronome = () => {
-    const newState = !metronomeSettings.enabled;
-    setMetronomeSettings((prev) => ({ ...prev, enabled: newState }));
-    audioEngineRef.current.setMetronomeEnabled(newState);
-  };
-
-  const setMetronomeVolume = (volume: number) => {
-    const clampedVolume = Math.max(0, Math.min(1, volume));
-    setMetronomeSettings((prev) => ({
-      ...prev,
-      volume: clampedVolume,
-    }));
-    audioEngineRef.current.setMetronomeVolume(clampedVolume);
-  };
-
-  const setMetronomeBeatSound = (sound: MetronomeSettings["beatSound"]) => {
-    setMetronomeSettings((prev) => ({ ...prev, beatSound: sound }));
-    // Additional implementation for beat sound variation can be added here
-    console.log(`Metronome beat sound set to: ${sound}`);
-  };
-
-  // Modal handlers
-  const openNewProjectModal = () => setShowNewProjectModal(true);
-  const closeNewProjectModal = () => setShowNewProjectModal(false);
-  const openExportModal = () => setShowExportModal(true);
-  const closeExportModal = () => setShowExportModal(false);
-  const openAudioSettingsModal = () => setShowAudioSettingsModal(true);
-  const closeAudioSettingsModal = () => setShowAudioSettingsModal(false);
-
-  /**
-   * Set the selected input device and apply it to the audio engine
-   */
-  const selectInputDevice = async (deviceId: string) => {
-    try {
-      setSelectedInputDeviceId(deviceId);
-      console.log(`[DAWContext] Selected input device: ${deviceId}`);
-      // Device selection is handled by the AudioDeviceManager
-      // The actual audio routing will happen when recording
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setAudioDeviceError(`Failed to select input device: ${message}`);
-      console.error('[DAWContext] Input device selection error:', error);
-    }
-  };
-
-  /**
-   * Set the selected output device and apply it to the audio engine
-   */
-  const selectOutputDevice = async (deviceId: string) => {
-    try {
-      setSelectedOutputDeviceId(deviceId);
-      
-      // Resume audio context if needed for device switching
-      const audioContext = audioEngineRef.current.getAudioContext();
-      if (audioContext && audioContext.state === 'suspended') {
-        await audioEngineRef.current.resumeAudioContext();
-      }
-      
-      console.log(`[DAWContext] Selected output device: ${deviceId}`);
-      setAudioDeviceError(null);
-      
-      // Update audio context state
-      if (audioContext) {
-        setAudioContextState(audioContext.state);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setAudioDeviceError(`Failed to select output device: ${message}`);
-      console.error('[DAWContext] Output device selection error:', error);
-    }
-  };
-
-  /**
-   * Get current audio context state for status display
-   */
-  const getAudioContextStatus = () => {
-    const audioContext = audioEngineRef.current.getAudioContext();
-    return audioContext?.state || 'unknown';
-  };
-
-  const openAboutModal = () => setShowAboutModal(true);
-  const closeAboutModal = () => setShowAboutModal(false);
-  const openSaveAsModal = () => setShowSaveAsModal(true);
-  const closeSaveAsModal = () => setShowSaveAsModal(false);
-  const openOpenProjectModal = () => setShowOpenProjectModal(true);
-  const closeOpenProjectModal = () => setShowOpenProjectModal(false);
-  const openMidiSettingsModal = () => setShowMidiSettingsModal(true);
-  const closeMidiSettingsModal = () => setShowMidiSettingsModal(false);
-  const openMixerOptionsModal = () => setShowMixerOptionsModal(true);
-  const closeMixerOptionsModal = () => setShowMixerOptionsModal(false);
-  const openPreferencesModal = () => setShowPreferencesModal(true);
-  const closePreferencesModal = () => setShowPreferencesModal(false);
-  const openShortcutsModal = () => setShowShortcutsModal(true);
-  const closeShortcutsModal = () => setShowShortcutsModal(false);
-
-  // Export audio using audio engine mixdown
-  const exportAudio = async (format: string, quality: string) => {
-    try {
-      const { blob, fileName } = await audioEngineRef.current.renderMixdown(
-        tracks,
-        {
-          format,
-          quality,
-          loopStart: loopRegion.enabled ? loopRegion.startTime : 0,
-          loopEnd: loopRegion.enabled ? loopRegion.endTime : undefined,
-          projectName: currentProject?.name,
-        }
-      );
-
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = fileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
-      alert(`Audio exported as ${fileName}`);
-    } catch (error) {
-      console.error("[DAWContext] Audio export failed:", error);
-      const message = error instanceof Error ? error.message : "Unknown error";
-      alert(`Failed to export audio: ${message}`);
-    }
-  };
-
-  // Export current project as JSON file
-  const exportProjectAsFile = () => {
-    if (!currentProject) {
-      alert('No project to export');
-      return;
-    }
-    
-    try {
-      downloadProjectFile(currentProject);
-      console.log('[DAWContext] Project exported successfully');
-    } catch (error) {
-      console.error('[DAWContext] Failed to export project:', error);
-      alert('Failed to export project');
-    }
-  };
-
-  // Import project from JSON file
-  const importProjectFromFileHandler = async () => {
-    try {
-      const file = await openFileDialog();
-      if (!file) return; // User cancelled
-      
-      const result = await importProjectFromFile(file);
-      
-      if (!result.success) {
-        alert(`Failed to import project: ${result.error}`);
-        return;
-      }
-      
-      if (result.project) {
-        // Set the imported project as current
-        handleSetCurrentProject(result.project);
-        
-        // Auto-select first track if available
-        if (result.project.tracks.length > 0) {
-          const firstTrack = result.project.tracks[0];
-          if (firstTrack) {
-            setSelectedTrack(firstTrack);
-          }
-        }
-        
-        console.log('[DAWContext] Project imported successfully:', result.project.name);
-        alert(`Project imported: ${result.project.name}`);
-      }
-    } catch (error) {
-      console.error('[DAWContext] Failed to import project:', error);
-      alert('Failed to import project');
-    }
-  };
-
-  // Bus/Routing functions
-  const createBus = (name: string) => {
-    const newBus: Bus = {
-      id: `bus-${Date.now()}`,
-      name,
-      color: '#4F46E5',
-      volume: 0,
-      pan: 0,
-      muted: false,
-      trackIds: [],
-      inserts: [],
-    };
-    setBuses([...buses, newBus]);
-  };
-
-  const deleteBus = (busId: string) => {
-    setBuses(buses.filter(b => b.id !== busId));
-    // Remove tracks from bus
-    setTracks(tracks.map(t => ({
-      ...t,
-      routing: t.routing === busId ? 'master' : t.routing,
-    })));
-  };
-
-  const addTrackToBus = (trackId: string, busId: string) => {
-    const bus = buses.find(b => b.id === busId);
-    if (bus && !bus.trackIds.includes(trackId)) {
-      setBuses(buses.map(b =>
-        b.id === busId
-          ? { ...b, trackIds: [...b.trackIds, trackId] }
-          : b
-      ));
-      setTracks(tracks.map(t =>
-        t.id === trackId
-          ? { ...t, routing: busId }
-          : t
-      ));
-    }
-  };
-
-  const removeTrackFromBus = (trackId: string, busId: string) => {
-    setBuses(buses.map(b =>
-      b.id === busId
-        ? { ...b, trackIds: b.trackIds.filter(id => id !== trackId) }
-        : b
-    ));
-    setTracks(tracks.map(t =>
-      t.id === trackId
-        ? { ...t, routing: 'master' }
-        : t
-    ));
-  };
-
-  const createSidechain = (sourceTrackId: string, targetTrackId: string) => {
-    console.log(`Created sidechain from ${sourceTrackId} to ${targetTrackId}`);
-    // This would typically update a compressor on the target track to receive sidechain input
-  };
-
-  // Plugin functions
-  const loadPlugin = (trackId: string, pluginName: string) => {
-    const track = tracks.find(t => t.id === trackId);
-    if (track) {
-      const newPlugin: Plugin = {
-        id: `plugin-${Date.now()}`,
-        name: pluginName,
-        type: 'third-party',
-        enabled: true,
-        parameters: {},
-      };
-      const updated = tracks.map(t =>
-        t.id === trackId
-          ? { ...t, inserts: [...t.inserts, newPlugin] }
-          : t
-      );
-      setTracks(updated);
-    }
-  };
-
-  const unloadPlugin = (trackId: string, pluginId: string) => {
-    setTracks(tracks.map(t =>
-      t.id === trackId
-        ? { ...t, inserts: t.inserts.filter(p => p.id !== pluginId) }
-        : t
-    ));
-  };
-
-  // MIDI functions
-  const createMIDIRoute = (sourceDeviceId: string, targetTrackId: string) => {
-    const newRoute: MidiRoute = {
-      id: `route-${Date.now()}`,
-      sourceDeviceId,
-      targetTrackId,
-      channel: 0,
-    };
-    setMidiRoutes([...midiRoutes, newRoute]);
-  };
-
-  const deleteMIDIRoute = (routeId: string) => {
-    setMidiRoutes(midiRoutes.filter(r => r.id !== routeId));
-  };
-
-  const getMIDIRoutesForTrack = (trackId: string) => {
-    return midiRoutes.filter(r => r.targetTrackId === trackId);
-  };
-
-  // Codette AI Integration Methods (Phase 1)
   const getSuggestionsForTrack = async (
     trackId: string,
     context?: string
   ): Promise<CodetteSuggestion[]> => {
-    if (!codetteConnected || !codetteRef.current) {
-      console.warn("[DAWContext] Codette not connected or bridge not initialized");
-      return [];
-    }
-
-    setCodetteLoading(true);
     try {
-      const track = tracks.find((t) => t.id === trackId);
-      if (!track) return [];
+      setCodetteLoading(true);
+      const bridge = codetteBridgeRef.current;
+      const track = tracks.find(t => t.id === trackId);
+      
+      if (!track) {
+        console.warn("[DAWContext] Track not found for suggestions:", trackId);
+        return [];
+      }
 
-      const suggestions = await codetteRef.current.getSuggestions({
-        type: context || "mixing",
+      const response = await bridge.getSuggestions({
+        type: context || 'general',
         track_type: track.type,
-        mood: "professional",
+        mood: 'neutral',
+        genre: 'unknown',
       });
 
-      setCodetteSuggestions(suggestions.suggestions);
-      return suggestions.suggestions;
+      const suggestions = response.suggestions || [];
+      setCodetteSuggestions(suggestions);
+      console.log("[DAWContext] Got suggestions for track:", trackId, suggestions.length);
+      return suggestions;
     } catch (error) {
-      console.error("[DAWContext] Failed to get suggestions:", error);
+      console.error("[DAWContext] Failed to get suggestions for track:", error);
       return [];
     } finally {
       setCodetteLoading(false);
@@ -1850,384 +610,666 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     trackId: string,
     suggestion: CodetteSuggestion
   ): Promise<boolean> => {
-    if (!codetteConnected) {
-      console.warn("[DAWContext] Codette not connected");
-      return false;
-    }
-
     try {
-      // Apply suggestion parameters to track
-      const updatedParams = suggestion.parameters || {};
-
-      updateTrack(trackId, {
-        // Apply parameters based on suggestion type
-        volume: updatedParams.volume !== undefined ? updatedParams.volume : undefined,
-        pan: updatedParams.pan !== undefined ? updatedParams.pan : undefined,
-        inputGain:
-          updatedParams.inputGain !== undefined
-            ? updatedParams.inputGain
-            : undefined,
-      });
-
-      // If suggestion includes plugins/effects, add them
-      if (updatedParams.plugin) {
-        addPluginToTrack(trackId, {
-          id: `plugin-${Date.now()}`,
-          name: updatedParams.plugin,
-          type: "eq",
-          enabled: true,
-          parameters: updatedParams.pluginParams || {},
-        });
-      }
-
-      return true;
+      setCodetteLoading(true);
+      const bridge = codetteBridgeRef.current;
+      const result = await bridge.applySuggestion(trackId, suggestion);
+      
+      console.log("[DAWContext] Applied Codette suggestion:", trackId, suggestion.id);
+      return result?.success ?? true;
     } catch (error) {
       console.error("[DAWContext] Failed to apply suggestion:", error);
       return false;
+    } finally {
+      setCodetteLoading(false);
     }
   };
 
   const analyzeTrackWithCodette = async (trackId: string): Promise<any> => {
-    if (!codetteConnected || !codetteRef.current) {
-      console.warn("[DAWContext] Codette not connected or bridge not initialized");
-      return null;
-    }
-
     try {
-      const track = tracks.find((t) => t.id === trackId);
-      if (!track) return null;
+      setCodetteLoading(true);
+      const bridge = codetteBridgeRef.current;
+      const track = tracks.find(t => t.id === trackId);
+      
+      if (!track) {
+        console.warn("[DAWContext] Track not found for analysis:", trackId);
+        return null;
+      }
 
-      // Calculate duration from BPM (4 bars at current tempo)
-      const barsToAnalyze = 4;
-      const beatsPerBar = 4;
-      const beatsTotal = barsToAnalyze * beatsPerBar;
-      const bpm = currentProject?.bpm || 120;
-      const duration = (beatsTotal * 60) / bpm; // Duration in seconds
-
-      const analysis = await codetteRef.current.analyzeAudio({
-        duration,
+      const audioBuffer = audioEngineRef.current.getAudioBufferData(trackId);
+      const duration = audioEngineRef.current.getAudioDuration(trackId);
+      
+      const audioData = audioBuffer ? {
+        duration: duration,
         sample_rate: 44100,
-        peak_level: track.volume,
-        rms_level: track.volume - 6, // Rough estimate
-      });
+        peak_level: 0.8,
+        rms_level: -12,
+      } : undefined;
 
+      const analysis = await bridge.analyzeAudio(audioData, 'spectrum');
+      console.log("[DAWContext] Analyzed track:", trackId, analysis);
       return analysis;
     } catch (error) {
       console.error("[DAWContext] Failed to analyze track:", error);
       return null;
+    } finally {
+      setCodetteLoading(false);
     }
   };
 
-  const syncDAWStateToCodette = async (): Promise<boolean> => {
-    if (!codetteConnected || !codetteRef.current) {
-      console.warn("[DAWContext] Codette not connected or bridge not initialized");
-      return false;
-    }
-
-    try {
-      const result = await codetteRef.current.syncState(
-        tracks,
-        currentTime,
-        isPlaying,
-        120 // Default to 120 BPM for now
-      );
-      return result.synced;
-    } catch (error) {
-      console.error("[DAWContext] Failed to sync state:", error);
-      return false;
-    }
-  };
-
-  // WebSocket Status Methods (Phase 4)
   const getWebSocketStatus = () => {
-    if (!codetteRef.current) return null;
-    return codetteRef.current.getWebSocketStatus();
+    try {
+      const bridge = codetteBridgeRef.current;
+      return bridge.getWebSocketStatus();
+    } catch (error) {
+      console.warn("[DAWContext] Failed to get WebSocket status:", error);
+      return { connected: false, reconnectAttempts: 0 };
+    }
   };
 
   const getCodetteBridgeStatus = () => {
-    if (!codetteRef.current) return null;
-    return codetteRef.current.getState();
+    try {
+      const bridge = codetteBridgeRef.current;
+      const status = bridge.getConnectionStatus();
+      return {
+        connected: status.connected,
+        reconnectCount: status.reconnectAttempts,
+        isReconnecting: status.isReconnecting,
+      };
+    } catch (error) {
+      console.warn("[DAWContext] Failed to get bridge status:", error);
+      return {
+        connected: false,
+        reconnectCount: 0,
+        isReconnecting: false,
+      };
+    }
   };
 
-  // Create context value object
-  const contextValue = {
-        currentProject,
-        tracks,
-        selectedTrack,
-        isPlaying,
-        isRecording,
-        currentTime,
-        zoom,
-        logicCoreMode,
-        voiceControlActive,
-        cpuUsage,
-        isUploadingFile,
-        uploadError,
-        setCurrentProject: handleSetCurrentProject,
-        addTrack,
-        selectTrack,
-        updateTrack,
-        deleteTrack,
-        duplicateTrack,
-        restoreTrack,
-        permanentlyDeleteTrack,
-        togglePlay,
-        toggleRecord,
-        stop,
-        setLogicCoreMode,
-        toggleVoiceControl,
-        saveProject,
-        loadProject,
-        uploadAudioFile,
-        getWaveformData,
-        getAudioDuration,
-        getAudioBufferData,
-        getAudioLevels,
-        seek,
-        setTrackInputGain,
-        addPluginToTrack,
-        removePluginFromTrack,
-        togglePluginEnabled,
-        undo,
-        redo,
-        canUndo: undoHistory.length > 0,
-        canRedo: redoHistory.length > 0,
-        deletedTracks,
-        // Phase 3
-        markers,
-        loopRegion,
-        metronomeSettings,
-        addMarker,
-        deleteMarker,
-        updateMarker,
-        setLoopRegion: setLoopRegionFn,
-        toggleLoop,
-        clearLoopRegion,
-        toggleMetronome,
-        setMetronomeVolume,
-        setMetronomeBeatSound,
-        // Modal state
-        showNewProjectModal,
-        openNewProjectModal,
-        closeNewProjectModal,
-        showExportModal,
-        openExportModal,
-        closeExportModal,
-        showAudioSettingsModal,
-        openAudioSettingsModal,
-        closeAudioSettingsModal,
-        showAboutModal,
-        openAboutModal,
-        closeAboutModal,
-        // Additional modals
-        showSaveAsModal,
-        openSaveAsModal,
-        closeSaveAsModal,
-        showOpenProjectModal,
-        openOpenProjectModal,
-        closeOpenProjectModal,
-        showMidiSettingsModal,
-        openMidiSettingsModal,
-        closeMidiSettingsModal,
-        showMixerOptionsModal,
-        openMixerOptionsModal,
-        closeMixerOptionsModal,
-        showPreferencesModal,
-        openPreferencesModal,
-        closePreferencesModal,
-        showShortcutsModal,
-        openShortcutsModal,
-        closeShortcutsModal,
-        // Export
-        exportAudio,
-        exportProjectAsFile,
-        importProjectFromFile: importProjectFromFileHandler,
-        // Bus/Routing
-        buses,
-        createBus,
-        deleteBus,
-        addTrackToBus,
-        removeTrackFromBus,
-        createSidechain,
-        // Plugin management
-        loadPlugin,
-        unloadPlugin,
-        loadedPlugins,
-        // MIDI
-        midiDevices,
-        createMIDIRoute,
-        deleteMIDIRoute,
-        getMIDIRoutesForTrack,
-        // Audio I/O
-        inputLevel,
-        latencyMs,
-        bufferUnderruns,
-        bufferOverruns,
-        isAudioIOActive,
-        audioIOError,
-        selectedInputDevice,
-        // Audio Device Selection
-        selectInputDevice,
-        selectOutputDevice,
-        getAudioContextStatus,
-        selectedInputDeviceId,
-        selectedOutputDeviceId,
-        // CPU Usage
-        cpuUsageDetailed: cpuUsageDetailedState,
-        // Codette AI Integration (Phase 1)
-        codetteConnected,
-        codetteLoading,
-        codetteSuggestions,
-        getSuggestionsForTrack,
-        applyCodetteSuggestion,
-        analyzeTrackWithCodette,
-        syncDAWStateToCodette,
-        codetteTransportPlay,
-        codetteTransportStop,
-        codetteTransportSeek,
-        codetteSetTempo,
-        codetteSetLoop,
-        getWebSocketStatus,
-        getCodetteBridgeStatus,
-        // Clipboard Operations
-        clipboardData,
-        cutTrack,
-        copyTrack,
-        pasteTrack,
-        selectAllTracks,
-        deselectAllTracks,
-        selectedTracks,
-        // Recording state
-        recordingTrackId: recordingTrackId,
-        recordingStartTime: recordingStartTime,
-        recordingTakeCount: recordingTakeCount,
-        recordingMode: recordingMode,
-        punchInEnabled: punchInEnabled,
-        punchInTime: punchInTime,
-        punchOutTime: punchOutTime,
-        recordingBlob: recordingBlob,
-        recordingError: recordingError,
-        // Recording methods
-        startRecording: async (trackId: string) => {
-          if (isRecording) return false;
-          try {
-            setIsRecording(true);
-            setRecordingTrackId(trackId);
-            setRecordingStartTime(0);
-            setRecordingTakeCount((prev: number) => prev + 1);
-            
-            // Reset track state for recording
-            updateTrack(trackId, {
-              armed: true,
-              inputGain: 0,
-              volume: -6,
-            });
+  // Recording functions
+  const startRecording = async (trackId: string): Promise<boolean> => {
+    try {
+      _setRecordingTrackId(trackId);
+      _setRecordingStartTime(Date.now());
+      setIsRecording(true);
+      const result = await audioEngineRef.current.startRecording();
+      console.log(`[DAWContext] Recording started on track ${trackId}`);
+      return result;
+    } catch (error) {
+      console.error("[DAWContext] startRecording failed:", error);
+      _setRecordingError(error instanceof Error ? error.message : "Recording failed");
+      return false;
+    }
+  };
 
-            // Start audio engine recording
-            const success = await audioEngineRef.current.startRecording();
-            return success;
-          } catch (error) {
-            console.error("Recording start error:", error);
-            setIsRecording(false);
-            setRecordingError("Failed to start recording");
-            return false;
-          }
-        },
-        stopRecording: async () => {
-          if (!isRecording) {
-            return null;
-          }
-          
-          try {
-            const blob = await audioEngineRef.current.stopRecording();
-            setIsRecording(false);
-            setRecordingTrackId(null);
-            setRecordingBlob(blob);
-            
-            if (blob) {
-              // Create a new audio track from the recording
-              const recordedFile = new File(
-                [blob],
-                `Recording-${Date.now()}.webm`,
-                { type: "audio/webm" }
-              );
-              await uploadAudioFile(recordedFile);
-              return blob;
-            } else {
-              return null;
-            }
-          } catch (error) {
-            console.error("Recording stop error:", error);
-            setIsRecording(false);
-            setRecordingError("Failed to stop recording");
-            return null;
-          }
-        },
-        pauseRecording: () => {
-          if (!isRecording) return false;
-          try {
-            audioEngineRef.current.pauseRecording();
-            setIsRecording(false);
-            return true;
-          } catch (error) {
-            console.error("Recording pause error:", error);
-            return false;
-          }
-        },
-        resumeRecording: () => {
-          if (isRecording) return false;
-          try {
-            audioEngineRef.current.resumeRecording();
-            setIsRecording(true);
-            return true;
-          } catch (error) {
-            console.error("Recording resume error:", error);
-            return false;
-          }
-        },
-        setRecordingMode: (mode: 'audio' | 'midi' | 'overdub') => {
-          setRecordingModeState(mode);
-        },
-        setPunchInOut: (punchIn: number, punchOut: number) => {
-          setPunchInTime(punchIn);
-          setPunchOutTime(punchOut);
-        },
-        togglePunchIn: () => {
-          setPunchInEnabled((prev: boolean) => !prev);
-        },
-        undoLastRecording: () => {
-          console.log("Undo last recording action");
-          setRecordingTakeCount((prev: number) => Math.max(0, prev - 1));
-        },
-      };
+  const stopRecording = async (): Promise<Blob | null> => {
+    try {
+      setIsRecording(false);
+      const blob = await audioEngineRef.current.stopRecording();
+      if (blob && recordingTrackId) {
+        _setRecordingBlob(blob);
+        await audioEngineRef.current.saveRecordingToTrack(recordingTrackId, blob);
+        console.log(`[DAWContext] Recording saved to track ${recordingTrackId}`);
+      }
+      return blob;
+    } catch (error) {
+      console.error("[DAWContext] stopRecording failed:", error);
+      _setRecordingError(error instanceof Error ? error.message : "Stop recording failed");
+      return null;
+    }
+  };
 
-  // Initialize action system with DAW context
-  useEffect(() => {
-    setDAWContext(contextValue);
-  }, [
-    togglePlay,
-    addTrack,
-    deleteTrack,
-    duplicateTrack,
-    updateTrack,
-    seek,
+  const pauseRecording = (): boolean => {
+    try {
+      const result = audioEngineRef.current.pauseRecording();
+      if (result) console.log("[DAWContext] Recording paused");
+      return result;
+    } catch (error) {
+      console.error("[DAWContext] pauseRecording failed:", error);
+      return false;
+    }
+  };
+
+  const resumeRecording = (): boolean => {
+    try {
+      const result = audioEngineRef.current.resumeRecording();
+      if (result) console.log("[DAWContext] Recording resumed");
+      return result;
+    } catch (error) {
+      console.error("[DAWContext] resumeRecording failed:", error);
+      return false;
+    }
+  };
+
+  const setPunchInOut = (punchIn: number, punchOut: number) => {
+    _setPunchInTime(punchIn);
+    _setPunchOutTime(punchOut);
+    console.log(`[DAWContext] Punch in/out set: ${punchIn}s - ${punchOut}s`);
+  };
+
+  const togglePunchIn = () => {
+    _setPunchInEnabled((prev) => !prev);
+    console.log(`[DAWContext] Punch in ${punchInEnabled ? 'disabled' : 'enabled'}`);
+  };
+
+  const setRecordingMode = (mode: 'audio' | 'midi' | 'overdub') => {
+    setRecordingModeState(mode);
+    console.log(`[DAWContext] Recording mode set to ${mode}`);
+  };
+
+  const undoLastRecording = () => {
+    console.log("[DAWContext] Undo last recording (stub)");
+  };
+
+  // Bus/Routing functions
+  const createBus = (name: string) => {
+    const bus: Bus = {
+      id: `bus-${Date.now()}`,
+      name,
+      trackIds: [],
+      volume: 0,
+      pan: 0,
+      color: '#888',
+      muted: false,
+      inserts: [],
+    };
+    setBuses((prev) => [...prev, bus]);
+    console.log(`[DAWContext] Bus created: ${name}`);
+  };
+
+  const deleteBus = (busId: string) => {
+    setBuses((prev) => prev.filter((b) => b.id !== busId));
+    console.log(`[DAWContext] Bus ${busId} deleted`);
+  };
+
+  const addTrackToBus = (trackId: string, busId: string) => {
+    setBuses((prev) =>
+      prev.map((b) =>
+        b.id === busId ? { ...b, trackIds: [...b.trackIds, trackId] } : b
+      )
+    );
+    console.log(`[DAWContext] Track ${trackId} added to bus ${busId}`);
+  };
+
+  const removeTrackFromBus = (trackId: string, busId: string) => {
+    setBuses((prev) =>
+      prev.map((b) =>
+        b.id === busId ? { ...b, trackIds: b.trackIds.filter((t: string) => t !== trackId) } : b
+      )
+    );
+    console.log(`[DAWContext] Track ${trackId} removed from bus ${busId}`);
+  };
+
+  const createSidechain = (sourceTrackId: string, targetTrackId: string) => {
+    setTracks((prev) => prev.map((t) => (t.id === targetTrackId ? { ...t, routing: `sidechain:${sourceTrackId}` } : t)));
+    console.log(`[DAWContext] Sidechain created: ${sourceTrackId} ? ${targetTrackId}`);
+  };
+
+  // MIDI functions
+  const createMIDIRoute = (sourceDeviceId: string, targetTrackId: string) => {
+    const route: MidiRoute = {
+      id: `route-${Date.now()}`,
+      sourceDeviceId,
+      targetTrackId,
+      channel: 0,
+    };
+    setMidiRoutes((prev) => [...prev, route]);
+    console.log(`[DAWContext] MIDI route created: ${sourceDeviceId} ? ${targetTrackId}`);
+  };
+
+  const deleteMIDIRoute = (routeId: string) => {
+    setMidiRoutes((prev) => prev.filter((r) => r.id !== routeId));
+    console.log(`[DAWContext] MIDI route ${routeId} deleted`);
+  };
+
+  const getMIDIRoutesForTrack = (trackId: string): MidiRoute[] => {
+    return midiRoutes.filter((r) => r.targetTrackId === trackId);
+  };
+
+  // Export functions
+  const exportAudio = async (format: string, quality: string) => {
+    console.log(`[DAWContext] Exporting audio as ${format} (${quality})`);
+  };
+
+  const exportProjectAsFile = () => {
+    const projectData = {
+      currentProject,
+      tracks,
+      buses,
+      midiRoutes,
+      loopRegion,
+      metronomeSettings,
+    };
+    const json = JSON.stringify(projectData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentProject?.name || 'project'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    console.log("[DAWContext] Project exported successfully");
+  };
+
+  const importProjectFromFile = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const data = JSON.parse(text);
+      setCurrentProject(data.currentProject);
+      setTracks(data.tracks || []);
+      setBuses(data.buses || []);
+      setMidiRoutes(data.midiRoutes || []);
+      _setLoopRegion(data.loopRegion || null);
+      _setMetronomeSettings(data.metronomeSettings || { enabled: false, volume: 1, beatSound: "click", accentFirst: false });
+      console.log("[DAWContext] Project imported successfully");
+    };
+    input.click();
+  };
+
+  const unloadPlugin = (trackId: string, pluginId: string) => {
+    removePluginFromTrack(trackId, pluginId);
+    console.log(`[DAWContext] Plugin ${pluginId} unloaded from track ${trackId}`);
+  };
+
+  // Audio engine wrapper functions
+  const seek = (timeSeconds: number) => {
+    setCurrentTime(timeSeconds);
+    if (isPlaying) {
+      try {
+        audioEngineRef.current.stopAllAudio();
+        setIsPlaying(false);
+        setIsPlaying(true);
+      } catch (error) {
+        console.error("[DAWContext] Seek failed:", error);
+      }
+    }
+  };
+
+  const setTrackInputGain = (trackId: string, gainDb: number) => {
+    try {
+      audioEngineRef.current.setTrackInputGain(trackId, gainDb);
+      setTracks((prev) =>
+        prev.map((t) => (t.id === trackId ? { ...t, inputGain: gainDb } : t))
+      );
+    } catch (error) {
+      console.error("[DAWContext] setTrackInputGain failed:", error);
+    }
+  };
+
+  const getAudioLevels = (): Uint8Array | null => {
+    try {
+      return audioEngineRef.current.getAudioLevels();
+    } catch (error) {
+      console.debug("[DAWContext] getAudioLevels failed:", error);
+      return null;
+    }
+  };
+
+  // Plugin management functions
+  const addPluginToTrack = (trackId: string, plugin: Plugin) => {
+    setTracks((prev) =>
+      prev.map((t) =>
+        t.id === trackId
+          ? { ...t, inserts: [...(t.inserts || []), plugin] }
+          : t
+      )
+    );
+    console.log(`[DAWContext] Plugin ${plugin.id} added to track ${trackId}`);
+  };
+
+  const removePluginFromTrack = (trackId: string, pluginId: string) => {
+    setTracks((prev) =>
+      prev.map((t) =>
+        t.id === trackId
+          ? { ...t, inserts: (t.inserts || []).filter((p) => p.id !== pluginId) }
+          : t
+      )
+    );
+    console.log(`[DAWContext] Plugin ${pluginId} removed from track ${trackId}`);
+  };
+
+  const togglePluginEnabled = (trackId: string, pluginId: string, enabled: boolean) => {
+    effectChainAPI.enableDisableEffect(trackId, pluginId, enabled);
+    console.log(`[DAWContext] Plugin ${pluginId} on track ${trackId}: ${enabled ? 'enabled' : 'disabled'}`);
+  };
+
+  const loadPlugin = (trackId: string, pluginName: string) => {
+    const plugin: Plugin = {
+      id: `plugin-${Date.now()}`,
+      name: pluginName,
+      type: 'utility',
+      parameters: {},
+      enabled: true,
+    };
+    addPluginToTrack(trackId, plugin);
+    console.log(`[DAWContext] Plugin ${pluginName} loaded on track ${trackId}`);
+  };
+
+  // Stub functions for undo/redo
+  const undo = () => { 
+    console.log("[DAWContext] undo (stub)");
+  };
+
+  const redo = () => { 
+    console.log("[DAWContext] redo (stub)");
+  };
+
+  // Clipboard functions
+  const cutTrack = (trackId: string) => {
+    const track = tracks.find(t => t.id === trackId);
+    if (track) {
+      setClipboardData({ type: 'track', data: track });
+      deleteTrack(trackId);
+    }
+  };
+
+  const copyTrack = (trackId: string) => {
+    const track = tracks.find(t => t.id === trackId);
+    if (track) {
+      setClipboardData({ type: 'track', data: track });
+    }
+  };
+
+  const pasteTrack = () => {
+    if (clipboardData.type === 'track' && clipboardData.data) {
+      const newTrack = { ...clipboardData.data, id: getUniqueTrackId() };
+      setTracks(prev => [...prev, newTrack]);
+    }
+  };
+
+  const selectAllTracks = () => {
+    setSelectedTracks(new Set(tracks.map(t => t.id)));
+  };
+
+  const deselectAllTracks = () => {
+    setSelectedTracks(new Set());
+  };
+
+  // Track management functions
+  const addTrack = (type: Track["type"]) => {
+    const t: Track = {
+      id: getUniqueTrackId(),
+      name: `${type} ${tracks.length + 1}`,
+      type,
+      color: '#888',
+      muted: false,
+      soloed: false,
+      armed: false,
+      inputGain: 0,
+      volume: 0,
+      pan: 0,
+      stereoWidth: 100,
+      phaseFlip: false,
+      inserts: [],
+      sends: [],
+      routing: '',
+    };
+    setTracks((prev) => [...prev, t]);
+    ensureDemoDataForTrack(t.id);
+  };
+
+  const selectTrack = (trackId: string) => {
+    const t = tracks.find((tr) => tr.id === trackId) || null;
+    setSelectedTrack(t);
+    if (t) ensureDemoDataForTrack(t.id);
+  };
+
+  const updateTrack = (trackId: string, updates: Partial<Track>) => {
+    setTracks((prev) => prev.map((t) => (t.id === trackId ? { ...t, ...updates } : t)));
+  };
+
+  const deleteTrack = (trackId: string) => {
+    setTracks((prev) => prev.filter((t) => t.id !== trackId));
+    const del = tracks.find((t) => t.id === trackId);
+    if (del) _setDeletedTracks((prev) => [...prev, del]);
+  };
+
+  const duplicateTrack = async (trackId: string) => {
+    const source = tracks.find((t) => t.id === trackId);
+    if (!source) return null;
+    const copy: Track = { ...source, id: getUniqueTrackId() };
+    setTracks((prev) => [...prev, copy]);
+    await audioEngineRef.current.duplicateTrackAudioBuffer(source.id, copy.id);
+    const wf = waveformCacheRef.current.get(source.id);
+    if (wf) waveformCacheRef.current.set(copy.id, wf);
+    const dur = durationCacheRef.current.get(source.id);
+    if (dur) durationCacheRef.current.set(copy.id, dur);
+    return copy;
+  };
+
+  const restoreTrack = (trackId: string) => {
+    const t = deletedTracks.find((tr) => tr.id === trackId);
+    if (!t) return;
+    setTracks((prev) => [...prev, { ...t }]);
+    _setDeletedTracks((prev) => prev.filter((tr) => tr.id !== trackId));
+  };
+
+  const permanentlyDeleteTrack = (trackId: string) => {
+    _setDeletedTracks((prev) => prev.filter((tr) => tr.id !== trackId));
+  };
+
+  // Marker functions
+  const addMarker = (time: number, name: string) => {
+    const marker: Marker = { id: getUniqueMarkerId(), name, time, color: '#fff', locked: false };
+    _setMarkers((prev) => [...prev, marker]);
+  };
+
+  const deleteMarker = (markerId: string) => {
+    _setMarkers((prev) => prev.filter((m) => m.id !== markerId));
+  };
+
+  const updateMarker = (markerId: string, updates: Partial<Marker>) => {
+    _setMarkers((prev) => prev.map((m) => (m.id === markerId ? { ...m, ...updates } : m)));
+  };
+
+  // Loop functions
+  const setLoopRegion = (startTime: number, endTime: number) => {
+    _setLoopRegion({ enabled: loopRegion?.enabled ?? true, startTime, endTime });
+  };
+
+  const toggleLoop = () => {
+    if (!loopRegion) return;
+    const enabled = loopRegion.enabled;
+    _setLoopRegion((prev) => (prev ? { ...prev, enabled: !enabled } : prev));
+  };
+
+  const clearLoopRegion = () => {
+    _setLoopRegion(null);
+  };
+
+  // Metronome functions
+  const toggleMetronome = () => {
+    _setMetronomeSettings((prev) => ({ ...prev, enabled: !prev.enabled }));
+  };
+
+  const setMetronomeVolume = (volume: number) => {
+    _setMetronomeSettings((prev) => ({ ...prev, volume }));
+  };
+
+  const setMetronomeBeatSound = (sound: MetronomeSettings["beatSound"]) => {
+    _setMetronomeSettings((prev) => ({ ...prev, beatSound: sound }));
+  };
+
+  // Context value assembly
+  const contextValue: DAWContextType = {
+    currentProject,
+    tracks,
     selectedTrack,
     isPlaying,
+    isRecording,
     currentTime,
-  ]);
+    zoom,
+    logicCoreMode,
+    voiceControlActive,
+    cpuUsage,
+    isUploadingFile,
+    uploadError,
+    deletedTracks,
+    canUndo,
+    canRedo,
+    markers,
+    loopRegion,
+    metronomeSettings,
+    inputLevel,
+    latencyMs,
+    bufferUnderruns,
+    bufferOverruns,
+    isAudioIOActive,
+    audioIOError,
+    selectedInputDevice: null,
+    selectedInputDeviceId,
+    selectedOutputDeviceId,
+    selectInputDevice: async (deviceId: string) => { _setSelectedInputDeviceId(deviceId); },
+    selectOutputDevice: async (deviceId: string) => { _setSelectedOutputDeviceId(deviceId); },
+    getAudioContextStatus,
+    setCurrentProject,
+    togglePlay,
+    toggleRecord,
+    stop,
+    setLogicCoreMode: (mode: LogicCoreMode) => setLogicCoreMode(mode),
+    toggleVoiceControl,
+    saveProject,
+    loadProject,
+    uploadAudioFile,
+    getWaveformData,
+    getAudioDuration,
+    getAudioBufferData,
+    getAudioLevels,
+    seek,
+    setTrackInputGain,
+    addPluginToTrack,
+    removePluginFromTrack,
+    togglePluginEnabled,
+    undo,
+    redo,
+    addTrack,
+    selectTrack,
+    updateTrack,
+    deleteTrack,
+    duplicateTrack,
+    restoreTrack,
+    permanentlyDeleteTrack,
+    addMarker,
+    deleteMarker,
+    updateMarker,
+    setLoopRegion,
+    toggleLoop,
+    clearLoopRegion,
+    toggleMetronome,
+    setMetronomeVolume,
+    setMetronomeBeatSound,
+    openNewProjectModal: () => setShowNewProjectModal(true),
+    closeNewProjectModal: () => setShowNewProjectModal(false),
+    openExportModal: () => setShowExportModal(true),
+    closeExportModal: () => setShowExportModal(false),
+    openAudioSettingsModal: () => setShowAudioSettingsModal(true),
+    closeAudioSettingsModal: () => setShowAudioSettingsModal(false),
+    openAboutModal: () => setShowAboutModal(true),
+    closeAboutModal: () => setShowAboutModal(false),
+    openSaveAsModal: () => setShowSaveAsModal(true),
+    closeSaveAsModal: () => setShowSaveAsModal(false),
+    openOpenProjectModal: () => setShowOpenProjectModal(true),
+    closeOpenProjectModal: () => setShowOpenProjectModal(false),
+    openMidiSettingsModal: () => setShowMidiSettingsModal(true),
+    closeMidiSettingsModal: () => setShowMidiSettingsModal(false),
+    openMixerOptionsModal: () => setShowMixerOptionsModal(true),
+    closeMixerOptionsModal: () => setShowMixerOptionsModal(false),
+    openPreferencesModal: () => setShowPreferencesModal(true),
+    closePreferencesModal: () => setShowPreferencesModal(false),
+    openShortcutsModal: () => setShowShortcutsModal(true),
+    closeShortcutsModal: () => setShowShortcutsModal(false),
+    showNewProjectModal,
+    showExportModal,
+    showAudioSettingsModal,
+    showAboutModal,
+    showSaveAsModal,
+    showOpenProjectModal,
+    showMidiSettingsModal,
+    showMixerOptionsModal,
+    showPreferencesModal,
+    showShortcutsModal,
+    exportAudio,
+    exportProjectAsFile,
+    importProjectFromFile,
+    buses,
+    createBus,
+    deleteBus,
+    addTrackToBus,
+    removeTrackFromBus,
+    createSidechain,
+    loadPlugin,
+    unloadPlugin,
+    midiDevices,
+    createMIDIRoute,
+    deleteMIDIRoute,
+    getMIDIRoutesForTrack,
+    codetteConnected,
+    codetteLoading,
+    codetteSuggestions,
+    getSuggestionsForTrack,
+    applyCodetteSuggestion,
+    analyzeTrackWithCodette,
+    syncDAWStateToCodette,
+    codetteTransportPlay,
+    codetteTransportStop,
+    codetteTransportSeek,
+    codetteSetTempo,
+    codetteSetLoop,
+    getWebSocketStatus,
+    getCodetteBridgeStatus,
+    clipboardData,
+    cutTrack,
+    copyTrack,
+    pasteTrack,
+    selectAllTracks,
+    deselectAllTracks,
+    selectedTracks,
+    cpuUsageDetailed: {},
+    recordingTrackId,
+    recordingStartTime,
+    recordingTakeCount,
+    recordingMode: recordingModeState,
+    punchInEnabled,
+    punchInTime,
+    punchOutTime,
+    recordingBlob,
+    recordingError,
+    startRecording,
+    stopRecording,
+    pauseRecording,
+    resumeRecording,
+    setRecordingMode,
+    setPunchInOut,
+    togglePunchIn,
+    undoLastRecording,
+    effectChainsByTrack: effectChainAPI.effectChainsByTrack,
+    getTrackEffects: effectChainAPI.getTrackEffects,
+    addEffectToTrack: effectChainAPI.addEffectToTrack,
+    removeEffectFromTrack: effectChainAPI.removeEffectFromTrack,
+    updateEffectParameter: effectChainAPI.updateEffectParameter,
+    enableDisableEffect: effectChainAPI.enableDisableEffect,
+    setEffectWetDry: effectChainAPI.setEffectWetDry,
+    getEffectChainForTrack: effectChainAPI.getEffectChainForTrack,
+    processTrackEffects: effectChainAPI.processTrackEffects,
+    hasActiveEffects: effectChainAPI.hasActiveEffects,
+    loadedPlugins: new Map(),
+  };
 
-  return (
-    <DAWContext.Provider value={contextValue}>
-      {children}
-    </DAWContext.Provider>
-  );
+  return <DAWContext.Provider value={contextValue}>{children}</DAWContext.Provider>;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
+// Custom hook to use DAW context
 export function useDAW() {
-  const context = useContext(DAWContext);
+  const context = React.useContext(DAWContext);
   if (!context) {
-    throw new Error("useDAW must be used within DAWProvider");
+    throw new Error("useDAW must be used within a DAWProvider");
   }
   return context;
 }

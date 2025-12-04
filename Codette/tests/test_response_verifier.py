@@ -1,5 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
+import sys
+from pathlib import Path
+
+# Add Codette/src to path for imports
+codette_src = Path(__file__).parent.parent.parent / "src"
+if str(codette_src) not in sys.path:
+    sys.path.insert(0, str(codette_src))
+
 from utils.response_verifier import ResponseVerifier
 from typing import Dict, Any
 

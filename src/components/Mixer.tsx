@@ -1,12 +1,11 @@
 import { useDAW } from '../contexts/DAWContext';
-import { Sliders, ChevronDown, ChevronUp, Sparkles, Settings } from 'lucide-react';
+import { Sliders, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { useState, useRef, useEffect, memo } from 'react';
 import MixerTile from './MixerTile';
 import DetachablePluginRack from './DetachablePluginRack';
 import MixerOptionsTile from './MixerOptionsTile';
 import { Tooltip, TOOLTIP_LIBRARY } from './TooltipProvider';
 import { KeyboardMusic, Volume2, Music2, Zap } from 'lucide-react';
-import { EnhancedMixerPanel } from './EnhancedMixerPanel';
 import InputMonitor from './InputMonitor';
 import { RecordingControls } from './RecordingControls';
 import { RecordingStatus } from './RecordingStatus';
@@ -47,9 +46,6 @@ const MixerComponent = () => {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showPluginRack, setShowPluginRack] = useState(false); // Show/hide plugin rack panel
   const [showAdvancedMixer, setShowAdvancedMixer] = useState(false); // Show/hide advanced mixer panel
-
-  // Recording UI state
-  const [showRecordingPanel, setShowRecordingPanel] = useState(false);
   const [showPunchPanel, setShowPunchPanel] = useState(false);
 
   // MIDI Quick Actions Handler
@@ -459,7 +455,7 @@ const MixerComponent = () => {
                         onUpdate={updateTrack}
                         onAddPlugin={addPluginToTrack}
                         onRemovePlugin={removePluginFromTrack}
-                        togglePluginEnabled={togglePluginEnabled}
+                        // togglePluginEnabled not part of MixerTile props; handled via DetachablePluginRack
                         levels={levels}
                         stripWidth={scaledStripWidth}
                         stripHeight={stripHeight}
@@ -496,7 +492,6 @@ const MixerComponent = () => {
                   {/* Input Monitor - Left Column */}
                   <div className="col-span-1">
                     <InputMonitor 
-                      trackId={selectedTrack.id}
                       showLabel={true}
                       compact={false}
                       height="h-32"

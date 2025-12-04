@@ -200,7 +200,7 @@ export default function TopBar() {
         <button
           onClick={toggleLoop}
           className={`p-1.5 rounded transition-all duration-200 ${
-            loopRegion.enabled
+            loopRegion && loopRegion.enabled
               ? "bg-blue-600 text-white shadow-lg shadow-blue-500/40 animate-control-highlight"
               : "hover:bg-gray-800 text-gray-300"
           }`}
@@ -241,7 +241,7 @@ export default function TopBar() {
         <button
           onClick={toggleMetronome}
           className={`p-1.5 rounded transition-all duration-200 ${
-            metronomeSettings.enabled
+            metronomeSettings && metronomeSettings.enabled
               ? "bg-yellow-600 text-white shadow-lg shadow-yellow-500/40"
               : "hover:bg-gray-800 text-gray-300"
           }`}
@@ -252,7 +252,7 @@ export default function TopBar() {
 
         {/* Add Marker */}
         <button
-          onClick={() => addMarker(currentTime, `Marker ${markers.length + 1}`)}
+          onClick={() => addMarker(currentTime, `Marker ${Array.isArray(markers) ? markers.length + 1 : 1}`)}
           className="p-1.5 rounded hover:bg-gray-800 text-purple-400 transition"
           title="Add Marker"
         >

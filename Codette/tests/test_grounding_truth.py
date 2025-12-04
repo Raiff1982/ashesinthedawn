@@ -1,4 +1,12 @@
 import asyncio
+import sys
+from pathlib import Path
+
+# Add Codette/src to path for imports
+codette_src = Path(__file__).parent.parent / "src"
+if str(codette_src) not in sys.path:
+    sys.path.insert(0, str(codette_src))
+
 from knowledge_base.grounding_truth import GroundingTruth
 
 def test_grounding_truth():

@@ -1,10 +1,10 @@
 {
-  "ActiveTargetSystem": "WSL: Ubuntu",
   "DevContainersInfoBarHidden": true,
+  "ActiveTargetSystem": "Local Machine",
   "ExpandedNodes": [
     "",
-    "\\src",
-    "\\src\\components"
+    "\\Codette",
+    "\\Codette\\tests"
   ],
   "PreviewInSolutionExplorer": false
 }

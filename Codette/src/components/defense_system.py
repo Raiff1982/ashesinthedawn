@@ -89,42 +89,14 @@ class DefenseSystem:
                             "energy_cost": energy_cost,
                             "remaining_energy": self.energy_pool,
                             "consciousness_factor": consciousness_factor,
-                            "timestamp": current_time
+                            "timestamp": current_time.isoformat()
                         })
                     except Exception as e:
                         logger.warning(f"Strategy {name} failed: {e}")
                 else:
-                    logger.warning(f"Insufficient energy for {name} strategy")
+                    logger.debug(f"Insufficient energy for {name} strategy ({self.energy_pool} < {energy_cost})")
                     
-            return protected_text
-            
-            for name, strategy in self.active_strategies.items():
-                # Check if we have enough energy
-                if self.energy_pool >= strategy["energy_cost"]:
-                    try:
-                        # Apply defense with consciousness-aware strength
-                        protected_text = strategy["processor"](protected_text)
-                        
-                        # Consume energy
-                        energy_cost = strategy["energy_cost"] * consciousness_factor
-                        self.energy_pool -= energy_cost
-                        
-                        # Log defense application
-                        self.defense_log.append({
-                            "timestamp": timestamp,
-                            "strategy": name,
-                            "energy_cost": energy_cost,
-                            "consciousness_factor": consciousness_factor
-                        })
-                    except Exception as e:
-                        logger.warning(f"Strategy {name} failed: {e}")
-                else:
-                    logger.warning(f"Insufficient energy for {name} strategy")
-            
-            # Regenerate some energy
-            self.energy_pool = min(1.0, self.energy_pool + 0.1)
-            
-            # Prune old logs
+            # Prune old logs if too large
             if len(self.defense_log) > 100:
                 self.defense_log = self.defense_log[-50:]
                 

@@ -42,35 +42,59 @@ export default function EffectChainPanel() {
         ) : (
           <div className="space-y-2">
             {trackPlugins.map((plugin, index) => (
-              <div key={plugin.id} className="bg-gray-800 rounded border border-gray-700 overflow-hidden">
+              <div key={plugin.id} className="bg-gray-800 rounded border border-gray-700 overflow-hidden relative group">
                 {/* Plugin Header */}
                 <button
                   onClick={() => setExpandedPlugin(expandedPlugin === plugin.id ? null : plugin.id)}
-                  className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-750 transition-colors group"
+                  className="w-full px-3 py-2 pr-20 flex items-center gap-2 hover:bg-gray-750 transition-colors text-left"
                 >
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-xs font-medium text-gray-200 bg-gray-700 px-1.5 py-0.5 rounded">
-                      {index + 1}
-                    </span>
-                    <span className="text-sm font-medium text-gray-100">{plugin.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-1 hover:bg-gray-700 rounded">
-                      <Volume2 className="w-3 h-3 text-gray-400" />
-                    </button>
-                    {selectedTrack && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removePluginFromTrack(selectedTrack.id, plugin.id);
-                        }}
-                        className="p-1 hover:bg-red-600/20 rounded"
-                      >
-                        <Trash2 className="w-3 h-3 text-red-400" />
-                      </button>
-                    )}
-                  </div>
+                  <span className="text-xs font-medium text-gray-200 bg-gray-700 px-1.5 py-0.5 rounded">
+                    {index + 1}
+                  </span>
+                  <span className="text-sm font-medium text-gray-100">{plugin.name}</span>
                 </button>
+                
+                {/* Plugin Actions - Outside button to avoid nesting */}
+                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Toggle mute/bypass logic here
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        // Toggle mute logic here
+                      }
+                    }}
+                    className="p-1 hover:bg-gray-700 rounded cursor-pointer"
+                    aria-label="Toggle plugin bypass"
+                  >
+                    <Volume2 className="w-3 h-3 text-gray-400" />
+                  </div>
+                  {selectedTrack && (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removePluginFromTrack(selectedTrack.id, plugin.id);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          removePluginFromTrack(selectedTrack.id, plugin.id);
+                        }
+                      }}
+                      className="p-1 hover:bg-red-600/20 rounded cursor-pointer"
+                      aria-label="Remove plugin"
+                    >
+                      <Trash2 className="w-3 h-3 text-red-400" />
+                    </div>
+                  )}
+                </div>
 
                 {/* Plugin Parameters */}
                 {expandedPlugin === plugin.id && (

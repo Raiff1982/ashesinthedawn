@@ -8,13 +8,11 @@ import { Radio } from 'lucide-react';
 import { Tooltip } from './TooltipProvider';
 
 interface PhaseCorrelationMeterProps {
-  _trackId?: string;
   width?: number;
   height?: number;
 }
 
 export function PhaseCorrelationMeter({
-  _trackId,
   width = 120,
   height = 120,
 }: PhaseCorrelationMeterProps) {

@@ -135,6 +135,8 @@ export interface AudioEvent {
 }
 
 // Phase 3: Real-Time Audio I/O Types
+export type AudioContextState = 'suspended' | 'running' | 'closed' | 'interrupted';
+
 export interface AudioDevice {
   deviceId: string;
   label: string;

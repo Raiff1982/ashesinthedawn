@@ -4,55 +4,55 @@
  */
 
 import { useState } from 'react';
-import { Volume2 } from 'lucide-react';
 import { Tooltip } from './TooltipProvider';
 
 interface StereoWidthControlProps {
-  _trackId?: string;
-  stereoWidth: number;
-  onStereoWidthChange: (width: number) => void;
-  _height?: number;
+  stereoWidth?: number;
+  onStereoWidthChange?: (width: number) => void;
 }
 
 export function StereoWidthControl({
-  _trackId,
-  stereoWidth = 100,
+  stereoWidth: incomingWidth = 100,
   onStereoWidthChange,
-  _height = 120,
 }: StereoWidthControlProps) {
-  const [isHovering, setIsHovering] = useState(false);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newWidth = parseFloat(e.target.value);
-    onStereoWidthChange(newWidth);
+  const [stereoWidth, setStereoWidth] = useState<number>(incomingWidth);
+  const handleChange = (newWidth: number) => {
+    const clamped = Math.max(0, Math.min(200, newWidth));
+    setStereoWidth(clamped);
+    onStereoWidthChange?.(clamped);
   };
 
   // Calculate stereo field visualization
-  const getStereoFieldColor = (width: number) => {
-    if (width < 50) return '#ff6b6b'; // Mono (red)
-    if (width < 100) return '#ffa500'; // Narrow (orange)
-    if (width === 100) return '#52b788'; // Normal (green)
+  const getStereoFieldColor = (value: number) => {
+    if (value < 50) return '#ff6b6b'; // Mono (red)
+    if (value < 100) return '#ffa500'; // Narrow (orange)
+    if (value === 100) return '#52b788'; // Normal (green)
     return '#3a86ff'; // Wide (blue)
   };
 
-  const getFieldLabel = (width: number) => {
-    if (width < 50) return 'MONO';
-    if (width < 100) return 'NARROW';
-    if (width === 100) return 'NORMAL';
-    if (width <= 150) return 'WIDE';
+  const getFieldLabel = (value: number) => {
+    if (value < 50) return 'MONO';
+    if (value < 100) return 'NARROW';
+    if (value === 100) return 'NORMAL';
+    if (value <= 150) return 'WIDE';
     return 'ULTRA-WIDE';
   };
 
   return (
-    <div className="space-y-2 p-3 bg-gray-800 rounded-lg border border-gray-700">
-      <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold text-gray-400 flex items-center gap-1">
-          <Volume2 className="w-3 h-3" />
-          STEREO WIDTH
-        </label>
-        <span className="text-xs font-mono bg-gray-900 px-2 py-1 rounded text-gray-300">
+    <div className="p-3 bg-gray-800 rounded border border-gray-700 space-y-2">
+      <label className="text-xs font-semibold text-gray-400">Stereo Width</label>
+      <div className="flex items-center gap-2">
+        <div className="text-xs text-gray-300 w-12 text-right">
           {stereoWidth.toFixed(0)}%
-        </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={200}
+          value={stereoWidth}
+          onChange={(e) => handleChange(parseInt(e.target.value))}
+          className="flex-1"
+        />
       </div>
 
       <Tooltip
@@ -80,13 +80,8 @@ export function StereoWidthControl({
             max="200"
             step="5"
             value={stereoWidth}
-            onChange={handleChange}
-            onMouseEnter={() => setIsHovering(true)}
-            onMouseLeave={() => setIsHovering(false)}
+            onChange={(e) => handleChange(parseInt(e.target.value))}
             className="w-full h-2 bg-gradient-to-r from-red-600 via-green-600 to-blue-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
-            style={{
-              filter: isHovering ? 'brightness(1.1)' : 'brightness(1)',
-            }}
           />
 
           {/* Stereo Field Visualization */}
@@ -99,7 +94,6 @@ export function StereoWidthControl({
                   width: `${Math.max(8, 16 * (stereoWidth / 200))}px`,
                   height: `${Math.max(8, 16 * (stereoWidth / 200))}px`,
                   backgroundColor: getStereoFieldColor(stereoWidth),
-                  opacity: 0.7,
                 }}
               />
               <span className="text-xs text-gray-500">L</span>
@@ -118,7 +112,6 @@ export function StereoWidthControl({
                   width: `${Math.max(8, 16 * (stereoWidth / 200))}px`,
                   height: `${Math.max(8, 16 * (stereoWidth / 200))}px`,
                   backgroundColor: getStereoFieldColor(stereoWidth),
-                  opacity: 0.7,
                 }}
               />
               <span className="text-xs text-gray-500">R</span>
@@ -134,11 +127,11 @@ export function StereoWidthControl({
             ].map((preset) => (
               <button
                 key={preset.value}
-                onClick={() => onStereoWidthChange(preset.value)}
-                className={`flex-1 px-2 py-1 rounded text-xs font-semibold transition-all ${
+                onClick={() => handleChange(preset.value)}
+                className={`px-2 py-1 rounded text-xs ${
                   stereoWidth === preset.value
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                 }`}
               >
                 {preset.label}

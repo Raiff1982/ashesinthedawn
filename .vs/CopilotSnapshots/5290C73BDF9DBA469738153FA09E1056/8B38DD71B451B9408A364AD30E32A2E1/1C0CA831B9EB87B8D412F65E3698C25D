@@ -1,0 +1,1471 @@
+﻿#!/usr/bin/env python
+"""
+Codette AI Unified Server
+Combined FastAPI server for CoreLogic Studio DAW integration
+Includes both standard endpoints and production-optimized features
+"""
+
+import sys
+import os
+import json
+import logging
+import asyncio
+import time
+import traceback
+import hashlib
+import uuid
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone
+from functools import lru_cache
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    env_file = Path(__file__).parent / '.env'
+    if env_file.exists():
+        load_dotenv(env_file)
+except ImportError:
+    pass  # dotenv not installed, fall back to environment variables
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import uvicorn
+
+# Try to import Supabase for music knowledge base
+try:
+    import supabase
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    SUPABASE_AVAILABLE = False
+    print("[WARNING] Supabase not installed - install with: pip install supabase")
+
+# Try to import Redis for persistent caching
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    print("[INFO] Redis not installed - using in-memory cache (install with: pip install redis)")
+
+# Try to import Codette Enhanced System
+try:
+    from codette_enhanced_responder import (
+        get_enhanced_responder,
+        UserRating,
+        CodetteEnhancedResponder
+    )
+    ENHANCED_RESPONDER_AVAILABLE = True
+    logger_setup = logging.getLogger(__name__)
+    logger_setup.info("[✅] Codette Enhanced Responder imported successfully")
+except ImportError as e:
+    ENHANCED_RESPONDER_AVAILABLE = False
+    logger_setup = logging.getLogger(__name__)
+    logger_setup.warning(f"[⚠️] Codette Enhanced Responder not available: {e}")
+
+# Setup paths
+codette_path = Path(__file__).parent / "codette"
+sys.path.insert(0, str(codette_path))
+sys.path.insert(0, str(Path(__file__).parent))
+
+# Import genre templates
+try:
+    from codette_genre_templates import (
+        get_genre_suggestions,
+        get_available_genres,
+        get_genre_characteristics
+    )
+    GENRE_TEMPLATES_AVAILABLE = True
+except ImportError:
+    GENRE_TEMPLATES_AVAILABLE = False
+    get_genre_suggestions = None  # type: ignore
+    get_available_genres = None  # type: ignore
+    get_genre_characteristics = None  # type: ignore
+    print("[WARNING] Genre templates not available")
+
+# Try to import numpy for audio analysis
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    NUMPY_AVAILABLE = False
+    print("[WARNING] NumPy not available - some analysis features will be limited")
+
+# ============================================================================
+# LOGGING SETUP
+# ============================================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# CACHING SYSTEM FOR PERFORMANCE OPTIMIZATION
+# ============================================================================
+
+class ContextCache:
+    """TTL-based cache for Supabase context retrieval (reduces API calls ~300ms per query)"""
+    
+    def __init__(self, ttl_seconds: int = 300):
+        self.cache: Dict[str, Dict[str, Any]] = {}
+        self.ttl = ttl_seconds
+        self.timestamps: Dict[str, float] = {}
+        
+        # Performance metrics
+        self.metrics: Dict[str, Any] = {
+            "hits": 0,
+            "misses": 0,
+            "total_requests": 0,
+            "total_hit_latency_ms": 0.0,
+            "total_miss_latency_ms": 0.0,
+            "average_hit_latency_ms": 0.0,
+            "average_miss_latency_ms": 0.0,
+            "hit_rate_percent": 0.0,
+            "started_at": time.time(),
+        }
+        self.operation_times: Dict[str, List[float]] = {
+            "hits": [],
+            "misses": []
+        }
+    
+    def get_cache_key(self, message: str, filename: Optional[str]) -> str:
+        """Generate cache key from message + filename"""
+        key_text = f"{message}:{filename or 'none'}"
+        return hashlib.md5(key_text.encode()).hexdigest()
+    
+    def get(self, message: str, filename: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Get cached context if exists and not expired"""
+        start_time = time.time()
+        key = self.get_cache_key(message, filename)
+        self.metrics["total_requests"] += 1
+        
+        if key not in self.cache:
+            # Cache miss
+            elapsed_ms = (time.time() - start_time) * 1000
+            self.metrics["misses"] += 1
+            self.metrics["total_miss_latency_ms"] += elapsed_ms
+            self.operation_times["misses"].append(elapsed_ms)
+            logger.debug(f"Cache miss for {message[:30]}... ({elapsed_ms:.2f}ms)")
+            return None
+        
+        # Check if expired
+        age = time.time() - self.timestamps[key]
+        if age > self.ttl:
+            del self.cache[key]
+            del self.timestamps[key]
+            elapsed_ms = (time.time() - start_time) * 1000
+            self.metrics["misses"] += 1
+            self.metrics["total_miss_latency_ms"] += elapsed_ms
+            self.operation_times["misses"].append(elapsed_ms)
+            logger.debug(f"Cache expired for {message[:30]}... ({elapsed_ms:.2f}ms)")
+            return None
+        
+        # Cache hit
+        elapsed_ms = (time.time() - start_time) * 1000
+        self.metrics["hits"] += 1
+        self.metrics["total_hit_latency_ms"] += elapsed_ms
+        self.operation_times["hits"].append(elapsed_ms)
+        logger.debug(f"Cache hit for {message[:30]}... (age: {age:.1f}s, latency: {elapsed_ms:.2f}ms)")
+        return self.cache[key]
+    
+    def set(self, message: str, filename: Optional[str], data: Dict[str, Any]) -> None:
+        """Cache context data with timestamp"""
+        key = self.get_cache_key(message, filename)
+        self.cache[key] = data
+        self.timestamps[key] = time.time()
+        logger.debug(f"Cached context for {message[:30]}...")
+    
+    def clear(self) -> None:
+        """Clear all cache"""
+        self.cache.clear()
+        self.timestamps.clear()
+        logger.info("Context cache cleared")
+    
+    def _update_metrics(self) -> None:
+        """Update derived metrics"""
+        if self.metrics["total_requests"] > 0:
+            self.metrics["hit_rate_percent"] = (
+                self.metrics["hits"] / self.metrics["total_requests"] * 100
+            )
+        
+        if self.metrics["hits"] > 0:
+            self.metrics["average_hit_latency_ms"] = (
+                self.metrics["total_hit_latency_ms"] / self.metrics["hits"]
+            )
+        
+        if self.metrics["misses"] > 0:
+            self.metrics["average_miss_latency_ms"] = (
+                self.metrics["total_miss_latency_ms"] / self.metrics["misses"]
+            )
+    
+    def stats(self) -> Dict[str, Any]:
+        """Get comprehensive cache statistics"""
+        uptime_seconds = time.time() - self.metrics["started_at"]
+        
+        return {
+            "entries": len(self.cache),
+            "ttl_seconds": self.ttl,
+            "hits": self.metrics["hits"],
+            "misses": self.metrics["misses"],
+            "total_requests": self.metrics["total_requests"],
+            "hit_rate_percent": round(self.metrics["hit_rate_percent"], 2),
+            "average_hit_latency_ms": round(self.metrics["average_hit_latency_ms"], 2),
+            "average_miss_latency_ms": round(self.metrics["average_miss_latency_ms"], 2),
+            "total_hit_latency_ms": round(self.metrics["total_hit_latency_ms"], 2),
+            "total_miss_latency_ms": round(self.metrics["total_miss_latency_ms"], 2),
+            "uptime_seconds": round(uptime_seconds, 1),
+            "performance_gain": round(
+                self.metrics["average_miss_latency_ms"] / 
+                max(self.metrics["average_hit_latency_ms"], 0.01), 2
+            ) if self.metrics["average_hitLatency_ms"] > 0 else 0,
+        }
+
+context_cache = ContextCache(ttl_seconds=300)  # 5-minute cache
+
+# ============================================================================
+# REDIS SETUP (Optional persistent caching)
+# ============================================================================
+
+redis_client = None
+if REDIS_AVAILABLE:
+    try:
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_port = int(os.getenv('REDIS_PORT', 6379))
+        redis_client = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            db=int(os.getenv('REDIS_DB', 0)),
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_keepalive=True,
+        )
+        # Test connection
+        redis_client.ping()
+        logger.info("✅ Redis connected successfully")
+        REDIS_ENABLED = True
+    except Exception as e:
+        logger.info(f"ℹ️ Redis unavailable (expected if not running) - using in-memory cache only. To enable Redis: redis-server or docker run -d -p 6379:6379 redis")
+        redis_client = None
+        REDIS_ENABLED = False
+else:
+    REDIS_ENABLED = False
+    logger.info("ℹ️ Redis not installed - using in-memory cache only (optional: pip install redis)")
+
+# ============================================================================
+# REAL CODETTE AI ENGINE & TRAINING DATA
+# ============================================================================
+
+# Try to import real Codette engine
+try:
+    from codette_real_engine import get_real_codette_engine
+    codette_engine = get_real_codette_engine()
+    logger.info("✅ Real Codette AI Engine initialized successfully")
+    USE_REAL_ENGINE = True
+except Exception as e:
+    logger.warning(f"⚠️ Failed to load real Codette engine: {e}")
+    codette_engine = None
+    USE_REAL_ENGINE = False
+
+# Try to import training data and analysis
+try:
+    from codette_training_data import training_data, get_training_context
+    from codette_analysis_module import analyze_session as enhanced_analyze, CodetteAnalyzer
+    TRAINING_AVAILABLE = True
+    analyzer = CodetteAnalyzer()
+    logger.info("[OK] Codette training data loaded successfully")
+    logger.info("[OK] Codette analyzer initialized")
+except ImportError as e:
+    logger.warning(f"[WARNING] Could not import Codette training modules: {e}")
+    TRAINING_AVAILABLE = False
+    training_data = None
+    get_training_context = None
+    enhanced_analyze = None
+    analyzer = None
+
+# Try to import BroaderPerspectiveEngine
+try:
+    from codette import BroaderPerspectiveEngine  # type: ignore
+    Codette = BroaderPerspectiveEngine
+    codette = Codette()
+    logger.info("[OK] Codette (BroaderPerspectiveEngine) imported and initialized")
+except Exception as e:
+    logger.warning(f"[WARNING] Could not import BroaderPerspectiveEngine: {e}")
+    Codette = None  # type: ignore
+    codette = None  # type: ignore
+
+# ============================================================================
+# FASTAPI APP SETUP
+# ============================================================================
+
+app = FastAPI(
+    title="Codette AI Unified Server",
+    description="Combined Codette AI server for CoreLogic Studio DAW",
+    version="2.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+logger.info("✅ FastAPI app created with CORS enabled")
+
+# ============================================================================
+# SUPABASE CLIENT SETUP (Music Knowledge Base)
+# ============================================================================
+
+supabase_client = None
+supabase_admin_client = None
+if SUPABASE_AVAILABLE:
+    try:
+        supabase_url = os.getenv('VITE_SUPABASE_URL')
+        supabase_key = os.getenv('VITE_SUPABASE_ANON_KEY')
+        supabase_service_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        
+        if supabase_url and supabase_key:
+            # Create anon client for reads
+            supabase_client = supabase.create_client(supabase_url, supabase_key)
+            logger.info("✅ Supabase anon client connected")
+        
+        # Create admin client for writes (if service key available)
+        if supabase_url and supabase_service_key:
+            supabase_admin_client = supabase.create_client(supabase_url, supabase_service_key)
+            logger.info("✅ Supabase admin client connected (for writes)")
+        elif supabase_url and supabase_key:
+            logger.info("⚠️  Supabase admin key not found, using anon client for writes")
+            supabase_admin_client = supabase_client
+        else:
+            logger.warning("⚠️ Supabase credentials not found in environment variables")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to connect to Supabase: {e}")
+else:
+    logger.info("ℹ️  Supabase not available - music knowledge base disabled")
+
+# ============================================================================
+# PYDANTIC MODELS
+# ============================================================================
+
+class ChatRequest(BaseModel):
+    message: str
+    perspective: Optional[str] = "mix_engineering"
+    context: Optional[List[Dict[str, Any]]] = None
+    conversation_id: Optional[str] = None
+    daw_context: Optional[Dict[str, Any]] = None  # DAW state: track, project, audio data
+
+class ChatResponse(BaseModel):
+    response: str
+    perspective: str
+    confidence: Optional[float] = None
+    timestamp: Optional[str] = None
+    source: Optional[str] = None  # Where response came from: "daw_advice", "semantic_search", "codette_engine", etc.
+    ml_score: Optional[Dict[str, float]] = None  # ML confidence scores: {"relevance": 0.85, "specificity": 0.90, "certainty": 0.78}
+
+class AudioAnalysisRequest(BaseModel):
+    audio_data: Optional[Dict[str, Any]] = None
+    analysis_type: Optional[str] = "spectrum"
+    track_data: Optional[Dict[str, Any]] = None
+    track_id: Optional[str] = None
+
+class AudioAnalysisResponse(BaseModel):
+    trackId: str
+    analysis: Dict[str, Any]
+    status: str
+    timestamp: Optional[str] = None
+
+class SuggestionRequest(BaseModel):
+    context: Dict[str, Any]
+    limit: Optional[int] = 5
+
+class SuggestionResponse(BaseModel):
+    suggestions: List[Dict[str, Any]]
+    confidence: Optional[float] = None
+    timestamp: Optional[str] = None
+
+class ProcessRequest(BaseModel):
+    id: str
+    type: str
+    payload: Dict[str, Any]
+    timestamp: int
+
+class ProcessResponse(BaseModel):
+    id: str
+    status: str
+    data: Dict[str, Any]
+    processingTime: float
+
+# Transport models
+class TransportState(BaseModel):
+    playing: bool
+    time_seconds: float
+    sample_pos: int
+    bpm: float
+    beat_pos: float
+    loop_enabled: bool
+    loop_start_seconds: float
+    loop_end_seconds: float
+
+class TransportCommandResponse(BaseModel):
+    success: bool
+    message: str
+    state: Optional[TransportState] = None
+
+# Embedding models
+class EmbedRow(BaseModel):
+    id: str
+    text: str
+
+class UpsertRequest(BaseModel):
+    rows: List[EmbedRow]
+
+class UpsertResponse(BaseModel):
+    success: bool
+    processed: int
+    updated: int
+    message: str
+
+# ============================================================================
+# TRANSPORT CLOCK MANAGER
+# ============================================================================
+
+class TransportManager:
+    """Manages DAW transport state and synchronization"""
+    
+    def __init__(self):
+        self.playing = False
+        self.time_seconds = 0.0
+        self.sample_pos = 0
+        self.bpm = 120.0
+        self.sample_rate = 44100
+        self.start_time = None
+        self.loop_enabled = False
+        self.loop_start_seconds = 0.0
+        self.loop_end_seconds = 10.0
+        self.connected_clients: set = set()
+    
+    def get_state(self) -> TransportState:
+        """Get current transport state"""
+        if self.playing and self.start_time:
+            elapsed = time.time() - self.start_time
+            self.time_seconds = elapsed
+            self.sample_pos = int(self.time_seconds * self.sample_rate)
+        
+        # Calculate beat position (4 beats per measure)
+        beat_duration = 60.0 / self.bpm
+        self.beat_pos = (self.time_seconds % (beat_duration * 4)) / beat_duration
+        
+        return TransportState(
+            playing=self.playing,
+            time_seconds=self.time_seconds,
+            sample_pos=self.sample_pos,
+            bpm=self.bpm,
+            beat_pos=self.beat_pos,
+            loop_enabled=self.loop_enabled,
+            loop_start_seconds=self.loop_start_seconds,
+            loop_end_seconds=self.loop_end_seconds
+        )
+    
+    def play(self) -> TransportState:
+        """Start playback"""
+        if not self.playing:
+            self.playing = True
+            self.start_time = time.time() - self.time_seconds
+        return self.get_state()
+    
+    def stop(self) -> TransportState:
+        """Stop playback and reset"""
+        self.playing = False
+        self.time_seconds = 0.0
+        self.sample_pos = 0
+        self.start_time = None
+        return self.get_state()
+    
+    def pause(self) -> TransportState:
+        """Pause playback (time remains)"""
+        if self.playing:
+            if self.start_time is not None:
+                self.time_seconds = time.time() - self.start_time
+            self.playing = False
+        return self.get_state()
+    
+    def resume(self) -> TransportState:
+        """Resume playback from pause"""
+        if not self.playing:
+            self.playing = True
+            self.start_time = time.time() - self.time_seconds
+        return self.get_state()
+    
+    def seek(self, time_seconds: float) -> TransportState:
+        """Seek to time position"""
+        self.time_seconds = max(0.0, time_seconds)
+        self.sample_pos = int(self.time_seconds * self.sample_rate)
+        if self.playing:
+            self.start_time = time.time() - self.time_seconds
+        return self.get_state()
+    
+    def set_tempo(self, bpm: float) -> TransportState:
+        """Set BPM"""
+        self.bpm = max(1.0, min(300.0, bpm))  # Clamp 1-300 BPM
+        return self.get_state()
+    
+    def set_loop(self, enabled: bool, start: float = 0.0, end: float = 10.0) -> TransportState:
+        """Configure loop region"""
+        self.loop_enabled = enabled
+        self.loop_start_seconds = max(0.0, start)
+        self.loop_end_seconds = max(self.loop_start_seconds + 0.1, end)
+        return self.get_state()
+
+# Initialize transport manager
+transport_manager = TransportManager()
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def get_timestamp():
+    """Get ISO format timestamp"""
+    from datetime import timezone
+    return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+def to_db(value):
+    """Convert linear amplitude to dB"""
+    if value <= 0 or not NUMPY_AVAILABLE:
+        return -96.0
+    if np is None:
+        return -96.0
+    return float(20 * np.log10(np.clip(value, 1e-7, 1.0)))
+
+def get_training_context_safe():
+    """Safely get training context"""
+    if TRAINING_AVAILABLE and get_training_context:
+        try:
+            return get_training_context()
+        except Exception as e:
+            logger.warning(f"Error getting training context: {e}")
+            return {}
+    return {}
+
+# ============================================================================
+# ROOT & HEALTH ENDPOINTS
+# ============================================================================
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "status": "ok",
+        "service": "Codette AI Unified Server",
+        "version": "2.0.0",
+        "docs": "/docs",
+        "real_engine": USE_REAL_ENGINE,
+        "training_available": TRAINING_AVAILABLE,
+    }
+
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
+    try:
+        return {
+            "status": "healthy",
+            "service": "Codette AI Unified Server",
+            "real_engine": USE_REAL_ENGINE,
+            "training_available": TRAINING_AVAILABLE,
+            "codette_available": codette is not None,
+            "analyzer_available": analyzer is not None,
+            "timestamp": get_timestamp(),
+        }
+    except Exception as e:
+        logger.error(f"ERROR in /health: {e}")
+        return {"status": "error", "error": str(e)}
+
+@app.get("/api/health")
+@app.post("/api/health")
+async def api_health():
+    """API health check endpoint"""
+    return {
+        "success": True,
+        "data": {"status": "ok", "service": "codette"},
+        "duration": 0,
+        "timestamp": get_timestamp(),
+    }
+
+# ============================================================================
+# TRAINING DATA ENDPOINTS
+# ============================================================================
+
+@app.get("/api/training/context")
+async def get_training_context_endpoint():
+    """Get Codette AI training context"""
+    try:
+        if TRAINING_AVAILABLE and get_training_context:
+            context = get_training_context()
+            return {
+                "success": True,
+                "data": context,
+                "message": "Training context available",
+                "timestamp": get_timestamp(),
+            }
+        else:
+            return {
+                "success": False,
+                "data": None,
+                "message": "Training context not available",
+                "timestamp": get_timestamp(),
+            }
+    except Exception as e:
+        logger.error(f"ERROR in /api/training/context: {e}")
+        return {
+            "success": False,
+            "data": None,
+            "error": str(e),
+            "timestamp": get_timestamp(),
+        }
+
+@app.get("/api/training/health")
+async def training_health():
+    """Check training module health"""
+    try:
+        return {
+            "success": True,
+            "training_available": TRAINING_AVAILABLE,
+            "modules": {
+                "training_data": TRAINING_AVAILABLE,
+                "analysis": TRAINING_AVAILABLE and enhanced_analyze is not None,
+                "analyzer": analyzer is not None,
+            },
+            "timestamp": get_timestamp(),
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "timestamp": get_timestamp(),
+        }
+
+# ============================================================================
+# EMBEDDING ENDPOINTS
+# ============================================================================
+
+def generate_simple_embedding(text: str, dim: int = 1536) -> List[float]:
+    """
+    Generate a simple deterministic embedding from text.
+    
+    In production, use a real embedding API:
+    - OpenAI: embedding-3-small
+    - Cohere: embed-english-v3.0
+    - HuggingFace: sentence-transformers/all-MiniLM-L6-v2
+    """
+    import hashlib
+    
+    # Create a deterministic hash from text
+    hash_bytes = hashlib.sha256(text.encode()).digest()
+    hash_ints = [int.from_bytes(hash_bytes[i:i+4], 'big') for i in range(0, len(hash_bytes), 4)]
+    
+    # Generate pseudo-random embedding based on hash
+    if NUMPY_AVAILABLE:
+        embedding = np.zeros(dim, dtype=np.float32)
+        for i in range(dim):
+            # Use hash values to seed deterministic randomness
+            seed_val = hash_ints[i % len(hash_ints)] + i
+            # Create value between -1 and 1
+            embedding[i] = np.sin(seed_val / 1000.0) * np.cos(seed_val / 2000.0)
+        
+        # Normalize to unit vector (L2 norm)
+        magnitude = np.linalg.norm(embedding)
+        if magnitude > 0:
+            embedding = embedding / magnitude
+        
+        return embedding.tolist()
+    else:
+        # Fallback without NumPy
+        import random
+        random.seed(int.from_bytes(hash_bytes[:4], 'big'))
+        embedding = [random.uniform(-1, 1) for _ in range(dim)]
+        magnitude = sum(x**2 for x in embedding) ** 0.5
+        if magnitude > 0:
+            embedding = [x / magnitude for x in embedding]
+        return embedding
+
+
+def ensure_valid_uuid(id_value: Any) -> Optional[str]:
+    """
+    Validate and convert a value to a valid UUID string.
+    Returns None if the value is invalid or a placeholder.
+    """
+    if not id_value:
+        return None
+    
+    # Check for placeholder values
+    if isinstance(id_value, str) and id_value.lower() in ('string', 'string...', 'unknown', 'none', 'null', ''):
+        logger.warning(f"[UUID] Rejecting placeholder ID: {id_value}")
+        return None
+    
+    try:
+        # Try to parse as UUID
+        valid_uuid = str(uuid.UUID(str(id_value)))
+        return valid_uuid
+    except (ValueError, AttributeError, TypeError) as e:
+        logger.warning(f"[UUID] Invalid UUID format: {id_value} - {e}")
+        return None
+
+
+@app.post("/api/upsert-embeddings", response_model=UpsertResponse)
+async def upsert_embeddings(request: UpsertRequest):
+    """
+    Generate embeddings for rows and update database.
+    
+    Request:
+        {
+            "rows": [
+                {"id": "...", "text": "..."},
+                {"id": "...", "text": "..."}
+            ]
+        }
+    
+    Response:
+        {
+            "success": true,
+            "processed": 20,
+            "updated": 20,
+            "message": "Successfully updated 20 embeddings"
+        }
+    """
+    try:
+        if not request.rows:
+            raise HTTPException(status_code=400, detail="No rows provided")
+        
+        logger.info(f"[upsert-embeddings] Processing {len(request.rows)} rows...")
+        
+        # Generate embeddings
+        updates = []
+        for row in request.rows:
+            embedding = generate_simple_embedding(row.text)
+            updates.append({
+                "id": row.id,
+                "embedding": embedding
+            })
+        
+        logger.info(f"[upsert-embeddings] Generated {len(updates)} embeddings")
+        if updates:
+            logger.info(f"[upsert-embeddings] Sample embedding: {updates[0]['embedding'][:5]}... (showing first 5 dims)")
+        
+        # Update database with embeddings
+        updated_count = 0
+        if supabase_admin_client and SUPABASE_AVAILABLE:
+            try:
+                logger.info(f"[upsert-embeddings] Updating {len(updates)} rows in Supabase...")
+                
+                # Update each row with its embedding using admin client
+                for update in updates:
+                    try:
+                        # Validate UUID first
+                        valid_id = ensure_valid_uuid(update['id'])
+                        if not valid_id:
+                            logger.warning(f"[upsert-embeddings] Skipping row with invalid ID: {update['id']}")
+                            continue
+                        
+                        # Prepare update payload - ensure embedding is JSON-serializable
+                        payload = {
+                            'embedding': update['embedding'],  # List of floats
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }
+                        
+                        logger.info(f"[upsert-embeddings] Sending update for ID {valid_id} (embedding dim: {len(update['embedding'])})")
+                        
+                        # Use admin client for writes with validated UUID
+                        response = supabase_admin_client.table('music_knowledge').update(payload).eq('id', valid_id).execute()
+                        
+                        # Check if update was successful (response should have data or status info)
+                        logger.info(f"[upsert-embeddings] Response for {valid_id}: {response}")
+                        
+                        # Count as updated if no error was raised
+                        updated_count += 1
+                        logger.info(f"[upsert-embeddings] ✅ Updated row {valid_id}")
+                        
+                    except Exception as row_error:
+                        logger.error(f"[upsert-embeddings] ❌ Failed to update row: {row_error}", exc_info=True)
+                
+                logger.info(f"[upsert-embeddings] Successfully updated {updated_count}/{len(updates)} rows")
+            except Exception as db_error:
+                logger.error(f"[upsert-embeddings] Database error: {db_error}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+        else:
+            logger.warning("[upsert-embeddings] Supabase admin not available - embeddings not persisted")
+            updated_count = 0
+        
+        return UpsertResponse(
+            success=True,
+            processed=len(request.rows),
+            updated=updated_count,
+            message=f"Successfully processed {len(updates)} embeddings, {updated_count} updated in database"
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[upsert-embeddings] Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# RESPONSE ENHANCEMENT HELPERS
+# ============================================================================
+
+def find_matching_training_example(user_input: str, perspective_key: str) -> dict | None:
+    """Find relevant training example for the given input and perspective"""
+    try:
+        from codette_training_data import PERSPECTIVE_RESPONSE_TRAINING
+        
+        if perspective_key not in PERSPECTIVE_RESPONSE_TRAINING:
+            return None
+        
+        perspective_training = PERSPECTIVE_RESPONSE_TRAINING[perspective_key]
+        training_examples = perspective_training.get("training_examples", [])
+        
+        # Simple keyword matching - find best matching training example
+        user_lower = user_input.lower()
+        best_match = None
+        best_score = 0
+        
+        for example in training_examples:
+            example_input = example.get("user_input", "").lower()
+            # Calculate keyword overlap
+            user_words = set(user_lower.split())
+            example_words = set(example_input.split())
+            overlap = len(user_words & example_words)
+            
+            if overlap > best_score:
+                best_score = overlap
+                best_match = example
+        
+        # Return if there's reasonable match (at least 2 keywords)
+        if best_score >= 2:
+            return best_match
+        
+        return None
+    except Exception as e:
+        logger.debug(f"Error finding training example: {e}")
+        return None
+
+def enhance_response_with_training(base_response: str, user_input: str, perspective_key: str) -> str:
+    """Enhance response quality using training examples as reference"""
+    try:
+        from codette_training_data import PERSPECTIVE_RESPONSE_TRAINING
+        
+        if perspective_key not in PERSPECTIVE_RESPONSE_TRAINING:
+            return base_response
+        
+        perspective_training = PERSPECTIVE_RESPONSE_TRAINING[perspective_key]
+        
+        # If response is too short or generic, enhance with training pattern
+        if len(base_response) < 100:
+            # Try to find matching example for pattern reference
+            example = find_matching_training_example(user_input, perspective_key)
+            if example:
+                # Use example structure as template
+                example_response = example.get("accurate_response", "")
+                # Extend base response with pattern-matched advice
+                if example_response:
+                    return f"{base_response}\n\n💡 Similar pattern: {example_response[:200]}..."
+        
+        return base_response
+    except Exception as e:
+        logger.debug(f"Error enhancing response: {e}")
+        return base_response
+
+# ============================================================================
+# CHAT ENDPOINTS
+# ============================================================================
+
+@app.post("/codette/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """Chat with Codette using training data, real engine, and Supabase context with message embeddings"""
+    try:
+        perspective = request.perspective or "mix_engineering"
+        message = request.message.lower()
+        
+        # Generate embedding for the incoming message (for semantic search)
+        message_embedding = generate_simple_embedding(request.message)
+        logger.info(f"Generated message embedding (dim: {len(message_embedding)})")
+        
+        # Get training context
+        training_context = get_training_context_safe()
+        daw_functions = training_context.get("daw_functions", {})
+        ui_components = training_context.get("ui_components", {})
+        response_templates = training_context.get("response_templates", {})
+        
+        # Initialize variables
+        response = ""
+        confidence = 0.75
+        perspective_source = "fallback"
+        response_source = "fallback"  # Track where response comes from: "daw_template", "semantic_search", "codette_engine", etc.
+        ml_scores = {"relevance": 0.65, "specificity": 0.60, "certainty": 0.55}  # Default ML confidence scores
+        
+        # Get Supabase context (code snippets, files, chat history)
+        supabase_context = None
+        context_info = ""
+        context_cached = False
+        
+        if supabase_client:
+            try:
+                cache_key = context_cache.get_cache_key(request.message, None)
+                
+                # Try Redis first (if available)
+                if REDIS_ENABLED and redis_client:
+                    try:
+                        cached_data = redis_client.get(f"context:{cache_key}")
+                        if cached_data:
+                            import json as json_module
+                            supabase_context = json_module.loads(cached_data)
+                            context_cached = True
+                            logger.info(f"Context retrieved from Redis cache for: {request.message[:50]}...")
+                    except Exception as redis_err:
+                        logger.debug(f"Redis retrieval failed (fallback to memory): {redis_err}")
+                
+                # Fall back to in-memory cache if Redis miss
+                if not context_cached:
+                    cached_context = context_cache.get(request.message, None)
+                    if cached_context is not None:
+                        supabase_context = cached_context
+                        context_cached = True
+                        logger.info(f"Context retrieved from memory cache for: {request.message[:50]}...")
+                
+                # Fetch from Supabase if not cached anywhere
+                if not context_cached:
+                    logger.info(f"Retrieving fresh context from Supabase for: {request.message[:50]}...")
+                    context_result = supabase_client.rpc(
+                        'get_codette_context',
+                        {
+                            'input_prompt': request.message,
+                            'optionally_filename': None
+                        }
+                    ).execute()
+                    
+                    supabase_context = context_result.data
+                    
+                    # Cache the result in both memory and Redis
+                    if supabase_context:
+                        # Memory cache
+                        context_cache.set(request.message, None, supabase_context)
+                        
+                        # Redis cache (if available)
+                        if REDIS_ENABLED and redis_client:
+                            try:
+                                import json as json_module
+                                redis_client.setex(
+                                    f"context:{cache_key}",
+                                    300,  # 5-minute TTL
+                                    json_module.dumps(supabase_context)
+                                )
+                                logger.debug(f"Context cached to Redis for: {request.message[:50]}...")
+                            except Exception as redis_err:
+                                logger.debug(f"Redis caching failed: {redis_err}")
+                
+                # Format context information for Codette
+                if supabase_context:
+                    context_parts = []
+                    
+                    # Add relevant code snippets
+                    snippets = supabase_context.get('snippets', [])
+                    if snippets and len(snippets) > 0:
+                        context_parts.append(f"Related Code ({len(snippets)} snippets):")
+                        for snippet in snippets[:3]:  # Limit to top 3
+                            filename = snippet.get('filename', 'unknown')
+                            snippet_text = snippet.get('snippet', '')[:100]
+                            context_parts.append(f"  • {filename}: {snippet_text}...")
+                    
+                    # Add file metadata
+                    file_info = supabase_context.get('file')
+                    if file_info and file_info != 'null':
+                        context_parts.append(f"File Context: {file_info.get('filename')} ({file_info.get('file_type')})")
+                    
+                    # Add chat history context
+                    chat_history = supabase_context.get('chat_history', [])
+                    if chat_history and len(chat_history) > 0:
+                        context_parts.append(f"User History: {len(chat_history)} previous messages")
+                    
+                    context_info = "\n".join(context_parts)
+                    cache_source = "Redis" if (REDIS_ENABLED and redis_client and context_cached) else "Memory"
+                    logger.info(f"Context ready [{cache_source}]: {len(snippets)} snippets, {len(chat_history)} history items")
+                
+            except Exception as e:
+                logger.warning(f"Context retrieval error: {e}")
+                supabase_context = None
+        
+        # ============ ADD DAW CONTEXT HANDLING ============
+        daw_context_info = ""
+        if request.daw_context:
+            try:
+                daw_parts = []
+                daw_ctx = request.daw_context
+                
+                # Track information
+                if daw_ctx.get('selected_track'):
+                    track = daw_ctx.get('selected_track')
+                    daw_parts.append(f"🎵 Selected Track: {track.get('name', 'Untitled')} (Type: {track.get('type', 'audio')})")
+                    daw_parts.append(f"   Volume: {track.get('volume', 0)}dB | Pan: {track.get('pan', 0)}")
+                
+                # Project information
+                if daw_ctx.get('project_name'):
+                    daw_parts.append(f"📁 Project: {daw_ctx.get('project_name')}")
+                
+                # Audio analysis data
+                if daw_ctx.get('audio_analysis'):
+                    analysis = daw_ctx.get('audio_analysis')
+                    if analysis.get('peak_level'):
+                        daw_parts.append(f"📊 Peak Level: {analysis.get('peak_level')}dB | RMS: {analysis.get('rms')}dB")
+                    if analysis.get('frequency_content'):
+                        daw_parts.append(f"   Frequency Balance: {analysis.get('frequency_content')}")
+                
+                # Track count
+                if daw_ctx.get('total_tracks'):
+                    daw_parts.append(f"🎚️ Total Tracks: {daw_ctx.get('total_tracks')}")
+                
+                # User goal/mixing context
+                if daw_ctx.get('mixing_goal'):
+                    daw_parts.append(f"🎯 Goal: {daw_ctx.get('mixing_goal')}")
+                
+                if daw_parts:
+                    daw_context_info = "\n".join(daw_parts)
+                    logger.info(f"DAW context received: {len(daw_parts)} items")
+            except Exception as e:
+                logger.debug(f"DAW context processing error: {e}")
+        # ============ END DAW CONTEXT HANDLING ============
+        
+        # ============ GENERATE DAW-SPECIFIC ADVICE USING CONTEXT (PRIORITY) ============
+        daw_specific_advice = ""
+        if request.daw_context:
+            logger.info(f"[DAW ADVICE] Generating DAW-specific advice. Message: '{message[:50]}...' Track: {request.daw_context.get('selected_track', {}).get('name', 'Unknown')}")
+            try:
+                daw_ctx = request.daw_context
+                track_info = daw_ctx.get('selected_track', {})
+                track_name = track_info.get('name', '').lower()
+                track_type = track_info.get('type', 'audio')
+                track_volume = track_info.get('volume', 0)
+                track_pan = track_info.get('pan', 0)
+                
+                msg_lower = message.lower()
+                keywords = ['mix', 'better', 'improve', 'problem', 'issue', 'help', 'how', 'advice', 'tip', 'sound']
+                
+                # Check if this is a mixing/advice question with DAW context
+                if any(kw in msg_lower for kw in keywords):
+                    logger.info(f"[DAW ADVICE] Message matches mixing keywords. Track name: {track_name}")
+                    
+                    # ===== DRUM TRACK ADVICE =====
+                    if any(term in track_name for term in ['drum', 'kick', 'snare', 'hat', 'tom', 'percussion']):
+                        daw_specific_advice = f"""🥁 **Drum Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Compression Strategy**:
+  • Kick: Ratio 4:1, Attack 5ms, Release 100ms, Threshold -20dB
+  • Snare: Ratio 6:1, Attack 3ms, Release 80ms (tighten transients)
+  • Hats: Light compression (2:1) to control dynamics
+
+**EQ Starting Points**:
+  • High-pass filter: Remove everything below 30Hz for most drums
+  • Kick: Scoop 2-4kHz (-3dB), boost 60Hz (+2dB) for punch
+  • Snare: Boost 5-7kHz (+2-3dB) for crack, cut 500Hz (-2dB)
+  • Hats: Gentle high-pass at 500Hz, bright shelf at 10kHz
+
+**Mix Level Tips**:
+  • Drums typically sit around -6dB to 0dB in the mix
+  • Your current level ({track_volume}dB) → Adjust for clarity with other tracks
+  • Leave 3-6dB of headroom before mastering
+
+**Common Issues**:
+  • Drums sound dull? → High-pass and add brightness at 8-10kHz
+  • Drums feel weak? → Add slight saturation, not just compression
+  • Drums clash with bass? → Automate kick volume around bass fundamentals
+"""
+                        confidence = 0.88
+
+                    # ===== BASS TRACK ADVICE =====
+                    elif any(term in track_name for term in ['bass', 'sub', 'low']):
+                        daw_specific_advice = f"""🎸 **Bass Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Frequency Management**:
+  • Clean Low-End: High-pass filter at 40-60Hz (remove mud below kick)
+  • Fundamental Clarity: Boost 80-200Hz (+1-2dB) for presence
+  • Tone Definition: Enhance 1-3kHz (+2-3dB) to cut through mix
+  • Prevent Harshness: Cut 4-7kHz slightly (-1dB)
+
+**Compression Setup**:
+  • Ratio: 4:1 (glue it together)
+  • Attack: 10-15ms (let transient through)
+  • Release: 100-200ms (maintain groove)
+  • Threshold: -18dB to -12dB
+
+**Saturation Techniques**:
+  • Add warmth: Subtle tape saturation (light overdrive)
+  • Enhance harmonics: Mild distortion for presence in small speakers
+  • Layer approach: Keep clean bass + saturated version for blend
+
+**Mixing Position**:
+  • Your level ({track_volume}dB) should sit slightly below kick for rhythm
+  • Pan mono if mixing for small speakers, slight width (±20%) for stereo
+  • Leave tight relationship with kick for strong foundation
+
+**Monitoring**:
+  • Check mix on multiple playback systems (headphones, car, earbuds)
+  • Reference similar professional recordings
+  • Use spectrum analyzer to avoid buildup below 100Hz
+"""
+                        confidence = 0.88
+
+                    # ===== VOCAL TRACK ADVICE =====
+                    elif any(term in track_name for term in ['vocal', 'voice', 'lead', 'vocal', 'singer']):
+                        daw_specific_advice = f"""🎤 **Vocal Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**De-Esser & Clarity**:
+  • Target sibilance: High-pass at 100Hz to remove mud
+  • Presence boost: Add 2-4kHz (+2dB) for intelligibility
+  • De-esser: Threshold around -20dB, ratio 4:1 for /s/ sounds
+  • Proximity warmth: Gentle shelf at 200Hz (+1dB)
+
+**Compression Chain**:
+  • Ratio: 2:1 to 4:1 (vocal-specific: not too tight)
+  • Attack: 20-30ms (preserve transients and tone)
+  • Release: 100-200ms (natural envelope)
+  • Threshold: -18dB (riding the volume)
+
+**Pro Vocal Techniques**:
+  • Double-comp: Gentle comp (2:1) + aggressive comp (6:1) in series
+  • Parallel compression: Mix 20-30% compressed with dry for punch
+  • Serial saturation: Add character with tape or tube emulation
+
+**Reverb Integration**:
+  • Send 10-15% of vocal to reverb (plate or hall)
+  • Reverb pre-delay: 40-60ms to maintain clarity
+  • Reverb decay: 1.5-2.5 seconds (style-dependent)
+  • High-pass reverb input: Remove below 1kHz for clarity
+
+**Level & Dynamics**:
+  • Center pan for lead vocals ({track_pan:+.1f} current)
+  • Headroom: Keep around -3dB peak to -6dB RMS
+  • Your volume ({track_volume}dB) → Should dominate the mix with presence
+  • Ride fader: Automate for consistency across performance
+"""
+                        confidence = 0.88
+
+                    # ===== GUITAR/INSTRUMENT TRACK ADVICE =====
+                    elif any(term in track_name for term in ['guitar', 'synth', 'keys', 'piano', 'instrument', 'pad']):
+                        daw_specific_advice = f"""🎸 **Instrument Track Mixing Guide** ({track_name.title()})
+
+**Current State**: Volume {track_volume}dB, Pan {track_pan:+.1f}
+
+**Frequency Sculpting**:
+  • Clean Foundation: High-pass filter around 60-100Hz
+  • Body Presence: Boost 200-500Hz (+1-2dB) for warmth
+  • Definition Layer: Enhance 2-4kHz for clarity and presence
+  • Brightness: Add 8-10kHz for air and top-end sheen
+  • Control Harshness: Gentle cut at 5-7kHz if present
+
+**Dynamics Processing**:
+  • Gentle Compression: Ratio 2:1, Attack 10ms, Release 100ms
+  • Purpose: Glue the sound, maintain consistency
+  • Peak Limiting: Set above compression for safety
+  • Transient Shaper: Optional - bring out or smooth attacks
+
+**Stereo Enhancement**:
+  • Pan Position**: Your current pan is {track_pan:+.1f} → Consider stereo placement
+  • Stereo Width**: For synthesizers/keyboards, consider subtle width (±15%)
+  • Doubling: Light delay (15-25ms, 10% mix) for dimension
+
+**Effects Strategy**:
+  • Reverb: 5-20% send for ambience (depends on genre)
+  • Delay: Sync to tempo if used (don't overdo it)
+  • Modulation: Subtle chorus/flanger for movement
+  • Drive/Saturation: Add character matching genre
+
+**Mix Positioning**:
+  • Volume ({track_volume}dB) → Adjust relative to drums and bass
+  • Rhythm instruments: Sit slightly back from lead vocals
+  • Pad layers: Create atmosphere without masking mix
+  • Layering: Stack compatible instruments in frequency range
+"""
+                        confidence = 0.87
+
+                    # ===== GENERIC MIXING ADVICE =====
+                    elif 'mix' in msg_lower and track_type == 'audio':
+                        daw_specific_advice = f"""🎚️ **Mixing Fundamentals** (Track: {track_name.title()})
+
+**Current Context**: 
+  • Selected Track: {track_name.title()} ({track_type})
+  • Volume: {track_volume}dB | Pan: {track_pan:+.1f}
+  • Project: {daw_ctx.get('total_tracks', 'N/A')} tracks total
+
+**Mixing Workflow**:
+  1. **Gain Staging**: Set input levels to -6dB to -3dB on peaks
+  2. **Balancing**: Set rough levels before any EQ/compression
+  3. **Panning**: Spread tracks spatially (avoid everything center)
+  4. **Subgroup**: Bus similar instruments (drums, vocals, etc.)
+  5. **Processing**: EQ first → Compression → Effects → Automation
+
+**Your Track ({track_name})**:
+  • Current Level: {track_volume}dB
+  • Position: {['Left' if track_pan < -0.3 else 'Center' if -0.3 <= track_pan <= 0.3 else 'Right'][0]}
+  • Next Steps:
+    1. Check peak levels (should hit -6dB to -3dB RMS)
+    2. A/B against reference mixes at similar level
+    3. Apply high-pass filter to remove unnecessary low-end
+    4. Add gentle EQ for tone shaping (avoid radical cuts)
+
+**Pro Tips**:
+  • Take breaks - ear fatigue clouds judgment
+  • Mix at moderate levels (85dB SPL reference)
+  • Use reference tracks from professional mixes
+  • Compare on multiple speaker systems before finalizing
+"""
+                        confidence = 0.85
+
+                    if daw_specific_advice:
+                        response = daw_specific_advice
+                        response_source = "daw_template"
+                        ml_scores = {"relevance": 0.88, "specificity": 0.92, "certainty": 0.85}
+                        confidence = 0.88  # High confidence for targeted DAW advice
+                        logger.info(f"[DAW ADVICE] ✅ Generated {len(daw_specific_advice)} char response for track: {track_name}")
+                        
+            except Exception as e:
+                logger.warning(f"[DAW ADVICE] ❌ Error generating advice: {e}")
+        # ============ END DAW-SPECIFIC ADVICE (PRIORITY) ============
+        
+        # Check if question is about DAW functions
+        for category, functions in daw_functions.items():
+            for func_name, func_data in functions.items():
+                if func_name in message or func_data.get("name", "").lower() in message:
+                    response = f"**{func_data['name']}** ({func_data['category']})\n\n{func_data['description']}\n\n"
+                    response += f"📋 Parameters: {', '.join(func_data['parameters']) or 'None'}\n"
+                    response += f"⏱️ Hotkey: {func_data.get('hotkey', 'N/A')}\n"
+                    response += "💡 Tips:\n" + "\n".join([f"  • {tip}" for tip in func_data.get('tips', [])])
+                    confidence = 0.92
+                    response_source = "daw_functions"
+                    ml_scores = {"relevance": 0.90, "specificity": 0.92, "certainty": 0.90}
+                    break
+            if response:
+                break
+        
+        # ============ SEMANTIC SEARCH + ML MATCHING ============
+        # Use the actual Supabase RPC functions for semantic search
+        # ONLY if we haven't found a response yet
+        if not response and request.daw_context and supabase_client:
+            try:
+                # Generate embedding for the user message
+                msg_embedding = generate_simple_embedding(request.message)
+                track_name = request.daw_context.get('selected_track', {}).get('name', '')
+                
+                logger.info(f"[ML] Semantic search for: '{request.message[:50]}...' in track: {track_name}")
+                
+                try:
+                    # Use the actual Supabase RPC function: get_music_suggestions
+                    search_result = supabase_client.rpc(
+                        'get_music_suggestions',
+                        {
+                            'query': request.message,
+                            'limit': 3
+                        }
+                    ).execute()
+                    
+                    if search_result.data and len(search_result.data) > 0:
+                        # Get the first matching suggestion
+                        semantic_match = search_result.data[0]
+                        response = semantic_match.get('content', '') or semantic_match.get('suggestion', '')
+                        if response:
+                            confidence = 0.82
+                            response_source = "semantic_search"
+                            ml_scores = {"relevance": 0.82, "specificity": 0.85, "certainty": 0.80}
+                            logger.info(f"[ML] Found semantic match: {response[:50]}... (confidence: {confidence})")
+                        
+                        # Log all matches for debugging
+                        logger.info(f"[ML] Semantic search result: {search_result.data}")
+                    else:
+                        logger.info("[ML] No semantic match found")
+                except Exception as e:
+                    logger.warning(f"[ML] Semantic search RPC error: {e}")
+                
+                # Heuristic ML matching - fallback if no semantic match found
+                if not response:
+                    logger.info(f"[ML] Performing heuristic search for: '{request.message[:50]}...'")
+                    all_responses = supabase_client.table('music_knowledge').select('id, content, tags').execute()
+                    
+                    if all_responses.data:
+                        best_match = None
+                        best_relevance = 0
+                        
+                        for entry in all_responses.data:
+                            entry_content = entry.get('content', '')
+                            entry_tags = entry.get('tags', [])
+                            
+                            # Simple relevance scoring
+                            relevance = 0
+                            if request.message in entry_content:
+                                relevance += 5
+                            if any(tag in entry_tags for tag in ['mix', 'eq', 'compress', 'reverb', 'delay']):
+                                relevance += 2
+                            if any(word in entry_content for word in ['tip', 'advice', 'know', 'consider']):
+                                relevance += 1
+                            
+
+                    if best_relevance > 0:
+                        best_match = entry
+                        best_relevance = relevance
+                
+                if best_match:
+                    response = best_match.get('content', '')
+                    confidence = 0.72
+                    response_source = "heuristic_search"
+                    ml_scores = {"relevance": 0.72, "specificity": 0.70, "certainty": 0.65}
+                    logger.info(f"[ML] Found heuristic match: {response[:50]}...")
+            
+            except Exception as e:
+                logger.warning(f"[ML] Error in semantic/heuristic search: {e}")
+        
+        # If still no response, use fallback
+        if not response:
+            response = "I'm still learning! Could you provide more context or rephrase your question?"
+            response_source = "fallback"
+            confidence = 0.50
+            ml_scores = {"relevance": 0.40, "specificity": 0.30, "certainty": 0.20}
+        
+        # Return response
+        return ChatResponse(
+            response=response,
+            perspective=perspective,
+            confidence=confidence,
+            timestamp=get_timestamp(),
+            source=response_source,
+            ml_score=ml_scores
+        )
+    
+    except Exception as e:
+        logger.error(f"ERROR in /codette/chat endpoint: {e}", exc_info=True)
+        return ChatResponse(
+            response=f"An error occurred: {str(e)}",
+            perspective="error",
+            confidence=0.0,
+            timestamp=get_timestamp(),
+            source="error",
+            ml_score={"relevance": 0.0, "specifically": 0.0, "certainty": 0.0}
+        )
+
+
+# ============================================================================
+# TRANSPORT ENDPOINTS  
+# ============================================================================
+
+@app.post("/transport/play", response_model=TransportCommandResponse)
+async def transport_play():
+    """Start playback"""
+    try:
+        state = transport_manager.play()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback started",
+            state=state
+        )
+    except Exception as e:
+        logger.error(f"ERROR in /transport/play: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.post("/transport/stop", response_model=TransportCommandResponse)
+async def transport_stop():
+    """Stop playback"""
+    try:
+        state = transport_manager.stop()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback stopped",
+            state=state
+        )
+    except Exception as e:
+        logger.error(f"ERROR in /transport/stop: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.post("/transport/pause", response_model=TransportCommandResponse)
+async def transport_pause():
+    """Pause playback"""
+    try:
+        state = transport_manager.pause()
+        return TransportCommandResponse(
+            success=True,
+            message="Playback paused",
+            state=state
+        )
+    except Exception as e:
+        logger.error(f"ERROR in /transport/pause: {e}")
+        return TransportCommandResponse(
+            success=False,
+            message=f"Error: {str(e)}"
+        )
+
+
+@app.get("/transport/state", response_model=TransportState)
+async def get_transport_state():
+    """Get current transport state"""
+    try:
+        return transport_manager.get_state()
+    except Exception as e:
+        logger.error(f"ERROR in /transport/state: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# STARTUP & SHUTDOWN
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Startup event"""
+    logger.info("="*80)
+    logger.info("Codette AI Unified Server Starting")
+    logger.info("="*80)
+    logger.info(f"Real Engine: {USE_REAL_ENGINE}")
+    logger.info(f"Training Available: {TRAINING_AVAILABLE}")
+    logger.info(f"Supabase Available: {SUPABASE_AVAILABLE}")
+    logger.info(f"Redis Available: {REDIS_AVAILABLE}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown event"""
+    logger.info("="*80)
+    logger.info("Codette AI Unified Server Shutting Down")
+    logger.info("="*80)
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    host = os.getenv('CODETTE_HOST', '0.0.0.0')
+    port = int(os.getenv('CODETTE_PORT', 8000))
+    
+    logger.info(f"Starting Codette AI Unified Server on {host}:{port}")
+    
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info"
+    )

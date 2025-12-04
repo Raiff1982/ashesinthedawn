@@ -8,14 +8,12 @@ import { Volume2, TrendingDown } from 'lucide-react';
 import { Tooltip } from './TooltipProvider';
 
 interface LevelMeterProps {
-  _trackId?: string;
   height?: number;
   width?: number;
   showLoudness?: boolean;
 }
 
 export function LevelMeter({
-  _trackId,
   height = 180,
   width = 100,
   showLoudness = true,

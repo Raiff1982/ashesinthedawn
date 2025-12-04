@@ -139,8 +139,6 @@ export function PianoRoll({
 
   const [minPitch, maxPitch] = visibleRange;
   const KEY_HEIGHT = 16;
-  const RULER_HEIGHT = 40;
-  const KEYS_WIDTH = 80;
 
   const totalHeight = (maxPitch - minPitch) * KEY_HEIGHT;
   const totalWidth = sequence.length * zoom;

@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useCodette } from '../hooks/useCodette';
-import { useDAW } from '../contexts/DAWContext';
-import { Plugin } from '../types';
+import { useCodette } from '@/hooks/useCodette';
+import { useDAW } from '@/contexts/DAWContext';
+import type { Plugin } from '@/types';
 import {
   MessageCircle,
   Send,

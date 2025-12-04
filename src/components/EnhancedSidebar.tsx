@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { Settings, Music, Plus, Grid, Zap, Lightbulb, Music2 } from 'lucide-react';
-import Sidebar from './Sidebar';
-import AudioMonitor from './AudioMonitor';
-import TrackDetailsPanel from './TrackDetailsPanel';
-import MIDISettings from './MIDISettings';
-import MIDIEditor from './MIDIEditor';
-import MarkerPanel from './MarkerPanel';
-import { CodetteMasterPanel } from './CodetteMasterPanel';
+import Sidebar from './Sidebar'
+import AudioMonitor from './AudioMonitor'
+import TrackDetailsPanel from './TrackDetailsPanel'
+import MIDISettings from './MIDISettings'
+import { MIDIEditor } from './MIDIEditor'
+import MarkerPanel from './MarkerPanel'
 import {
   LazyRoutingMatrixWrapper,
   LazyPluginBrowserWrapper,
@@ -54,13 +53,15 @@ export default function EnhancedSidebar() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'codette' && <CodetteMasterPanel />}
+        {activeTab === 'codette' && (
+          <div className="p-4 text-xs text-gray-400">Codette panel unavailable</div>
+        )}
         {activeTab === 'track' && <TrackDetailsPanel />}
         {activeTab === 'files' && <Sidebar />}
         {activeTab === 'routing' && <LazyRoutingMatrixWrapper />}
         {activeTab === 'plugins' && <LazyPluginBrowserWrapper />}
         {activeTab === 'midi' && <MIDISettings />}
-        {activeTab === 'midi-editor' && <MIDIEditor isVisible={true} />}
+        {activeTab === 'midi-editor' && <MIDIEditor />}
         {activeTab === 'spectrum' && <LazySpectrumVisualizerPanelWrapper />}
         {activeTab === 'markers' && <MarkerPanel />}
         {activeTab === 'monitor' && <AudioMonitor />}

@@ -17,14 +17,12 @@ interface EnhancedMixerPanelProps {
   track: Track | null;
   onClose: () => void;
   onTrackUpdate: (trackId: string, updates: Partial<Track>) => void;
-  availableAuxTracks?: Array<{ id: string; name: string }>;
 }
 
 export function EnhancedMixerPanel({
   track,
   onClose,
   onTrackUpdate,
-  availableAuxTracks = [],
 }: EnhancedMixerPanelProps) {
   const [activeTab, setActiveTab] = useState<'stereo' | 'automation' | 'sends' | 'metering'>('stereo');
 
@@ -85,9 +83,8 @@ export function EnhancedMixerPanel({
         {activeTab === 'stereo' && (
           <>
             <StereoWidthControl
-              trackId={track.id}
-              stereoWidth={track.stereoWidth || 100}
-              onStereoWidthChange={(width) =>
+              stereoWidth={track.stereoWidth}
+              onStereoWidthChange={(width: number) =>
                 onTrackUpdate(track.id, { stereoWidth: width })
               }
             />
@@ -149,26 +146,19 @@ export function EnhancedMixerPanel({
 
         {activeTab === 'sends' && (
           <SendLevelControl
-            trackId={track.id}
             sends={[]}
-            availableAuxTracks={availableAuxTracks}
-            onSendChange={(sends: any) => {
-              console.log('Sends updated:', sends);
-            }}
-            onAddSend={(auxTrackId: string) => {
-              console.log('Add send to:', auxTrackId);
-            }}
-            onRemoveSend={(sendId: string) => {
-              console.log('Remove send:', sendId);
-            }}
+            availableAuxTracks={[]}
+            onSendChange={(sends) => console.log('sends changed', sends)}
+            onAddSend={(auxTrackId) => console.log('add send', auxTrackId)}
+            onRemoveSend={(sendId) => console.log('remove send', sendId)}
           />
         )}
 
         {activeTab === 'metering' && (
           <div className="space-y-3">
-            <SpectrumAnalyzer trackId={track.id} height={150} width={320} />
-            <LevelMeter trackId={track.id} height={180} width={320} showLoudness={true} />
-            <PhaseCorrelationMeter trackId={track.id} width={320} height={120} />
+            <SpectrumAnalyzer height={150} width={320} />
+            <LevelMeter height={180} width={320} showLoudness={true} />
+            <PhaseCorrelationMeter width={320} height={120} />
           </div>
         )}
       </div>

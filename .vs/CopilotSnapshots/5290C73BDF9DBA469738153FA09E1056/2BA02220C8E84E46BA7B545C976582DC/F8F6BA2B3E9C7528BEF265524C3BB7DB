@@ -1,0 +1,61 @@
+﻿# 🎯 Fix Codette API 404/403 Errors
+**Overview**: Fix Codette API 404/403 Errors
+
+**Progress**: 0% [░░░░░░░░░░]
+
+**Last Updated**: 2025-12-03 14:59:47
+
+## 📝 Plan Steps
+-  **Verify actual registered routes in codette_server.py**
+-  **Check /codette/suggest endpoint registration**
+-  **Check /codette/status endpoint registration**
+-  **Analyze WebSocket endpoint registration and auth**
+-  **Test backend routes with curl/httpie**
+-  **Update codetteBridge.ts to match exact backend URLs**
+-  **Fix WebSocket authentication if needed**
+-  **Validate CORS configuration**
+-  **Test frontend-backend integration**
+
+
+## Expanded checks (concise)
+- Verify actual registered routes in `codette_server.py`
+  - Open `codette_server.py` and locate route decorators or `app.add_route` calls
+  - Confirm paths, methods, and any prefix (blueprint/mount) used
+- Check `/codette/suggest` endpoint registration
+  - Confirm exact path and HTTP method (POST/GET)
+  - Look for authentication/permission decorators that could return 403
+- Check `/codette/status` endpoint registration
+  - Confirm path, method and whether it is publicly accessible
+- Analyze WebSocket endpoint registration and auth
+  - Check WS path, any tokens required, and whether a proxy or prefix alters the final URL
+- Test backend routes with `curl` / `httpie`
+  - Call exact paths found in `codette_server.py` from the dev machine
+  - Inspect status codes, headers, and response bodies
+- Update `codetteBridge.ts` to match exact backend URLs
+  - Ensure frontend uses the full path including any prefix
+  - Use absolute URLs in dev if proxy/CORS is not configured
+- Fix WebSocket authentication if needed
+  - Align token exchange between HTTP and WS (headers vs query param)
+  - Ensure backend accepts the method used by the frontend
+- Validate CORS configuration
+  - Confirm backend CORS allows the frontend origin and required methods/headers
+- Test frontend-backend integration
+  - Run frontend dev server and exercise features that hit the endpoints
+  - Capture browser network logs and backend logs for correlation
+
+## Quick troubleshooting commands
+- List registered routes (example for Flask/FastAPI)
+  - Flask: `python -c "from codette_server import app; print(app.url_map)"`
+  - FastAPI: `uvicorn codette_server:app --reload` then inspect startup logs
+- Test endpoint:
+  - `curl -v http://localhost:8000/codette/status`
+  - `http POST http://localhost:8000/codette/suggest api_key=="..." prompt=="test"
+`
+- Test websocket:
+  - `websocat ws://localhost:8000/ws/path` (or use browser console)
+
+## Next action
+Start with: Verify actual registered routes in `codette_server.py` (step 1). Actions:
+1. Open `codette_server.py` and confirm registered paths and any mount prefixes.
+2. Run the backend locally and list routes or check startup logs for mounted paths.
+

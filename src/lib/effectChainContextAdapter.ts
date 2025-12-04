@@ -1,0 +1,185 @@
+/**
+ * Effect Chain Context Adapter
+ * Bridges TrackEffectChainManager into DAWContext
+ * 
+ * Phase 9: Effect Chain Integration for DAWContext
+ * This file provides all the effect chain functions that need to be integrated
+ * into DAWContext without modifying that large file directly.
+ */
+
+import { useRef, useState, useCallback } from 'react';
+import {
+  getEffectChainManager,
+  TrackEffectChain,
+  EffectInstanceState,
+} from './trackEffectChainManager';
+
+export interface EffectChainContextAPI {
+  effectChainsByTrack: Map<string, TrackEffectChain>;
+  getTrackEffects: (trackId: string) => EffectInstanceState[];
+  addEffectToTrack: (trackId: string, effectType: string) => EffectInstanceState;
+  removeEffectFromTrack: (trackId: string, effectId: string) => boolean;
+  updateEffectParameter: (trackId: string, effectId: string, paramName: string, value: unknown) => boolean;
+  enableDisableEffect: (trackId: string, effectId: string, enabled: boolean) => boolean;
+  setEffectWetDry: (trackId: string, effectId: string, wetDry: number) => boolean;
+  getEffectChainForTrack: (trackId: string) => TrackEffectChain | undefined;
+  processTrackEffects: (trackId: string, audio: Float32Array, sampleRate: number) => Promise<Float32Array>;
+  hasActiveEffects: (trackId: string) => boolean;
+}
+
+/**
+ * Hook to initialize and manage effect chain API
+ * Used internally by DAWProvider
+ */
+export function useEffectChainAPI(): EffectChainContextAPI {
+  const effectChainManagerRef = useRef(getEffectChainManager());
+  const [, setEffectChainVersion] = useState(0);
+
+  const getTrackEffects = useCallback((trackId: string): EffectInstanceState[] => {
+    const manager = effectChainManagerRef.current;
+    return manager.getEffectsForTrack(trackId);
+  }, []);
+
+  const addEffectToTrack = useCallback(
+    (trackId: string, effectType: string): EffectInstanceState => {
+      const manager = effectChainManagerRef.current;
+      const effect = manager.addEffectToTrack(trackId, effectType);
+      setEffectChainVersion((v) => v + 1);
+      console.log(`[DAWContext] Added ${effectType} effect to track ${trackId}`);
+      return effect;
+    },
+    []
+  );
+
+  const removeEffectFromTrack = useCallback(
+    (trackId: string, effectId: string): boolean => {
+      const manager = effectChainManagerRef.current;
+      const success = manager.removeEffectFromTrack(trackId, effectId);
+      if (success) {
+        setEffectChainVersion((v) => v + 1);
+        console.log(`[DAWContext] Removed effect ${effectId} from track ${trackId}`);
+      }
+      return success;
+    },
+    []
+  );
+
+  const updateEffectParameter = useCallback(
+    (trackId: string, effectId: string, paramName: string, value: unknown): boolean => {
+      const manager = effectChainManagerRef.current;
+      const success = manager.updateEffectParameter(trackId, effectId, paramName, value);
+      if (success) {
+        setEffectChainVersion((v) => v + 1);
+      }
+      return success;
+    },
+    []
+  );
+
+  const enableDisableEffect = useCallback(
+    (trackId: string, effectId: string, enabled: boolean): boolean => {
+      const manager = effectChainManagerRef.current;
+      const success = manager.toggleEffect(trackId, effectId, enabled);
+      if (success) {
+        setEffectChainVersion((v) => v + 1);
+        console.log(
+          `[DAWContext] Effect ${effectId} on track ${trackId} ${
+            enabled ? "enabled" : "disabled"
+          }`
+        );
+      }
+      return success;
+    },
+    []
+  );
+
+  const setEffectWetDry = useCallback(
+    (trackId: string, effectId: string, wetDry: number): boolean => {
+      const manager = effectChainManagerRef.current;
+      const success = manager.setWetDry(trackId, effectId, wetDry);
+      if (success) {
+        setEffectChainVersion((v) => v + 1);
+      }
+      return success;
+    },
+    []
+  );
+
+  const getEffectChainForTrack = useCallback(
+    (trackId: string): TrackEffectChain | undefined => {
+      const manager = effectChainManagerRef.current;
+      return manager.getChainForTrack(trackId);
+    },
+    []
+  );
+
+  const processTrackEffects = useCallback(
+    async (
+      trackId: string,
+      audio: Float32Array,
+      /* sampleRate */ _sampleRate: number
+    ): Promise<Float32Array> => {
+      const manager = effectChainManagerRef.current;
+      const chain = manager.getChainForTrack(trackId);
+
+      if (!chain || !manager.hasActiveEffects(trackId)) {
+        return audio;
+      }
+
+      try {
+        // TODO: Connect to useEffectChain hook here
+        // For now, return audio unchanged until DSP bridge integration
+        manager.setProcessingState(trackId, false);
+        return audio;
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error("Unknown error");
+        manager.setError(trackId, err);
+        console.error(
+          `[DAWContext] Error processing effects for track ${trackId}:`,
+          error
+        );
+        return audio;
+      }
+    },
+    []
+  );
+
+  const hasActiveEffects = useCallback((trackId: string): boolean => {
+    const manager = effectChainManagerRef.current;
+    return manager.hasActiveEffects(trackId);
+  }, []);
+
+  return {
+    effectChainsByTrack: effectChainManagerRef.current.getAllChains(),
+    getTrackEffects,
+    addEffectToTrack,
+    removeEffectFromTrack,
+    updateEffectParameter,
+    enableDisableEffect,
+    setEffectWetDry,
+    getEffectChainForTrack,
+    processTrackEffects,
+    hasActiveEffects,
+  };
+}
+
+/**
+ * INTEGRATION INSTRUCTIONS FOR DAWContext:
+ * 
+ * 1. Import this hook at the top of DAWContext.tsx:
+ *    import { useEffectChainAPI, EffectChainContextAPI } from '../lib/effectChainContextAdapter';
+ * 
+ * 2. In the DAWProvider component, call this hook:
+ *    const effectChainAPI = useEffectChainAPI();
+ * 
+ * 3. Add these types to DAWContextType interface:
+ *    (Copy from EffectChainContextAPI interface above)
+ * 
+ * 4. Spread effectChainAPI into the contextValue object:
+ *    const contextValue = {
+ *      // ...existing properties...
+ *      ...effectChainAPI,
+ *    };
+ * 
+ * 5. The effect chain manager will automatically clean up on unmount via the hook's ref
+ */

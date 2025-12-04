@@ -4,8 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Copy, Trash2 } from 'lucide-react';
-import { Tooltip } from './TooltipProvider';
+import { X } from 'lucide-react';
 
 interface CurvePoint {
   x: number; // 0-1
@@ -29,7 +28,7 @@ export function AutomationCurveEditor({
     { x: 1, y: 0.5, tension: 0 },
   ],
   onPointsChange,
-  curveType = 'volume',
+  curveType: _curveType = 'volume',
   height = 200,
   width = 400,
 }: AutomationCurveEditorProps) {
@@ -268,21 +267,18 @@ export function AutomationCurveEditor({
         </div>
       </div>
 
-      <Tooltip
-        content={{
-          title: 'Automation Curve',
-          description:
-            'Draw an automation curve for this parameter. Click to add points, drag to move, right-click to delete.',
-          category: 'mixer',
-          relatedFunctions: ['Volume Envelope', 'LFO', 'MIDI Automation'],
-          performanceTip: 'Use fewer points for smoother curves and better performance',
-          examples: [
-            'Fade in/out: Linear curve from low to high',
-            'Swell: Exponential curve for dynamic swells',
-            'Ducking: Inverse curve for automated ducking',
-          ],
-        }}
-        position="top"
+      <div
+        className="space-y-2"
+        title="Automation Curve
+Draw an automation curve for this parameter. Click to add points, drag to move, right-click to delete.
+Category: mixer
+Related Functions: Volume Envelope, LFO, MIDI Automation
+Performance Tip: Use fewer points for smoother curves and better performance
+
+Examples:
+Fade in/out: Linear curve from low to high
+Swell: Exponential curve for dynamic swells
+Ducking: Inverse curve for automated ducking"
       >
         <div className="space-y-2">
           <canvas
@@ -326,7 +322,7 @@ export function AutomationCurveEditor({
             ))}
           </div>
         </div>
-      </Tooltip>
+      </div>
     </div>
   );
 }

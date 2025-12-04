@@ -17,13 +17,14 @@ if __name__ == "__main__":
     
     while True:
         try:
-            # Run uvicorn
+            # Run uvicorn with UNIFIED server
             result = subprocess.run([
                 sys.executable, "-m", "uvicorn",
-                "codette_server:app",
+                "codette_server_unified:app",
                 "--host", "0.0.0.0",
                 "--port", "8000",
                 "--log-level", "info",
+                "--reload"
             ])
             
             if result.returncode != 0:

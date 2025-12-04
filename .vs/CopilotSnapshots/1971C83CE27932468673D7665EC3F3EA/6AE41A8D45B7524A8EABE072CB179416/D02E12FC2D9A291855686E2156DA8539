@@ -1,0 +1,545 @@
+﻿/**
+ * Codette Integration Examples
+ * Real-world usage patterns for all Codette functions
+ * 
+ * Status: ✅ Production Ready
+ * Version: 1.0
+ */
+
+import { useCodette } from '@/hooks/useCodette';
+import { useDAW } from '@/contexts/DAWContext';
+import { getCodetteBridge } from '@/lib/codetteBridge';
+
+// ============================================================================
+// EXAMPLE 1: Basic Message Query
+// ============================================================================
+
+export async function example1_BasicMessageQuery() {
+  const bridge = getCodetteBridge();
+  
+  // Send message and get response from all 11 perspectives
+  const response = await bridge.chat(
+    'How can I improve the clarity of this vocal?',
+    'conversation-1'
+  );
+  
+  console.log('Response:', response);
+  // Output: { response: "...", confidence: 0.85, source: "codette_engine" }
+}
+
+// ============================================================================
+// EXAMPLE 2: Query Specific Perspective
+// ============================================================================
+
+export async function example2_SpecificPerspective() {
+  const bridge = getCodetteBridge();
+  
+  // Query a single perspective for technical analysis
+  const neuralResponse = await bridge.chat(
+    'What EQ settings would work best for this track?',
+    'conversation-1',
+    'neural_network'
+  );
+  
+  console.log('Neural Network Analysis:', neuralResponse);
+}
+
+// ============================================================================
+// EXAMPLE 3: Get Mixing Suggestions
+// ============================================================================
+
+export async function example3_MixingSuggestions() {
+  const bridge = getCodetteBridge();
+  
+  // Get mixing suggestions for current project context
+  const suggestions = await bridge.getSuggestions({
+    type: 'mixing',
+    track_type: 'vocals',
+    mood: 'energetic',
+    genre: 'electronic',
+    bpm: 120
+  });
+  
+  console.log('Mixing Suggestions:');
+  suggestions.suggestions.forEach(s => {
+    console.log(`- ${s.title}: ${s.description} (${s.confidence}% confidence)`);
+  });
+}
+
+// ============================================================================
+// EXAMPLE 4: Analyze Audio Track
+// ============================================================================
+
+export async function example4_AnalyzeAudio() {
+  const bridge = getCodetteBridge();
+  
+  // Analyze audio buffer from current track
+  const analysis = await bridge.analyzeAudio(
+    {
+      duration: 10,
+      sample_rate: 44100,
+      peak_level: -3,
+      rms_level: -12
+    },
+    'spectrum'
+  );
+  
+  console.log('Audio Analysis:');
+  console.log(`Quality Score: ${analysis.results.quality_score}`);
+  console.log('Recommendations:', analysis.recommendations);
+}
+
+// ============================================================================
+// EXAMPLE 5: React Hook - All Functions in Component
+// ============================================================================
+
+export function example5_ReactComponent() {
+  const {
+    isConnected,
+    isLoading,
+    chatHistory,
+    suggestions,
+    analysis,
+    sendMessage,
+    getSuggestions,
+    analyzeAudio,
+    queryAllPerspectives,
+  } = useCodette({ autoConnect: true });
+
+  const { selectedTrack, isPlaying } = useDAW();
+
+  // Get suggestions when playing track
+  React.useEffect(() => {
+    if (isConnected && isPlaying && selectedTrack) {
+      getSuggestions(`track_${selectedTrack.id}`);
+    }
+  }, [isPlaying, selectedTrack?.id, isConnected]);
+
+  return (
+    <div>
+      <h3>Codette Suggestions ({suggestions.length})</h3>
+      {isLoading && <p>Loading...</p>}
+      {suggestions.map(s => (
+        <div key={s.id}>
+          <strong>{s.title}</strong>
+          <p>{s.description}</p>
+          <span>{Math.round(s.confidence * 100)}% confidence</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
+// EXAMPLE 6: DAW Integration - Sync State to Codette
+// ============================================================================
+
+export async function example6_SyncDAWState() {
+  const daw = useDAW();
+  const bridge = getCodetteBridge();
+
+  // Sync current DAW state to Codette
+  const synced = await bridge.syncState(
+    daw.tracks,
+    daw.currentTime,
+    daw.isPlaying,
+    120 // BPM
+  );
+
+  console.log('DAW Synced:', synced);
+}
+
+// ============================================================================
+// EXAMPLE 7: Transport Control via Codette
+// ============================================================================
+
+export async function example7_TransportControl() {
+  const bridge = getCodetteBridge();
+
+  // Play transport via Codette command
+  await bridge.transportPlay();
+
+  // Seek to specific time
+  await bridge.transportSeek(30);
+
+  // Set tempo
+  await bridge.setTempo(140);
+
+  // Enable loop
+  await bridge.setLoop(true, 0, 60);
+}
+
+// ============================================================================
+// EXAMPLE 8: Memory Cocoons - Persistent Learning
+// ============================================================================
+
+export async function example8_MemoryCocoons() {
+  const bridge = getCodetteBridge();
+
+  // Get interaction history (memory cocoons)
+  const history = await bridge.chat(
+    'Help me improve this mix',
+    'conversation-1'
+  );
+
+  // Later: retrieve specific cocoon from history
+  const cocoonId = 'cocoon_1702486800000';
+  // const cocoon = await bridge.getCocoon(cocoonId);
+
+  // Generate dream from memory
+  // const dream = await bridge.dreamFromCocoon(cocoonId);
+}
+
+// ============================================================================
+// EXAMPLE 9: Real-Time Event Listening
+// ============================================================================
+
+export async function example9_EventListening() {
+  const bridge = getCodetteBridge();
+
+  // Listen for real-time suggestions
+  bridge.on('suggestion_received', (suggestions) => {
+    console.log('New suggestions arrived:', suggestions);
+  });
+
+  // Listen for analysis complete
+  bridge.on('analysis_complete', (analysis) => {
+    console.log('Analysis done:', analysis);
+  });
+
+  // Listen for transport state changes
+  bridge.on('transport_changed', (state) => {
+    console.log('Transport state:', state);
+  });
+
+  // Listen for connection events
+  bridge.on('connected', () => {
+    console.log('Codette connected!');
+  });
+
+  bridge.on('disconnected', () => {
+    console.log('Codette disconnected');
+  });
+
+  // Listen for reconnection
+  bridge.on('reconnected', (data) => {
+    console.log('Codette reconnected after attempts:', data.attempts);
+  });
+}
+
+// ============================================================================
+// EXAMPLE 10: Error Handling & Fallbacks
+// ============================================================================
+
+export async function example10_ErrorHandling() {
+  const bridge = getCodetteBridge();
+
+  try {
+    // This will automatically fallback if API is down
+    const suggestions = await bridge.getSuggestions({ type: 'mixing' });
+    console.log('Got suggestions (API or fallback):', suggestions);
+  } catch (error) {
+    // Should NOT throw - fallback prevents errors
+    console.error('Unexpected error:', error);
+  }
+
+  // Check connection status
+  const status = bridge.getConnectionStatus();
+  console.log('Connected:', status.connected);
+  console.log('Reconnect attempts:', status.reconnectAttempts);
+
+  // Manually reconnect if needed
+  const reconnected = await bridge.forceReconnect();
+  console.log('Reconnection successful:', reconnected);
+}
+
+// ============================================================================
+// EXAMPLE 11: Full Workflow - User Asks for Help
+// ============================================================================
+
+export async function example11_FullWorkflow() {
+  const bridge = getCodetteBridge();
+  const daw = useDAW();
+
+  // User asks for help improving mix
+  const userQuestion = 'My vocals sound muffled. How can I fix this?';
+
+  // 1. Sync DAW state
+  await bridge.syncState(
+    daw.tracks,
+    daw.currentTime,
+    daw.isPlaying,
+    120
+  );
+
+  // 2. Analyze current track
+  if (daw.selectedTrack) {
+    const analysis = await bridge.analyzeAudio(
+      {
+        duration: 10,
+        sample_rate: 44100
+      },
+      'spectrum'
+    );
+    console.log('Current track analysis:', analysis);
+
+    // 3. Get suggestions based on analysis
+    const suggestions = await bridge.getSuggestions({
+      type: 'mixing',
+      track_type: daw.selectedTrack.type,
+      genre: 'pop',
+      bpm: 120
+    });
+    console.log('Mixing suggestions:', suggestions);
+  }
+
+  // 4. Get multi-perspective analysis
+  const multiPerspective = {
+    newtonian: await bridge.chat(userQuestion, 'conv-1', 'newtonian_logic'),
+    creative: await bridge.chat(userQuestion, 'conv-1', 'davinci_synthesis'),
+    technical: await bridge.chat(userQuestion, 'conv-1', 'mathematical_rigor')
+  };
+  console.log('Multi-perspective analysis:', multiPerspective);
+
+  // 5. Get specific music guidance
+  const guidance = await bridge.chat(
+    userQuestion,
+    'conv-1'
+  );
+  console.log('Codette guidance:', guidance.response);
+}
+
+// ============================================================================
+// EXAMPLE 12: Auto-Suggestion Loop
+// ============================================================================
+
+export function example12_AutoSuggestions() {
+  const { getSuggestions, suggestions } = useCodette();
+  const { selectedTrack, isPlaying } = useDAW();
+
+  // Auto-refresh suggestions every 30 seconds when playing
+  React.useEffect(() => {
+    if (!isPlaying || !selectedTrack) return;
+
+    const interval = setInterval(() => {
+      getSuggestions(`track_${selectedTrack.id}`);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, selectedTrack?.id]);
+
+  return (
+    <div>
+      <h4>Real-time Suggestions</h4>
+      {suggestions.map(s => (
+        <div key={s.id} className="suggestion-card">
+          <h5>{s.title}</h5>
+          <p>{s.description}</p>
+          <div className="confidence-bar" style={{ width: `${s.confidence * 100}%` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
+// EXAMPLE 13: Quick Actions Menu
+// ============================================================================
+
+export function example13_QuickActions() {
+  const bridge = getCodetteBridge();
+  const daw = useDAW();
+
+  const actions = {
+    playAudio: async () => {
+      await bridge.transportPlay();
+    },
+
+    stopAudio: async () => {
+      await bridge.transportStop();
+    },
+
+    setGainStaging: async () => {
+      if (daw.selectedTrack) {
+        daw.updateTrack(daw.selectedTrack.id, { volume: -6 });
+      }
+    },
+
+    addCompressor: async () => {
+      if (daw.selectedTrack) {
+        daw.addPluginToTrack(daw.selectedTrack.id, {
+          id: `comp-${Date.now()}`,
+          name: 'Compressor',
+          type: 'compressor',
+          enabled: true,
+          parameters: {}
+        });
+      }
+    },
+
+    analyzeCurrent: async () => {
+      if (daw.selectedTrack) {
+        const result = await bridge.analyzeAudio({
+          duration: 10,
+          sample_rate: 44100
+        }, 'spectrum');
+        console.log('Analysis:', result);
+      }
+    }
+  };
+
+  return (
+    <div className="quick-actions">
+      <button onClick={actions.playAudio}>▶ Play</button>
+      <button onClick={actions.stopAudio}>⏹ Stop</button>
+      <button onClick={actions.setGainStaging}>-6dB</button>
+      <button onClick={actions.addCompressor}>+ Compressor</button>
+      <button onClick={actions.analyzeCurrent}>🔍 Analyze</button>
+    </div>
+  );
+}
+
+// ============================================================================
+// EXAMPLE 14: Status Monitoring
+// ============================================================================
+
+export function example14_StatusMonitoring() {
+  const bridge = getCodetteBridge();
+  const [status, setStatus] = React.useState(bridge.getConnectionStatus());
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      const newStatus = bridge.getConnectionStatus();
+      setStatus(newStatus);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="status-monitor">
+      <div className={`status-dot ${status.connected ? 'connected' : 'disconnected'}`} />
+      <span>
+        {status.connected ? 'Connected' : `Reconnecting (${status.reconnectAttempts}/${10})`}
+      </span>
+      <span>Queue: {bridge.getQueueStatus().queueSize} pending</span>
+    </div>
+  );
+}
+
+// ============================================================================
+// EXAMPLE 15: Settings Panel
+// ============================================================================
+
+export function example15_SettingsPanel() {
+  const {
+    setActivePerspectives,
+    startListening,
+    stopListening
+  } = useCodette();
+
+  const [selectedPerspectives, setSelectedPerspectives] = React.useState([
+    'newtonian_logic',
+    'neural_network',
+    'mathematical_rigor'
+  ]);
+
+  const [listeningEnabled, setListeningEnabled] = React.useState(false);
+
+  const handlePerspectiveToggle = (perspective: string) => {
+    const newSelection = selectedPerspectives.includes(perspective)
+      ? selectedPerspectives.filter(p => p !== perspective)
+      : [...selectedPerspectives, perspective];
+
+    setSelectedPerspectives(newSelection);
+    setActivePerspectives(newSelection);
+  };
+
+  const handleListeningToggle = () => {
+    if (listeningEnabled) {
+      stopListening();
+    } else {
+      startListening();
+    }
+    setListeningEnabled(!listeningEnabled);
+  };
+
+  return (
+    <div className="settings-panel">
+      <h3>Codette Settings</h3>
+
+      <div className="perspective-selector">
+        <h4>Active Perspectives</h4>
+        {[
+          'newtonian_logic',
+          'davinci_synthesis',
+          'human_intuition',
+          'neural_network',
+          'quantum_logic'
+        ].map(p => (
+          <label key={p}>
+            <input
+              type="checkbox"
+              checked={selectedPerspectives.includes(p)}
+              onChange={() => handlePerspectiveToggle(p)}
+            />
+            {p.replace(/_/g, ' ')}
+          </label>
+        ))}
+      </div>
+
+      <div className="listening-control">
+        <label>
+          <input
+            type="checkbox"
+            checked={listeningEnabled}
+            onChange={handleListeningToggle}
+          />
+          Enable Real-time Listening Mode
+        </label>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// USAGE IN COMPONENT
+// ============================================================================
+
+/**
+ * QUICK INTEGRATION:
+ * 
+ * 1. Import the hook:
+ *    import { useCodette } from '@/hooks/useCodette';
+ * 
+ * 2. Use in component:
+ *    const { sendMessage, suggestions, analysis } = useCodette();
+ * 
+ * 3. Call functions:
+ *    await sendMessage('How can I improve this mix?');
+ *    await getSuggestions('mixing');
+ *    await analyzeTrack(trackId);
+ * 
+ * 4. Monitor state:
+ *    if (isConnected) { ... }
+ *    if (isLoading) { ... }
+ *    suggestions.map(s => ...)
+ */
+
+export default {
+  example1_BasicMessageQuery,
+  example2_SpecificPerspective,
+  example3_MixingSuggestions,
+  example4_AnalyzeAudio,
+  example5_ReactComponent,
+  example6_SyncDAWState,
+  example7_TransportControl,
+  example8_MemoryCocoons,
+  example9_EventListening,
+  example10_ErrorHandling,
+  example11_FullWorkflow,
+  example12_AutoSuggestions,
+  example13_QuickActions,
+  example14_StatusMonitoring,
+  example15_SettingsPanel,
+};

@@ -1,0 +1,163 @@
+﻿/**
+ * InputMonitor Component - Real-time input level display
+ * Shows input levels, peak hold, RMS, and clipping detection
+ */
+
+import { useEffect, useState, useRef } from 'react';
+import { useDAW } from '../contexts/DAWContext';
+
+interface InputMonitorProps {
+  trackId?: string;
+  showLabel?: boolean;
+  compact?: boolean;
+  height?: string;
+}
+
+export default function InputMonitor({
+  trackId,
+  showLabel = true,
+  compact = false,
+  height = 'h-8',
+}: InputMonitorProps) {
+  const { inputLevel, selectedTrack } = useDAW();
+  const [peakLevel, setPeakLevel] = useState(0);
+  const [rmsLevel, setRmsLevel] = useState(0);
+  const [isClipping, setIsClipping] = useState(false);
+  const peakDecayTimer = useRef<NodeJS.Timeout>();
+
+  // Track peak level with decay
+  useEffect(() => {
+    if (inputLevel > peakLevel) {
+      setPeakLevel(inputLevel);
+      if (peakDecayTimer.current) {
+        clearTimeout(peakDecayTimer.current);
+      }
+    }
+
+    // Clipping detection
+    setIsClipping(inputLevel > 0.95);
+
+    // Smooth RMS calculation
+    setRmsLevel((prev) => prev * 0.9 + inputLevel * 0.1);
+
+    // Peak decay after 2 seconds
+    if (peakDecayTimer.current) {
+      clearTimeout(peakDecayTimer.current);
+    }
+    peakDecayTimer.current = setTimeout(() => {
+      setPeakLevel(Math.max(inputLevel, peakLevel * 0.95));
+    }, 2000);
+
+    return () => {
+      if (peakDecayTimer.current) {
+        clearTimeout(peakDecayTimer.current);
+      }
+    };
+  }, [inputLevel, peakLevel]);
+
+  // Calculate meter color
+  const getMeterColor = (level: number): string => {
+    if (level < 0.5) return 'bg-gradient-to-r from-green-500 to-green-600';
+    if (level < 0.8) return 'bg-gradient-to-r from-yellow-500 to-yellow-600';
+    return 'bg-gradient-to-r from-red-500 to-red-600';
+  };
+
+  // Convert linear to dB
+  const linearToDb = (linear: number): number => {
+    if (linear === 0) return -Infinity;
+    return 20 * Math.log10(linear);
+  };
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1 flex-1">
+        {/* Compact Meter */}
+        <div className={`${height} flex-1 bg-gray-950 rounded border border-gray-600 overflow-hidden relative`}>
+          {/* RMS Indicator */}
+          <div
+            className={`h-full transition-all ${getMeterColor(rmsLevel)}`}
+            style={{ width: `${rmsLevel * 100}%` }}
+          />
+
+          {/* Peak Line */}
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-white/80"
+            style={{ left: `${peakLevel * 100}%` }}
+          />
+
+          {/* Clipping Flash */}
+          {isClipping && (
+            <div className="absolute inset-0 animate-pulse bg-red-500/30" />
+          )}
+        </div>
+
+        {/* Level Number */}
+        <span className="text-xs font-mono text-gray-400 w-8 text-right">
+          {linearToDb(rmsLevel).toFixed(0)}dB
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Header */}
+      {showLabel && (
+        <div className="flex items-center justify-between">
+          <label htmlFor="input-monitor" className="text-xs font-semibold text-gray-300">
+            Input Level
+          </label>
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-mono text-gray-400">
+              {linearToDb(rmsLevel).toFixed(1)}dB
+            </span>
+            {isClipping && (
+              <span className="text-xs font-bold text-red-500 animate-pulse">CLIP</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main Meter */}
+      <div
+        id="input-monitor"
+        className={`${height} bg-gray-950 rounded border border-gray-600 overflow-hidden relative flex items-center`}
+      >
+        {/* RMS Bar */}
+        <div
+          className={`h-full transition-all ${getMeterColor(rmsLevel)}`}
+          style={{ width: `${rmsLevel * 100}%` }}
+        />
+
+        {/* Peak Indicator (white line) */}
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-white/80 transition-all shadow-lg"
+          style={{ left: `${peakLevel * 100}%` }}
+        />
+
+        {/* Clipping Indicator */}
+        {isClipping && (
+          <div className="absolute inset-0 animate-pulse bg-red-500/20" />
+        )}
+      </div>
+
+      {/* Scale Labels */}
+      <div className="flex justify-between text-xs text-gray-500">
+        <span>-?</span>
+        <span>-12dB</span>
+        <span>0dB</span>
+        <span>+3dB</span>
+      </div>
+
+      {/* Peak Indicator */}
+      {peakLevel > 0 && (
+        <div className="flex justify-between items-center text-xs p-1 bg-gray-800 rounded">
+          <span className="text-gray-400">Peak:</span>
+          <span className="font-mono text-gray-300">
+            {linearToDb(peakLevel).toFixed(1)}dB
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}

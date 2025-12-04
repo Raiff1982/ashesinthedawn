@@ -1,0 +1,57 @@
+﻿/**
+ * Codette AI Panel Component
+ * Real-time suggestions, analysis, and chat with Codette AI backend
+ */
+
+import React, { useState, useRef, useEffect } from 'react';
+import { useCodette } from '@/hooks/useCodette';
+import { useDAW } from '@/contexts/DAWContext';
+import type { Plugin } from '@/types';
+import {
+  MessageCircle,
+  Send,
+  Loader,
+  AlertCircle,
+  Lightbulb,
+  Zap,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Minimize2,
+} from 'lucide-react';
+
+export interface CodettePanelProps {
+  isVisible?: boolean;
+  onClose?: () => void;
+  trackContext?: Record<string, unknown>;
+}
+
+export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
+  const {
+    isConnected,
+    isLoading,
+    chatHistory,
+    suggestions,
+    analysis,
+    error,
+    sendMessage,
+    clearHistory,
+    reconnect,
+    getSuggestions,
+    getMasteringAdvice,
+  } = useCodette({ autoConnect: true });
+
+  // DAW Context for actual state updates
+  const {
+    addTrack,
+    selectedTrack,
+    togglePlay,
+    updateTrack,
+    isPlaying,
+  } = useDAW();
+
+  const [inputValue, setInputValue] = useState('');
+  const [activeTab, setActiveTab] = useState<'suggestions' | 'analysis' | 'chat' | 'actions'>('suggestions');
+  const [selectedContext, setSelectedContext] = useState('general');
+  const [expanded, setExpanded] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);

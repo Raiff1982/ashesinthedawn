@@ -1,0 +1,139 @@
+﻿/**
+ * STEREO WIDTH CONTROL
+ * Adjust stereo image width from mono (0%) to ultra-wide (200%)
+ */
+
+import React, { useState } from 'react';
+import { Volume2 } from 'lucide-react';
+import { Tooltip } from './TooltipProvider';
+
+interface StereoWidthControlProps {}
+
+export function StereoWidthControl({}: StereoWidthControlProps) {
+  const [stereoWidth, setStereoWidth] = useState<number>(100);
+
+  const onStereoWidthChange = (newWidth: number) => {
+    setStereoWidth(Math.max(0, Math.min(200, newWidth)));
+  };
+
+  // Calculate stereo field visualization
+  const getStereoFieldColor = (value: number) => {
+    if (value < 50) return '#ff6b6b'; // Mono (red)
+    if (value < 100) return '#ffa500'; // Narrow (orange)
+    if (value === 100) return '#52b788'; // Normal (green)
+    return '#3a86ff'; // Wide (blue)
+  };
+
+  const getFieldLabel = (value: number) => {
+    if (value < 50) return 'MONO';
+    if (value < 100) return 'NARROW';
+    if (value === 100) return 'NORMAL';
+    if (value <= 150) return 'WIDE';
+    return 'ULTRA-WIDE';
+  };
+
+  return (
+    <div className="p-3 bg-gray-800 rounded border border-gray-700 space-y-2">
+      <label className="text-xs font-semibold text-gray-400">Stereo Width</label>
+      <div className="flex items-center gap-2">
+        <div className="text-xs text-gray-300 w-12 text-right">
+          {stereoWidth.toFixed(0)}%
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={200}
+          value={stereoWidth}
+          onChange={(e) => onStereoWidthChange(parseInt(e.target.value))}
+          className="flex-1"
+        />
+      </div>
+
+      <Tooltip
+        content={{
+          title: 'Stereo Width',
+          description:
+            'Adjust the stereo image width. 0% = Mono (center), 100% = Normal stereo, 200% = Ultra-wide (exaggerated sides)',
+          category: 'mixer',
+          relatedFunctions: ['Pan', 'Phase Correlation', 'Stereo Imaging'],
+          performanceTip: 'Use values >100% carefully on master bus to avoid translation issues on mono speakers',
+          examples: [
+            'Vocals: 100% (centered stereo)',
+            'Drums: 80-120% (slight width)',
+            'Ambience: 150%+ (wide, spacious)',
+            'Kick/Bass: 50-80% (mostly mono for translation)',
+          ],
+        }}
+        position="top"
+      >
+        <div className="space-y-2">
+          {/* Slider */}
+          <input
+            type="range"
+            min="0"
+            max="200"
+            step="5"
+            value={stereoWidth}
+            onChange={(e) => onStereoWidthChange(parseInt(e.target.value))}
+            className="w-full h-2 bg-gradient-to-r from-red-600 via-green-600 to-blue-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+          />
+
+          {/* Stereo Field Visualization */}
+          <div className="flex items-center justify-between px-2 py-2 bg-gray-900 rounded border border-gray-700">
+            {/* Left channel */}
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className="rounded-full transition-all"
+                style={{
+                  width: `${Math.max(8, 16 * (stereoWidth / 200))}px`,
+                  height: `${Math.max(8, 16 * (stereoWidth / 200))}px`,
+                  backgroundColor: getStereoFieldColor(stereoWidth),
+                }}
+              />
+              <span className="text-xs text-gray-500">L</span>
+            </div>
+
+            {/* Center indicator */}
+            <div className="text-xs font-bold text-gray-400">
+              {getFieldLabel(stereoWidth)}
+            </div>
+
+            {/* Right channel */}
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className="rounded-full transition-all"
+                style={{
+                  width: `${Math.max(8, 16 * (stereoWidth / 200))}px`,
+                  height: `${Math.max(8, 16 * (stereoWidth / 200))}px`,
+                  backgroundColor: getStereoFieldColor(stereoWidth),
+                }}
+              />
+              <span className="text-xs text-gray-500">R</span>
+            </div>
+          </div>
+
+          {/* Quick Presets */}
+          <div className="flex gap-1">
+            {[
+              { label: 'MONO', value: 0 },
+              { label: 'N', value: 100 },
+              { label: 'W', value: 150 },
+            ].map((preset) => (
+              <button
+                key={preset.value}
+                onClick={() => onStereoWidthChange(preset.value)}
+                className={`px-2 py-1 rounded text-xs ${
+                  stereoWidth === preset.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Tooltip>
+    </div>
+  );
+}

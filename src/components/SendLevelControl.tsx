@@ -18,7 +18,6 @@ interface SendInfo {
 }
 
 interface SendLevelControlProps {
-  _trackId?: string;
   sends?: SendInfo[];
   availableAuxTracks?: Array<{ id: string; name: string }>;
   onSendChange?: (sends: SendInfo[]) => void;
@@ -27,7 +26,6 @@ interface SendLevelControlProps {
 }
 
 export function SendLevelControl({
-  _trackId,
   sends = [],
   availableAuxTracks = [],
   onSendChange,

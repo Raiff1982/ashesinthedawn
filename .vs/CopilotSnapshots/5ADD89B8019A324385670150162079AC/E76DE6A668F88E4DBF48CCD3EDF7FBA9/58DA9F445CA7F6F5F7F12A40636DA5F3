@@ -1,0 +1,44 @@
+﻿{
+  "version": 3,
+  "vendor": {
+    "microsoft.com/VisualStudioSettings/CMake/1.0": {}
+  },
+  "configurePresets": [
+    {
+      "name": "windows-default",
+      "displayName": "Windows x64 Debug",
+      "description": "Sets Ninja generator, compilers, x64 architecture, build and install directory, debug build type",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+      },
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-default",
+      "configurePreset": "windows-default",
+      "description": "Build using windows-default configuration",
+      "inherits": "default"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-default",
+      "configurePreset": "windows-default",
+      "description": "Run tests using windows-default configuration",
+      "inherits": "default"
+    }
+  ]
+}

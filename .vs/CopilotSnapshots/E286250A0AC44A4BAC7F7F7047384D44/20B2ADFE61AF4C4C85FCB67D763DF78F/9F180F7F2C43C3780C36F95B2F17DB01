@@ -1,0 +1,175 @@
+﻿/**
+ * ENHANCED MIXER PANEL
+ * Advanced controls for a selected track: Stereo, Automation, Sends, Metering
+ */
+
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import { Track } from '../types';
+import { StereoWidthControl } from './StereoWidthControl';
+import { AutomationCurveEditor } from './AutomationCurveEditor';
+import { SendLevelControl } from './SendLevelControl';
+import { SpectrumAnalyzer } from './SpectrumAnalyzer';
+import { LevelMeter } from './LevelMeter';
+import { PhaseCorrelationMeter } from './PhaseCorrelationMeter';
+
+interface EnhancedMixerPanelProps {
+  track: Track | null;
+  onClose: () => void;
+  onTrackUpdate: (trackId: string, updates: Partial<Track>) => void;
+  availableAuxTracks?: Array<{ id: string; name: string }>;
+}
+
+export function EnhancedMixerPanel({
+  track,
+  onClose,
+  onTrackUpdate,
+  availableAuxTracks = [],
+}: EnhancedMixerPanelProps) {
+  const [activeTab, setActiveTab] = useState<'stereo' | 'automation' | 'sends' | 'metering'>('stereo');
+
+  if (!track) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-gray-400 p-4 text-center">
+        <p className="text-sm">Select a track to view advanced mixer controls</p>
+      </div>
+    );
+  }
+
+  const tabs = [
+    { id: 'stereo' as const, label: 'Stereo', icon: '??' },
+    { id: 'automation' as const, label: 'Automation', icon: '??' },
+    { id: 'sends' as const, label: 'Sends', icon: '??' },
+    { id: 'metering' as const, label: 'Metering', icon: '??' },
+  ];
+
+  return (
+    <div className="h-full flex flex-col bg-gray-900 border-l border-gray-700">
+      {/* Header */}
+      <div className="p-3 border-b border-gray-700 bg-gray-800 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            className="w-3 h-3 rounded flex-shrink-0"
+            style={{ backgroundColor: track.color }}
+          />
+          <h3 className="text-sm font-bold text-gray-200 truncate">{track.name}</h3>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1 hover:bg-gray-700 rounded transition"
+        >
+          <X className="w-4 h-4 text-gray-400" />
+        </button>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex gap-1 p-2 border-b border-gray-700 bg-gray-800 flex-shrink-0 overflow-x-auto">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-1 px-3 py-2 rounded text-xs font-semibold transition-colors whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Content Area */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {activeTab === 'stereo' && (
+          <>
+            <StereoWidthControl
+              stereoWidth={track.stereoWidth}
+              onStereoWidthChange={(width: number) =>
+                onTrackUpdate(track.id, { stereoWidth: width })
+              }
+            />
+
+            <div className="p-3 bg-gray-800 rounded-lg border border-gray-700 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-gray-400">PAN</label>
+                <span className="text-xs font-mono text-gray-300">
+                  {track.pan === 0 ? 'CENTER' : track.pan > 0 ? `R${Math.abs(track.pan).toFixed(1)}` : `L${Math.abs(track.pan).toFixed(1)}`}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.05"
+                value={track.pan}
+                onChange={(e) =>
+                  onTrackUpdate(track.id, { pan: parseFloat(e.target.value) })
+                }
+                className="w-full h-2 bg-gradient-to-r from-blue-600 via-gray-600 to-blue-600 rounded-lg"
+              />
+            </div>
+
+            <button
+              onClick={() =>
+                onTrackUpdate(track.id, { phaseFlip: !track.phaseFlip })
+              }
+              className={`w-full px-3 py-2 rounded text-xs font-semibold transition-colors ${
+                track.phaseFlip
+                  ? 'bg-red-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {track.phaseFlip ? '? PHASE INVERTED' : '?? NORMAL PHASE'}
+            </button>
+          </>
+        )}
+
+        {activeTab === 'automation' && (
+          <AutomationCurveEditor
+            trackId={track.id}
+            points={
+              track.automationMode === 'write'
+                ? [
+                    { x: 0, y: 0.5 },
+                    { x: 1, y: 0.5 },
+                  ]
+                : []
+            }
+            onPointsChange={(points) => {
+              console.log('Automation curve updated:', points);
+            }}
+            curveType="volume"
+            height={300}
+            width={400}
+          />
+        )}
+
+        {activeTab === 'sends' && (
+          <SendLevelControl
+            trackId={track.id}
+            sends={[]}
+            availableAuxTracks={[]}
+            onSendChange={(sends) => onTrackUpdate(track.id, { sends })}
+            onAddSend={(auxTrackId) => console.log('add send', auxTrackId)}
+            onRemoveSend={(sendId) => console.log('remove send', sendId)}
+          />
+        )}
+
+        {activeTab === 'metering' && (
+          <div className="space-y-3">
+            <SpectrumAnalyzer height={150} width={320} />
+            <LevelMeter height={180} width={320} showLoudness={true} />
+            <PhaseCorrelationMeter width={320} height={120} />
+          </div>
+        )}
+      </div>
+
+      {/* Footer Info */}
+      <div className="p-2 border-t border-gray-700 bg-gray-800 text-xs text-gray-500 flex-shrink-0 italic">
+        ?? Tip: Changes here affect this track's mixer settings in real-time
+      </div>
+    </div>
+  );
+}

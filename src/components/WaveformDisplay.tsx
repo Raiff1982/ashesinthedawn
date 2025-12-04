@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useDAW } from "../contexts/DAWContext";
 import { normalizeCanvasDimensions } from "../lib/windowScaling";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -35,21 +35,22 @@ export default function WaveformDisplay({
   const [isHoveringPeak, setIsHoveringPeak] = useState(false);
 
   const duration = getAudioDuration(trackId);
-  let waveformData = getWaveformData(trackId);
+  const baseData = getWaveformData(trackId);
 
-  // Generate demo waveform if no data available (for testing)
-  if (!waveformData || waveformData.length === 0) {
-    waveformData = Array.from({ length: 1024 }, (_, i) => {
-      const t = (i / 1024) * Math.PI * 4;
-      // Create a mix of sine waves for visual interest
+  // Memoize waveform data to avoid new array on each render causing effect loops
+  const waveformData = useMemo(() => {
+    if (baseData && baseData.length > 0) return baseData;
+    const length = 1024;
+    return Array.from({ length }, (_, i) => {
+      const t = (i / length) * Math.PI * 4;
       return Math.abs(
         Math.sin(t) * 0.6 +
-        Math.sin(t * 2) * 0.3 +
-        Math.sin(t * 3) * 0.1 +
-        Math.random() * 0.05
+          Math.sin(t * 2) * 0.3 +
+          Math.sin(t * 3) * 0.1 +
+          Math.random() * 0.05
       );
     });
-  }
+  }, [baseData]);
 
   // Track container and watch for size changes
   useEffect(() => {
