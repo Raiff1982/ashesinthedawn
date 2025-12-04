@@ -1862,7 +1862,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     memory_size = 0
                     if codette_engine and hasattr(codette_engine, 'memory'):
                         try:
-                            memory_size = len(codette_engine.memory)
+                            if hasattr(codette_engine, 'memory'):
+                                memory_size = len(codette_engine.memory)
                         except:
                             pass
                     
@@ -1909,7 +1910,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json({
                         "type": "analysis_response",
                         "status": "success",
-                        "trackId": track_data.get("track_id", "unknown"),
+                        "trackId": request.track_data.get("track_id", "unknown"),
                         "analysis": {
                             "analysis_type": analysis_type,
                             "codette_insights": codette_response,
@@ -2287,3 +2288,23 @@ async def create_mixdown(request: Dict[str, Any]):
     except Exception as e:
         logger.error(f"ERROR in /api/mixdown: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# MAIN - RUN SERVER
+# ============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Get port from environment or use default
+    port = int(os.getenv("CODETTE_PORT", "8000"))
+    host = os.getenv("CODETTE_HOST", "0.0.0.0")
+    
+    # Run server with uvicorn
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=True
+    )

@@ -2,8 +2,8 @@
  * useCodette Hook - Complete Codette AI Integration
  * All 11 perspectives, music guidance, memory system, and real-time features
  * 
- * Status: ✅ Production Ready
- * Version: 3.0
+ * Status: ✅ Production Ready - ENHANCED
+ * Version: 4.0
  */
 /* eslint-disable react-hooks/rules-of-hooks */
 
@@ -73,6 +73,64 @@ export interface CodetteChatMessage {
   };
 }
 
+// NEW: Training data types
+export interface TrainingContext {
+  daw_functions: Record<string, any>;
+  ui_components: Record<string, any>;
+  codette_abilities: Record<string, any>;
+}
+
+// NEW: DSP Effect types
+export interface EffectProcessRequest {
+  effect_type: string;
+  parameters: Record<string, number>;
+  audio_data: number[];
+  sample_rate?: number;
+}
+
+export interface EffectProcessResponse {
+  status: string;
+  effect: string;
+  parameters: Record<string, number>;
+  output: number[];
+  length: number;
+}
+
+// NEW: Analysis endpoint types
+export interface DelaySyncResponse {
+  status: string;
+  bpm: number;
+  divisions: Record<string, number>;
+}
+
+export interface GenreDetectionResponse {
+  status: string;
+  detected_genre: string;
+  confidence: number;
+  candidates?: string[];
+}
+
+export interface EarTrainingExercise {
+  name: string;
+  semitones?: number;
+  intervals?: number[];
+  difficulty: string;
+  example?: string;
+  quality?: string;
+}
+
+export interface ProductionChecklist {
+  [section: string]: string[];
+}
+
+export interface InstrumentInfo {
+  frequency_range: string;
+  fundamental?: string;
+  presence?: string;
+  compression_ratio: string;
+  tips: string[];
+}
+
 export interface UseCodetteOptions {
   autoConnect?: boolean;
   apiUrl?: string;
@@ -89,6 +147,8 @@ export interface UseCodetteReturn {
   analysis: AnalysisResult | null;
   error: Error | null;
   quantumState: QuantumState;
+  currentPersonality: string;
+  websocketConnected: boolean;
 
   sendMessage: (message: string, dawContext?: Record<string, unknown>) => Promise<string | null>;
   clearHistory: () => void;
@@ -118,6 +178,32 @@ export interface UseCodetteReturn {
   getTrackSuggestions: (trackId: string) => Promise<Suggestion[]>;
   analyzeTrack: (trackId: string) => Promise<AnalysisResult | null>;
   applyTrackSuggestion: (trackId: string, suggestion: Suggestion) => Promise<boolean>;
+
+  // NEW: Personality & Training
+  rotatePersonality: () => Promise<string>;
+  setPersonality: (personality: string) => void;
+  getTrainingContext: () => Promise<TrainingContext | null>;
+  searchTrainingData: (query: string, category?: string) => Promise<any[]>;
+
+  // NEW: DSP Effects Processing
+  processEffect: (request: EffectProcessRequest) => Promise<EffectProcessResponse | null>;
+  listAvailableEffects: () => Promise<Record<string, any> | null>;
+
+  // NEW: Analysis Endpoints
+  getDelaySync: (bpm: number) => Promise<DelaySyncResponse | null>;
+  detectGenre: (tracks: any[]) => Promise<GenreDetectionResponse | null>;
+  getEarTraining: (exerciseType: string, difficulty: string) => Promise<EarTrainingExercise[]>;
+  getProductionChecklist: (stage: string) => Promise<ProductionChecklist | null>;
+  getInstrumentInfo: (category?: string, instrument?: string) => Promise<Record<string, any> | null>;
+
+  // NEW: Creative Prompts
+  createPlaylist: (prompt: string) => Promise<any>;
+  analyzeDAWProject: (tracks: any[], bpm: number, projectName: string) => Promise<any>;
+
+  // NEW: WebSocket
+  connectWebSocket: () => void;
+  disconnectWebSocket: () => void;
+  sendWebSocketMessage: (type: string, payload: any) => void;
 }
 
 // ============================================================================
@@ -136,6 +222,14 @@ const PERSPECTIVES = [
   'copilot_developer',
   'bias_mitigation',
   'psychological'
+] as const;
+
+const PERSONALITY_MODES = [
+  'technical_expert',
+  'creative_mentor',
+  'practical_guide',
+  'analytical_teacher',
+  'innovative_explorer'
 ] as const;
 
 const MOCK_QUANTUM_STATE: QuantumState = {
@@ -181,8 +275,11 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
   const [error, setError] = useState<Error | null>(null);
   const [quantumState, setQuantumState] = useState<QuantumState>(MOCK_QUANTUM_STATE);
   const [activePerspectives, setActivePerspectives] = useState<string[]>(PERSPECTIVES.slice(0, 5));
+  const [currentPersonality, setCurrentPersonality] = useState<string>('technical_expert');
+  const [websocketConnected, setWebsocketConnected] = useState(false);
 
   const listenerActiveRef = useRef(false);
+  const websocketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (autoConnect) {
@@ -192,7 +289,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
   }, [autoConnect]);
 
   // ========================================================================
-  // CORE METHODS
+  // CORE METHODS (existing)
   // ========================================================================
 
   const sendMessage = useCallback(
@@ -745,7 +842,318 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
     [apiUrl]
   );
 
+  // ========================================================================
+  // NEW: PERSONALITY & TRAINING METHODS
+  // ========================================================================
+
+  const rotatePersonality = useCallback(async (): Promise<string> => {
+    const currentIndex = PERSONALITY_MODES.indexOf(currentPersonality as any);
+    const nextIndex = (currentIndex + 1) % PERSONALITY_MODES.length;
+    const nextPersonality = PERSONALITY_MODES[nextIndex];
+    setCurrentPersonality(nextPersonality);
+    console.log(`🎭 Personality rotated to: ${nextPersonality}`);
+    return nextPersonality;
+  }, [currentPersonality]);
+
+  const setPersonality = useCallback((personality: string) => {
+    if (PERSONALITY_MODES.includes(personality as any)) {
+      setCurrentPersonality(personality);
+      console.log(`🎭 Personality set to: ${personality}`);
+    }
+  }, []);
+
+  const getTrainingContext = useCallback(async (): Promise<TrainingContext | null> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/training/context`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.data;
+      }
+    } catch (err) {
+      console.error('getTrainingContext failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  const searchTrainingData = useCallback(async (query: string, category?: string): Promise<any[]> => {
+    try {
+      const trainingContext = await getTrainingContext();
+      if (!trainingContext) return [];
+
+      const results: any[] = [];
+      const queryLower = query.toLowerCase();
+
+      // Search DAW functions
+      if (!category || category === 'daw_functions') {
+        Object.entries(trainingContext.daw_functions).forEach(([catName, functions]) => {
+          Object.entries(functions as Record<string, any>).forEach(([funcName, funcData]) => {
+            if (funcName.toLowerCase().includes(queryLower) || 
+                (funcData.description as string).toLowerCase().includes(queryLower)) {
+              results.push({ type: 'daw_function', category: catName, ...funcData });
+            }
+          });
+        });
+      }
+
+      // Search UI components
+      if (!category || category === 'ui_components') {
+        Object.entries(trainingContext.ui_components).forEach(([compName, compData]) => {
+          if (compName.toLowerCase().includes(queryLower) || 
+              (compData as any).description.toLowerCase().includes(queryLower)) {
+            results.push({ type: 'ui_component', name: compName, ...compData });
+          }
+        });
+      }
+
+      // Search Codette abilities
+      if (!category || category === 'codette_abilities') {
+        Object.entries(trainingContext.codette_abilities).forEach(([abilityName, abilityData]) => {
+          if (abilityName.toLowerCase().includes(queryLower) || 
+              (abilityData as any).description.toLowerCase().includes(queryLower)) {
+            results.push({ type: 'codette_ability', name: abilityName, ...abilityData });
+          }
+        });
+      }
+
+      return results;
+    } catch (err) {
+      console.error('searchTrainingData failed:', err);
+      return [];
+    }
+  }, [getTrainingContext]);
+
+  // ========================================================================
+  // NEW: DSP EFFECTS PROCESSING
+  // ========================================================================
+
+  const processEffect = useCallback(async (request: EffectProcessRequest): Promise<EffectProcessResponse | null> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/effects/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request)
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('processEffect failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  const listAvailableEffects = useCallback(async (): Promise<Record<string, any> | null> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/effects/list`);
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('listAvailableEffects failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  // ========================================================================
+  // NEW: ANALYSIS ENDPOINTS
+  // ========================================================================
+
+  const getDelaySync = useCallback(async (bpm: number): Promise<DelaySyncResponse | null> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/analysis/delay-sync?bpm=${bpm}`);
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('getDelaySync failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  const detectGenre = useCallback(async (tracks: any[]): Promise<GenreDetectionResponse | null> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/analysis/detect-genre`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracks })
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('detectGenre failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  const getEarTraining = useCallback(async (exerciseType: string, difficulty: string): Promise<EarTrainingExercise[]> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/analysis/ear-training?exercise_type=${exerciseType}&difficulty=${difficulty}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.exercises || [];
+      }
+    } catch (err) {
+      console.error('getEarTraining failed:', err);
+    }
+    return [];
+  }, [apiUrl]);
+
+  const getProductionChecklist = useCallback(async (stage: string): Promise<ProductionChecklist | null> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/analysis/production-checklist?stage=${stage}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.sections;
+      }
+    } catch (err) {
+      console.error('getProductionChecklist failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  const getInstrumentInfo = useCallback(async (category?: string, instrument?: string): Promise<Record<string, any> | null> => {
+    try {
+      let url = `${apiUrl}/api/analysis/instrument-info`;
+      const params = new URLSearchParams();
+      if (category) params.append('category', category);
+      if (instrument) params.append('instrument', instrument);
+      if (params.toString()) url += `?${params.toString()}`;
+
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        return data.data;
+      }
+    } catch (err) {
+      console.error('getInstrumentInfo failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  // ========================================================================
+  // NEW: CREATIVE PROMPTS
+  // ========================================================================
+
+  const createPlaylist = useCallback(async (prompt: string): Promise<any> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/prompt/playlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('createPlaylist failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  const analyzeDAWProject = useCallback(async (tracks: any[], bpm: number, projectName: string): Promise<any> => {
+    try {
+      const response = await fetch(`${apiUrl}/api/prompt/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracks, bpm, project_name: projectName })
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('analyzeDAWProject failed:', err);
+    }
+    return null;
+  }, [apiUrl]);
+
+  // ========================================================================
+  // NEW: WEBSOCKET METHODS
+  // ========================================================================
+
+  const connectWebSocket = useCallback(() => {
+    if (websocketRef.current?.readyState === WebSocket.OPEN) {
+      console.log('WebSocket already connected');
+      return;
+    }
+
+    const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+    const ws = new WebSocket(`${wsUrl}/ws`);
+
+    ws.onopen = () => {
+      console.log('✅ WebSocket connected to Codette');
+      setWebsocketConnected(true);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('📨 WebSocket message:', data);
+
+        if (data.type === 'chat_response') {
+          const assistantMsg: CodetteChatMessage = {
+            role: 'assistant',
+            content: data.response,
+            timestamp: Date.now(),
+            source: 'websocket',
+            confidence: data.confidence || 0.85
+          };
+          setChatHistory(prev => [...prev, assistantMsg]);
+        } else if (data.type === 'status_response') {
+          if (data.quantum_state) {
+            setQuantumState(data.quantum_state);
+          }
+        }
+      } catch (err) {
+        console.error('WebSocket message parse error:', err);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('❌ WebSocket error:', error);
+      setWebsocketConnected(false);
+    };
+
+    ws.onclose = () => {
+      console.log('🔌 WebSocket disconnected');
+      setWebsocketConnected(false);
+    };
+
+    websocketRef.current = ws;
+  }, [apiUrl]);
+
+  const disconnectWebSocket = useCallback(() => {
+    if (websocketRef.current) {
+      websocketRef.current.close();
+      websocketRef.current = null;
+      setWebsocketConnected(false);
+      console.log('🔌 WebSocket disconnected manually');
+    }
+  }, []);
+
+  const sendWebSocketMessage = useCallback((type: string, payload: any) => {
+    if (websocketRef.current?.readyState === WebSocket.OPEN) {
+      websocketRef.current.send(JSON.stringify({ type, ...payload }));
+    } else {
+      console.error('WebSocket not connected');
+    }
+  }, []);
+
+  // Cleanup WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (websocketRef.current) {
+        websocketRef.current.close();
+      }
+    };
+  }, []);
+
   return {
+    // Existing returns
     isConnected,
     isLoading,
     chatHistory,
@@ -753,6 +1161,9 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
     analysis,
     error,
     quantumState,
+    currentPersonality,
+    websocketConnected,
+
     sendMessage,
     clearHistory,
     analyzeAudio,
@@ -775,7 +1186,25 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
     syncDAWState,
     getTrackSuggestions,
     analyzeTrack,
-    applyTrackSuggestion
+    applyTrackSuggestion,
+
+    // NEW returns
+    rotatePersonality,
+    setPersonality,
+    getTrainingContext,
+    searchTrainingData,
+    processEffect,
+    listAvailableEffects,
+    getDelaySync,
+    detectGenre,
+    getEarTraining,
+    getProductionChecklist,
+    getInstrumentInfo,
+    createPlaylist,
+    analyzeDAWProject,
+    connectWebSocket,
+    disconnectWebSocket,
+    sendWebSocketMessage,
   };
 }
 
