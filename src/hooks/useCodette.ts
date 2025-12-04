@@ -306,6 +306,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
         setChatHistory(prev => [...prev, userMsg]);
 
         try {
+          console.log('🚀 Sending query to backend:', message);
           const response = await fetch(`${apiUrl}/api/codette/query`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -318,20 +319,46 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
 
           if (response.ok) {
             const data = await response.json();
-            const assistantMsg: CodetteChatMessage = {
-              role: 'assistant',
-              content: data.perspectives ? Object.keys(data.perspectives).map(k => (data.perspectives as any)[k]).join('\n\n') : data.message,
-              timestamp: Date.now(),
-              source: 'codette_engine',
-              confidence: data.confidence || 0.85
-            };
-            setChatHistory(prev => [...prev, assistantMsg]);
-            return assistantMsg.content;
+            console.log('✅ Backend response received:', data);
+            
+            // Extract perspective responses from backend
+            let contentText = '';
+            
+            if (data.perspectives && typeof data.perspectives === 'object') {
+              // Format multi-perspective response
+              const perspectiveEntries = Object.entries(data.perspectives);
+              if (perspectiveEntries.length > 0) {
+                contentText = perspectiveEntries
+                  .map(([perspective, response]) => `**${perspective}**:\n${response}`)
+                  .join('\n\n');
+              }
+            } else if (data.response) {
+              contentText = data.response;
+            } else if (data.message) {
+              contentText = data.message;
+            }
+            
+            if (contentText) {
+              const assistantMsg: CodetteChatMessage = {
+                role: 'assistant',
+                content: contentText,
+                timestamp: Date.now(),
+                source: 'codette_engine',
+                confidence: data.confidence || 0.85
+              };
+              setChatHistory(prev => [...prev, assistantMsg]);
+              console.log('✅ Real backend response displayed');
+              return assistantMsg.content;
+            }
           }
+          
+          console.warn('⚠️ Backend response not OK, status:', response.status);
         } catch (apiError) {
-          console.debug('API call failed, using local reasoning');
+          console.error('❌ API call failed:', apiError);
         }
 
+        // Only use fallback if backend truly failed
+        console.log('⚠️ Using fallback mock responses');
         const localResponse = await queryAllPerspectives(message);
         const responseEntries: Array<[string, string]> = Object.keys(localResponse).map(k => [k, localResponse[k]]);
         const combinedResponse = responseEntries
@@ -392,6 +419,7 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
   const queryAllPerspectives = useCallback(
     async (query: string): Promise<Record<string, string>> => {
       try {
+        console.log('🔍 Querying all perspectives for:', query);
         try {
           const response = await fetch(`${apiUrl}/api/codette/query`, {
             method: 'POST',
@@ -404,19 +432,26 @@ export function useCodette(options?: UseCodetteOptions): UseCodetteReturn {
 
           if (response.ok) {
             const data = await response.json();
-            return data.perspectives || {};
+            console.log('✅ Backend perspectives received:', Object.keys(data.perspectives || {}));
+            if (data.perspectives && typeof data.perspectives === 'object') {
+              return data.perspectives;
+            }
+          } else {
+            console.warn('⚠️ Backend perspectives request failed with status:', response.status);
           }
         } catch (apiError) {
-          console.debug('API failed, using mock perspectives');
+          console.error('❌ Perspectives API call failed:', apiError);
         }
 
+        // Fallback to mock data only if backend fails
+        console.warn('⚠️ Using mock perspective data as fallback');
         const results: Record<string, string> = {};
         for (const perspective of activePerspectives) {
-          results[perspective] = MOCK_PERSPECTIVES[perspective] || `${perspective}: Analysis`;
+          results[perspective] = MOCK_PERSPECTIVES[perspective] || `${perspective}: Analysis of "${query}"`;
         }
         return results;
       } catch (err) {
-        console.error('queryAllPerspectives failed:', err);
+        console.error('❌ queryAllPerspectives error:', err);
         return {};
       }
     },
