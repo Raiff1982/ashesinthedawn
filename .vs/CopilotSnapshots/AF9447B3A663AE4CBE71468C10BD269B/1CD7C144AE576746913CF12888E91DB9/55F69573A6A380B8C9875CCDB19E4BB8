@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import * as React from "react";
 import type {
   Track,
   Project,
@@ -369,77 +369,12 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 
   // Basic helper functions
   const getAudioContextStatus = () => "running";
-  const togglePlay = () => {
-    if (!isPlaying) {
-      // Starting playback
-      audioEngineRef.current
-        .initialize()
-        .then(async () => {
-          // CRITICAL FIX: Resume audio context explicitly (browser autoplay policy)
-          await audioEngineRef.current.resumeAudioContext();
-          
-          // Play all non-muted audio and instrument tracks from current time
-          tracks.forEach((track) => {
-            if (
-              !track.muted &&
-              (track.type === "audio" || track.type === "instrument")
-            ) {
-              // playAudio expects dB volume value
-              const success = audioEngineRef.current.playAudio(
-                track.id,
-                currentTime,
-                track.volume,
-                track.pan,
-                track.inserts
-              );
-              if (success) {
-                console.log(`? Started playback for track: ${track.name}`);
-              } else {
-                console.warn(`?? No audio buffer for track: ${track.name} - upload audio first`);
-              }
-            }
-          });
-          setIsPlaying(true);
-        })
-        .catch((err) => {
-          console.error("? Audio init failed:", err);
-          alert("Audio playback failed. Please check browser permissions and try again.");
-        });
-    } else {
-      // Pausing playback
-      audioEngineRef.current.stopAllAudio();
-      setIsPlaying(false);
-    }
-  };
+  const togglePlay = () => setIsPlaying((prev) => !prev);
   const toggleRecord = () => setIsRecording((prev) => !prev);
   const stop = () => {
-    // Stop recording first if active
-    if (isRecording) {
-      audioEngineRef.current
-        .stopRecording()
-        .then((blob) => {
-          if (blob) {
-            // Auto-save recording as new track
-            const recordedFile = new File(
-              [blob],
-              `Recording-${Date.now()}.webm`,
-              { type: "audio/webm" }
-            );
-            uploadAudioFile(recordedFile);
-          }
-        })
-        .catch((err) => console.error("Error stopping recording:", err));
-      setIsRecording(false);
-    }
-
-    // Stop all playback
-    audioEngineRef.current.stopAllAudio();
     setIsPlaying(false);
-
-    // Reset timeline to beginning
+    setIsRecording(false);
     setCurrentTime(0);
-    
-    console.log("?? Playback stopped and reset to start");
   };
   const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
 

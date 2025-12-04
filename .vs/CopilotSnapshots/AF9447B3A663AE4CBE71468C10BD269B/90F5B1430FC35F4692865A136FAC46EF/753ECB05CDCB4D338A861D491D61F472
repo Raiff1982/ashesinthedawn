@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import * as React from "react";
 import type {
   Track,
   Project,
@@ -393,16 +393,16 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
                 track.inserts
               );
               if (success) {
-                console.log(`? Started playback for track: ${track.name}`);
+                console.log(`✅ Started playback for track: ${track.name}`);
               } else {
-                console.warn(`?? No audio buffer for track: ${track.name} - upload audio first`);
+                console.warn(`⚠️ No audio buffer for track: ${track.name} - upload audio first`);
               }
             }
           });
           setIsPlaying(true);
         })
         .catch((err) => {
-          console.error("? Audio init failed:", err);
+          console.error("❌ Audio init failed:", err);
           alert("Audio playback failed. Please check browser permissions and try again.");
         });
     } else {
@@ -439,7 +439,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     // Reset timeline to beginning
     setCurrentTime(0);
     
-    console.log("?? Playback stopped and reset to start");
+    console.log("⏹️ Playback stopped and reset to start");
   };
   const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
 

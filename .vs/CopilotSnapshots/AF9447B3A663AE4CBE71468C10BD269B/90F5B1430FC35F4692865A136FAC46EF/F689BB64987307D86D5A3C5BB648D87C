@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import * as React from "react";
 import type {
   Track,
   Project,
@@ -393,16 +393,16 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
                 track.inserts
               );
               if (success) {
-                console.log(`? Started playback for track: ${track.name}`);
+                console.log(`✅ Started playback for track: ${track.name}`);
               } else {
-                console.warn(`?? No audio buffer for track: ${track.name} - upload audio first`);
+                console.warn(`⚠️ No audio buffer for track: ${track.name} - upload audio first`);
               }
             }
           });
           setIsPlaying(true);
         })
         .catch((err) => {
-          console.error("? Audio init failed:", err);
+          console.error("❌ Audio init failed:", err);
           alert("Audio playback failed. Please check browser permissions and try again.");
         });
     } else {
@@ -413,33 +413,9 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   };
   const toggleRecord = () => setIsRecording((prev) => !prev);
   const stop = () => {
-    // Stop recording first if active
-    if (isRecording) {
-      audioEngineRef.current
-        .stopRecording()
-        .then((blob) => {
-          if (blob) {
-            // Auto-save recording as new track
-            const recordedFile = new File(
-              [blob],
-              `Recording-${Date.now()}.webm`,
-              { type: "audio/webm" }
-            );
-            uploadAudioFile(recordedFile);
-          }
-        })
-        .catch((err) => console.error("Error stopping recording:", err));
-      setIsRecording(false);
-    }
-
-    // Stop all playback
-    audioEngineRef.current.stopAllAudio();
     setIsPlaying(false);
-
-    // Reset timeline to beginning
+    setIsRecording(false);
     setCurrentTime(0);
-    
-    console.log("?? Playback stopped and reset to start");
   };
   const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
 
