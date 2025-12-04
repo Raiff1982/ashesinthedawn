@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Effect Chain Context Adapter
  * Bridges TrackEffectChainManager into DAWContext with DSP Bridge integration
  * 

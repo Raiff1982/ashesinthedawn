@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Effect Chain Context Adapter
  * Bridges TrackEffectChainManager into DAWContext with DSP Bridge integration
  * 
@@ -148,24 +148,11 @@ export function useEffectChainAPI(): EffectChainContextAPI {
         // Process through each effect in the chain
         for (const effect of effects) {
           try {
-            // Convert parameters to numeric-only format for DSP bridge
-            const numericParameters: Record<string, number> = {};
-            for (const [key, value] of Object.entries(effect.parameters)) {
-              if (typeof value === 'number') {
-                numericParameters[key] = value;
-              } else if (typeof value === 'string') {
-                const parsed = parseFloat(value);
-                if (!isNaN(parsed)) {
-                  numericParameters[key] = parsed;
-                }
-              }
-            }
-            
             // Process audio through DSP bridge
             const effectOutput = await dspProcessEffect(
               effect.effectType,
               processedAudio,
-              numericParameters,
+              effect.parameters,
               sampleRate
             );
             

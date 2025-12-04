@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DSP Bridge - Frontend to Python Backend Communication
  * 
  * Provides REST API client for audio processing effects, automation, and metering
