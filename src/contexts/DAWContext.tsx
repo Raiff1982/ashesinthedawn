@@ -302,7 +302,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   const getUniqueTrackId = () => `track-${++trackIdCounterRef.current}`;
   const getUniqueMarkerId = () => `marker-${Date.now()}-${++markerIdCounterRef.current}`;
 
-  // Playback timer
+  // Playback timer with proper cleanup
   const playTimerRef = React.useRef<number | null>(null);
   const lastTickRef = React.useRef<number | null>(null);
 
@@ -314,22 +314,33 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         const last = lastTickRef.current ?? now;
         const deltaSec = (now - last) / 1000;
         lastTickRef.current = now;
+        
+        // Update current time without triggering re-render loop
         setCurrentTime((prev) => prev + deltaSec);
+        
+        // Schedule next frame
         playTimerRef.current = requestAnimationFrame(tick);
       };
+      
+      // Start animation loop
       playTimerRef.current = requestAnimationFrame(tick);
-    } else if (playTimerRef.current) {
-      cancelAnimationFrame(playTimerRef.current);
-      playTimerRef.current = null;
-      lastTickRef.current = null;
-    }
-    return () => {
-      if (playTimerRef.current) {
+      
+      // Cleanup on unmount or when isPlaying changes
+      return () => {
+        if (playTimerRef.current !== null) {
+          cancelAnimationFrame(playTimerRef.current);
+          playTimerRef.current = null;
+        }
+      };
+    } else {
+      // Stop animation loop when paused
+      if (playTimerRef.current !== null) {
         cancelAnimationFrame(playTimerRef.current);
         playTimerRef.current = null;
       }
-    };
-  }, [isPlaying]);
+      lastTickRef.current = null;
+    }
+  }, [isPlaying]); // Only depend on isPlaying - not currentTime!
 
   // Monitor Codette connection status
   React.useEffect(() => {
@@ -369,12 +380,77 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 
   // Basic helper functions
   const getAudioContextStatus = () => "running";
-  const togglePlay = () => setIsPlaying((prev) => !prev);
+  const togglePlay = () => {
+    if (!isPlaying) {
+      // Starting playback
+      audioEngineRef.current
+        .initialize()
+        .then(async () => {
+          // CRITICAL FIX: Resume audio context explicitly (browser autoplay policy)
+          await audioEngineRef.current.resumeAudioContext();
+          
+          // Play all non-muted audio and instrument tracks from current time
+          tracks.forEach((track) => {
+            if (
+              !track.muted &&
+              (track.type === "audio" || track.type === "instrument")
+            ) {
+              // playAudio expects dB volume value
+              const success = audioEngineRef.current.playAudio(
+                track.id,
+                currentTime,
+                track.volume,
+                track.pan,
+                track.inserts
+              );
+              if (success) {
+                console.log(`? Started playback for track: ${track.name}`);
+              } else {
+                console.warn(`?? No audio buffer for track: ${track.name} - upload audio first`);
+              }
+            }
+          });
+          setIsPlaying(true);
+        })
+        .catch((err) => {
+          console.error("? Audio init failed:", err);
+          alert("Audio playback failed. Please check browser permissions and try again.");
+        });
+    } else {
+      // Pausing playback
+      audioEngineRef.current.stopAllAudio();
+      setIsPlaying(false);
+    }
+  };
   const toggleRecord = () => setIsRecording((prev) => !prev);
   const stop = () => {
+    // Stop recording first if active
+    if (isRecording) {
+      audioEngineRef.current
+        .stopRecording()
+        .then((blob) => {
+          if (blob) {
+            // Auto-save recording as new track
+            const recordedFile = new File(
+              [blob],
+              `Recording-${Date.now()}.webm`,
+              { type: "audio/webm" }
+            );
+            uploadAudioFile(recordedFile);
+          }
+        })
+        .catch((err) => console.error("Error stopping recording:", err));
+      setIsRecording(false);
+    }
+
+    // Stop all playback
+    audioEngineRef.current.stopAllAudio();
     setIsPlaying(false);
-    setIsRecording(false);
+
+    // Reset timeline to beginning
     setCurrentTime(0);
+    
+    console.log("?? Playback stopped and reset to start");
   };
   const toggleVoiceControl = () => setVoiceControlActive((prev) => !prev);
 

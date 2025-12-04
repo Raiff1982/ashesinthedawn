@@ -37,6 +37,11 @@ export default function MIDISettings() {
     }
   };
 
+  const handleChannelChange = (routeId: string, newChannel: number) => {
+    // TODO: Implement MIDI channel update in DAWContext
+    console.log(`[MIDISettings] Channel change for route ${routeId} to ${newChannel}`);
+  };
+
   return (
     <div className="flex flex-col h-full bg-gray-900 border-r border-gray-700">
       {/* Header */}
@@ -55,7 +60,7 @@ export default function MIDISettings() {
           <p className="text-sm font-medium text-gray-100">{selectedTrack.name}</p>
         </div>
       ) : (
-        <div className="px-4 py-3 bg-gray-800/50 border-b border-gray-700">
+        <div className="px-4 py-3 bg-gray-800/50 border-gray-700">
           <p className="text-xs text-gray-500">Select a track to configure MIDI</p>
         </div>
       )}
@@ -89,9 +94,10 @@ export default function MIDISettings() {
           <div className="space-y-2">
             {trackRoutes.map(route => (
               <div key={route.id} className="bg-gray-900 rounded border border-gray-600 p-2">
-                <button
+                {/* FIX: Changed button to div to avoid nested button warning */}
+                <div
                   onClick={() => setExpandedRoute(expandedRoute === route.id ? null : route.id)}
-                  className="w-full flex items-center justify-between"
+                  className="w-full flex items-center justify-between cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
                     <ChevronDown
@@ -107,21 +113,25 @@ export default function MIDISettings() {
                       deleteMIDIRoute(route.id);
                     }}
                     className="p-1 hover:bg-red-600/20 rounded transition-colors"
+                    title="Delete MIDI route"
                   >
                     <MoreVertical className="w-3 h-3 text-red-400" />
                   </button>
-                </button>
+                </div>
 
                 {expandedRoute === route.id && (
                   <div className="mt-2 pt-2 border-t border-gray-700 space-y-2">
                     <div>
-                      <label htmlFor={`midi-channel-${route.id}`} className="text-xs text-gray-500 mb-1 block\">Channel</label>
+                      <label htmlFor={`midi-channel-${route.id}`} className="text-xs text-gray-500 mb-1 block">Channel</label>
+                      {/* FIX: Added onChange handler */}
                       <select
                         id={`midi-channel-${route.id}`}
                         name={`midi-channel-${route.id}`}
                         value={route.channel}
+                        onChange={(e) => handleChannelChange(route.id, parseInt(e.target.value))}
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-300"
-                      >\n                        {Array.from({ length: 16 }, (_, i) => (
+                      >
+                        {Array.from({ length: 16 }, (_, i) => (
                           <option key={i + 1} value={i + 1}>
                             Channel {i + 1}
                           </option>

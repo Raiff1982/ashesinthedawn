@@ -1,6 +1,6 @@
 /**
  * Effect Chain Context Adapter
- * Bridges TrackEffectChainManager into DAWContext
+ * Bridges TrackEffectChainManager into DAWContext with DSP Bridge integration
  * 
  * Phase 9: Effect Chain Integration for DAWContext
  * This file provides all the effect chain functions that need to be integrated
@@ -13,6 +13,7 @@ import {
   TrackEffectChain,
   EffectInstanceState,
 } from './trackEffectChainManager';
+import { processEffect as dspProcessEffect } from './dspBridge';
 
 export interface EffectChainContextAPI {
   effectChainsByTrack: Map<string, TrackEffectChain>;
@@ -28,7 +29,7 @@ export interface EffectChainContextAPI {
 }
 
 /**
- * Hook to initialize and manage effect chain API
+ * Hook to initialize and manage effect chain API with DSP Bridge integration
  * Used internally by DAWProvider
  */
 export function useEffectChainAPI(): EffectChainContextAPI {
@@ -45,7 +46,7 @@ export function useEffectChainAPI(): EffectChainContextAPI {
       const manager = effectChainManagerRef.current;
       const effect = manager.addEffectToTrack(trackId, effectType);
       setEffectChainVersion((v) => v + 1);
-      console.log(`[DAWContext] Added ${effectType} effect to track ${trackId}`);
+      console.log(`[EffectChain] Added ${effectType} effect to track ${trackId}`);
       return effect;
     },
     []
@@ -57,7 +58,7 @@ export function useEffectChainAPI(): EffectChainContextAPI {
       const success = manager.removeEffectFromTrack(trackId, effectId);
       if (success) {
         setEffectChainVersion((v) => v + 1);
-        console.log(`[DAWContext] Removed effect ${effectId} from track ${trackId}`);
+        console.log(`[EffectChain] Removed effect ${effectId} from track ${trackId}`);
       }
       return success;
     },
@@ -83,7 +84,7 @@ export function useEffectChainAPI(): EffectChainContextAPI {
       if (success) {
         setEffectChainVersion((v) => v + 1);
         console.log(
-          `[DAWContext] Effect ${effectId} on track ${trackId} ${
+          `[EffectChain] Effect ${effectId} on track ${trackId} ${
             enabled ? "enabled" : "disabled"
           }`
         );
@@ -113,11 +114,15 @@ export function useEffectChainAPI(): EffectChainContextAPI {
     []
   );
 
+  /**
+   * Process audio through effect chain using DSP Bridge
+   * This is where the actual audio processing happens!
+   */
   const processTrackEffects = useCallback(
     async (
       trackId: string,
       audio: Float32Array,
-      /* sampleRate */ _sampleRate: number
+      sampleRate: number
     ): Promise<Float32Array> => {
       const manager = effectChainManagerRef.current;
       const chain = manager.getChainForTrack(trackId);
@@ -127,15 +132,69 @@ export function useEffectChainAPI(): EffectChainContextAPI {
       }
 
       try {
-        // TODO: Connect to useEffectChain hook here
-        // For now, return audio unchanged until DSP bridge integration
+        manager.setProcessingState(trackId, true);
+        
+        // Get all active effects for this track
+        const effects = manager.getEffectsForTrack(trackId)
+          .filter(effect => effect.enabled && !effect.bypass);
+        
+        if (effects.length === 0) {
+          manager.setProcessingState(trackId, false);
+          return audio;
+        }
+
+        let processedAudio = audio;
+        
+        // Process through each effect in the chain
+        for (const effect of effects) {
+          try {
+            // Convert parameters to numeric-only format for DSP bridge
+            const numericParameters: Record<string, number> = {};
+            for (const [key, value] of Object.entries(effect.parameters)) {
+              if (typeof value === 'number') {
+                numericParameters[key] = value;
+              } else if (typeof value === 'string') {
+                const parsed = parseFloat(value);
+                if (!isNaN(parsed)) {
+                  numericParameters[key] = parsed;
+                }
+              }
+            }
+            
+            // Process audio through DSP bridge
+            const effectOutput = await dspProcessEffect(
+              effect.effectType,
+              processedAudio,
+              numericParameters,
+              sampleRate
+            );
+            
+            // Apply wet/dry mix
+            const wetAmount = effect.wetDry;
+            const dryAmount = 1 - wetAmount;
+            
+            const mixedOutput = new Float32Array(processedAudio.length);
+            for (let i = 0; i < processedAudio.length; i++) {
+              mixedOutput[i] = processedAudio[i] * dryAmount + effectOutput[i] * wetAmount;
+            }
+            
+            processedAudio = mixedOutput;
+            
+            console.log(`[EffectChain] Processed ${effect.effectType} on track ${trackId}`);
+          } catch (error) {
+            console.error(`[EffectChain] Failed to process ${effect.effectType}:`, error);
+            // Continue with previous audio on error
+          }
+        }
+        
         manager.setProcessingState(trackId, false);
-        return audio;
+        return processedAudio;
+        
       } catch (error) {
         const err = error instanceof Error ? error : new Error("Unknown error");
         manager.setError(trackId, err);
         console.error(
-          `[DAWContext] Error processing effects for track ${trackId}:`,
+          `[EffectChain] Error processing effects for track ${trackId}:`,
           error
         );
         return audio;

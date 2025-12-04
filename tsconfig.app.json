@@ -20,9 +20,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    },
-    "suppressImplicitAnyIndexErrors": true,
-    "suppressNoImplicitAnyIndexErrors": true
+    }
   },
   "include": ["src"]
 }

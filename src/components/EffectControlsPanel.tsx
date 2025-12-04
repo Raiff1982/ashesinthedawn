@@ -356,7 +356,7 @@ export default function EffectControlsPanel({
 
         // Update via DSP bridge
         const bridge = await initializeDSPBridge();
-        if (bridge && typeof bridge === 'object' && 'processEffect' in bridge) {
+        if (bridge && typeof bridge === 'object' && typeof (bridge as any).processEffect === 'function') {
           await (bridge as any).processEffect(effectType, new Float32Array([]), {
             [paramName]: newValue,
           });

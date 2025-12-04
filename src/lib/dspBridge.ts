@@ -5,7 +5,7 @@
  * Connects React frontend to daw_core Python DSP engine
  * 
  * Endpoints:
- * - Effects: Process audio through 19 professional effects
+ * - Effects: Process audio through 19 professional effects via unified endpoint
  * - Automation: Generate curves, LFO, envelopes
  * - Metering: Level, spectrum, VU, correlation analysis
  * - Engine: Start/stop audio engine, configure parameters
@@ -118,13 +118,14 @@ async function safeFetch<T>(
 }
 
 // ============================================================================
-// EFFECT PROCESSING
+// EFFECT PROCESSING (UPDATED TO USE UNIFIED ENDPOINT)
 // ============================================================================
 
 export interface EffectProcessRequest {
   effect_type: string;
   parameters: Record<string, number>;
   audio_data: number[];
+  sample_rate?: number;
 }
 
 export interface EffectProcessResponse {
@@ -133,24 +134,33 @@ export interface EffectProcessResponse {
   parameters: Record<string, number>;
   output: number[];
   length: number;
+  sample_rate: number;
+  timestamp: string;
 }
 
 /**
- * Process audio through a specific effect
+ * Process audio through a specific effect using UNIFIED endpoint
+ * @param effectType - Effect name (e.g., 'compressor', 'highpass', 'reverb')
+ * @param audioData - Input audio samples
+ * @param parameters - Effect-specific parameters
+ * @param sampleRate - Sample rate in Hz (default: 44100)
+ * @returns Processed audio samples
  */
 export async function processEffect(
   effectType: string,
   audioData: Float32Array,
-  parameters: Record<string, number>
+  parameters: Record<string, number>,
+  sampleRate: number = 44100
 ): Promise<Float32Array> {
   const request: EffectProcessRequest = {
     effect_type: effectType,
     parameters,
     audio_data: Array.from(audioData),
+    sample_rate: sampleRate,
   };
 
-  const endpoint = getEffectEndpoint(effectType);
-  const response = await safeFetch<EffectProcessResponse>(endpoint, {
+  // Use unified endpoint for ALL effects
+  const response = await safeFetch<EffectProcessResponse>("/api/effects/process", {
     method: "POST",
     body: JSON.stringify(request),
   });
@@ -159,46 +169,29 @@ export async function processEffect(
 }
 
 /**
- * Map effect names to API endpoints
+ * Process audio through effect chain (serial processing)
+ * @param audioData - Input audio samples
+ * @param effectChain - Array of effects to apply in sequence
+ * @param sampleRate - Sample rate in Hz
+ * @returns Processed audio samples
  */
-function getEffectEndpoint(effectType: string): string {
-  const effectMap: Record<string, string> = {
-    // EQ effects
-    "highpass": "/process/eq/highpass",
-    "lowpass": "/process/eq/lowpass",
-    "peaking": "/process/eq/peaking",
-    "3band-eq": "/process/eq/3band",
+export async function processEffectChain(
+  audioData: Float32Array,
+  effectChain: Array<{ type: string; parameters: Record<string, number> }>,
+  sampleRate: number = 44100
+): Promise<Float32Array> {
+  let output = audioData;
 
-    // Dynamics
-    "compressor": "/process/dynamics/compressor",
-    "limiter": "/process/dynamics/limiter",
-    "expander": "/process/dynamics/expander",
-    "gate": "/process/dynamics/gate",
-
-    // Saturation
-    "saturation": "/process/saturation/saturation",
-    "distortion": "/process/saturation/distortion",
-    "wave-shaper": "/process/saturation/waveshaper",
-
-    // Delays
-    "simple-delay": "/process/delay/simple",
-    "ping-pong": "/process/delay/pingpong",
-    "multi-tap": "/process/delay/multitap",
-    "stereo-delay": "/process/delay/stereo",
-
-    // Reverb
-    "freeverb": "/process/reverb/freeverb",
-    "hall": "/process/reverb/hall",
-    "plate": "/process/reverb/plate",
-    "room": "/process/reverb/room",
-  };
-
-  const endpoint = effectMap[effectType.toLowerCase()];
-  if (!endpoint) {
-    throw new Error(`Unknown effect type: ${effectType}`);
+  for (const effect of effectChain) {
+    try {
+      output = await processEffect(effect.type, output, effect.parameters, sampleRate);
+    } catch (error) {
+      console.error(`Failed to process ${effect.type}:`, error);
+      // Continue with previous output on error
+    }
   }
 
-  return endpoint;
+  return output;
 }
 
 // ============================================================================

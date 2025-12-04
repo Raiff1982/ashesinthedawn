@@ -24,10 +24,11 @@ export interface CodetteDAWIntegration {
 }
 
 export function useCodetteDAWIntegration(): CodetteDAWIntegration {
-  const { getSuggestions, addEffect, setTrackLevel } = useCodette({ autoConnect: true });
+  const { getSuggestions } = useCodette({ autoConnect: true });
   const {
     selectedTrack,
     updateTrack,
+    addEffectToTrack,
   } = useDAW();
 
   const lastSyncRef = useRef<number>(0);
@@ -40,16 +41,21 @@ export function useCodetteDAWIntegration(): CodetteDAWIntegration {
         switch (suggestion.type) {
           case 'effect': {
             const effectType = suggestion.parameters.effectType || suggestion.title;
-            await addEffect(selectedTrack.id, effectType, suggestion.title);
+            // Use addEffectToTrack from DAW context
+            addEffectToTrack(selectedTrack.id, effectType);
             return true;
           }
 
           case 'parameter': {
             const { paramName, value } = suggestion.parameters;
             if (paramName && value !== undefined) {
-              const levelType = paramName as 'volume' | 'pan' | 'input_gain' | 'stereo_width';
-              await setTrackLevel(selectedTrack.id, levelType, value);
-              return true;
+              // Update track parameter via DAW context
+              const updates: Record<string, any> = {};
+              if (paramName === 'volume' || paramName === 'pan' || paramName === 'inputGain') {
+                updates[paramName] = value;
+                updateTrack(selectedTrack.id, updates);
+                return true;
+              }
             }
             return false;
           }
@@ -86,7 +92,7 @@ export function useCodetteDAWIntegration(): CodetteDAWIntegration {
         return false;
       }
     },
-    [selectedTrack, addEffect, setTrackLevel, updateTrack]
+    [selectedTrack, addEffectToTrack, updateTrack]
   );
 
   const getSuggestionsForCurrentState = useCallback(async () => {
