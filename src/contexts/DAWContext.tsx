@@ -302,7 +302,7 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
   const getUniqueTrackId = () => `track-${++trackIdCounterRef.current}`;
   const getUniqueMarkerId = () => `marker-${Date.now()}-${++markerIdCounterRef.current}`;
 
-  // Playback timer
+  // Playback timer with proper cleanup
   const playTimerRef = React.useRef<number | null>(null);
   const lastTickRef = React.useRef<number | null>(null);
 
@@ -314,22 +314,33 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         const last = lastTickRef.current ?? now;
         const deltaSec = (now - last) / 1000;
         lastTickRef.current = now;
+        
+        // Update current time without triggering re-render loop
         setCurrentTime((prev) => prev + deltaSec);
+        
+        // Schedule next frame
         playTimerRef.current = requestAnimationFrame(tick);
       };
+      
+      // Start animation loop
       playTimerRef.current = requestAnimationFrame(tick);
-    } else if (playTimerRef.current) {
-      cancelAnimationFrame(playTimerRef.current);
-      playTimerRef.current = null;
-      lastTickRef.current = null;
-    }
-    return () => {
-      if (playTimerRef.current) {
+      
+      // Cleanup on unmount or when isPlaying changes
+      return () => {
+        if (playTimerRef.current !== null) {
+          cancelAnimationFrame(playTimerRef.current);
+          playTimerRef.current = null;
+        }
+      };
+    } else {
+      // Stop animation loop when paused
+      if (playTimerRef.current !== null) {
         cancelAnimationFrame(playTimerRef.current);
         playTimerRef.current = null;
       }
-    };
-  }, [isPlaying]);
+      lastTickRef.current = null;
+    }
+  }, [isPlaying]); // Only depend on isPlaying - not currentTime!
 
   // Monitor Codette connection status
   React.useEffect(() => {

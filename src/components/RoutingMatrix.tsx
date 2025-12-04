@@ -68,15 +68,23 @@ export default function RoutingMatrix() {
                 <span className="text-sm font-medium text-gray-100">{bus.name}</span>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => {
                     e.stopPropagation();
                     deleteBus(bus.id);
                   }}
-                  className="p-1 hover:bg-red-600/20 rounded"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      deleteBus(bus.id);
+                    }
+                  }}
+                  className="p-1 hover:bg-red-600/20 rounded cursor-pointer"
                 >
                   <Trash2 className="w-3 h-3 text-red-400" />
-                </button>
+                </div>
               </div>
             </button>
 

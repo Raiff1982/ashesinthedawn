@@ -1743,21 +1743,6 @@ async def get_transport_state():
 # STATUS AND DIAGNOSTIC ENDPOINTS
 # ============================================================================
 
-@app.get("/codette/status")
-async def codette_status():
-    """Get Codette system status"""
-    try:
-        return {
-            "status": "ok",
-            "codette_available": codette_engine is not None,
-            "engine_type": "codette_new.Codette" if codette_engine else "None",
-            "memory_size": len(codette_engine.memory) if codette_engine else 0,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /codette/status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/api/cache-stats")
 async def get_cache_stats():
     """Get cache performance statistics"""
@@ -1785,6 +1770,189 @@ async def clear_cache():
     except Exception as e:
         logger.error(f"ERROR in /api/cache-clear: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# WEBSOCKET ENDPOINT FOR REAL-TIME COMMUNICATION
+# ============================================================================
+
+# Track active WebSocket connections
+active_websockets: set = set()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time Codette AI communication
+    Supports chat, status updates, and streaming responses
+    """
+    await websocket.accept()
+    active_websockets.add(websocket)
+    connection_id = id(websocket)
+    
+    logger.info(f"✅ WebSocket connected: {connection_id} (total: {len(active_websockets)})")
+    
+    try:
+        # Send welcome message
+        await websocket.send_json({
+            "type": "connection",
+            "status": "connected",
+            "message": "Connected to Codette AI Unified Server",
+            "codette_available": codette_engine is not None,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Main message loop
+        while True:
+            try:
+                # Receive message from client
+                data = await websocket.receive_text()
+                message = json.loads(data)
+                
+                message_type = message.get("type", "unknown")
+                logger.info(f"📨 WebSocket {connection_id} received: {message_type}")
+                
+                # Handle different message types
+                if message_type == "ping":
+                    # Respond to ping
+                    await websocket.send_json({
+                        "type": "pong",
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                elif message_type == "chat":
+                    # Process chat request
+                    query = message.get("message", "")
+                    perspective = message.get("perspective", "mix_engineering")
+                    daw_context = message.get("daw_context", {})
+                    
+                    if not codette_engine:
+                        await websocket.send_json({
+                            "type": "chat_response",
+                            "response": "Codette AI is not available",
+                            "status": "error",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
+                        continue
+                    
+                    # Build query with context
+                    full_query = query
+                    if perspective and perspective != "mix_engineering":
+                        full_query = f"[{perspective} perspective] {query}"
+                    
+                    if daw_context:
+                        context_summary = f" (DAW: {len(daw_context.get('tracks', []))} tracks"
+                        if daw_context.get('selected_track'):
+                            context_summary += f", selected: {daw_context['selected_track'].get('name', 'Unknown')}"
+                        context_summary += ")"
+                        full_query += context_summary
+                    
+                    # Get response from Codette
+                    response_text = get_varied_codette_response(full_query)
+                    
+                    # Send response
+                    await websocket.send_json({
+                        "type": "chat_response",
+                        "response": response_text,
+                        "perspective": perspective,
+                        "confidence": 0.85,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                elif message_type == "status":
+                    # Send status update
+                    memory_size = 0
+                    if codette_engine and hasattr(codette_engine, 'memory'):
+                        try:
+                            memory_size = len(codette_engine.memory)
+                        except:
+                            pass
+                    
+                    await websocket.send_json({
+                        "type": "status_response",
+                        "status": "ok",
+                        "codette_available": codette_engine is not None,
+                        "engine_type": "codette_new.Codette" if codette_engine else "None",
+                        "memory_size": memory_size,
+                        "active_connections": len(active_websockets),
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                elif message_type == "analyze":
+                    # Process audio analysis request
+                    track_data = message.get("track_data", {})
+                    audio_data = message.get("audio_data", {})
+                    analysis_type = message.get("analysis_type", "spectrum")
+                    
+                    if not codette_engine:
+                        await websocket.send_json({
+                            "type": "analysis_response",
+                            "status": "error",
+                            "message": "Codette AI not available",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
+                        continue
+                    
+                    # Perform analysis
+                    track_name = track_data.get("track_name", "Unknown")
+                    track_type = track_data.get("track_type", "audio")
+                    
+                    query = f"Analyze {analysis_type} for track '{track_name}' and provide mixing recommendations"
+                    codette_response = codette_engine.respond(query)
+                    
+                    # Get mixing suggestions
+                    track_info = {
+                        'peak_level': audio_data.get("peak_level", -6.0),
+                        'muted': track_data.get("muted", False),
+                        'soloed': track_data.get("soloed", False)
+                    }
+                    mixing_suggestions = codette_engine.generate_mixing_suggestions(track_type, track_info)
+                    
+                    await websocket.send_json({
+                        "type": "analysis_response",
+                        "status": "success",
+                        "trackId": track_data.get("track_id", "unknown"),
+                        "analysis": {
+                            "analysis_type": analysis_type,
+                            "codette_insights": codette_response,
+                            "mixing_suggestions": mixing_suggestions,
+                            "quality_score": 0.85
+                        },
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                else:
+                    # Unknown message type
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Unknown message type: {message_type}",
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+            
+            except json.JSONDecodeError:
+                logger.warning(f"⚠️  WebSocket {connection_id} received invalid JSON")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Invalid JSON format",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+            
+            except Exception as msg_error:
+                logger.error(f"❌ WebSocket {connection_id} message error: {msg_error}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": str(msg_error),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+    
+    except WebSocketDisconnect:
+        logger.info(f"🔌 WebSocket disconnected: {connection_id}")
+    
+    except Exception as e:
+        logger.error(f"❌ WebSocket {connection_id} error: {e}")
+    
+    finally:
+        # Clean up
+        active_websockets.discard(websocket)
+        logger.info(f"🧹 WebSocket cleanup: {connection_id} (remaining: {len(active_websockets)})")
 
 # ============================================================================
 # DSP EFFECT PROCESSING ENDPOINTS (UNIFIED API)
