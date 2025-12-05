@@ -372,12 +372,35 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     ctx.stroke();
   };
 
+  // Draw waveform when track selected or analysis tab opened
   useEffect(() => {
-    if (waveformCanvasRef.current && selectedTrack) {
-      const audioData = getAudioBufferData(selectedTrack.id);
-      drawWaveform(waveformCanvasRef.current, audioData);
-    }
-  }, [selectedTrack, analysis]);
+    // Only draw if we're on the analysis tab and have a selected track
+    if (activeTab !== 'analysis' || !selectedTrack) return;
+    
+    // Small delay to ensure canvas is mounted
+    const timeoutId = setTimeout(() => {
+      if (waveformCanvasRef.current) {
+        let audioData = getAudioBufferData(selectedTrack.id);
+        
+        // Generate demo waveform if no audio data available
+        if (!audioData || audioData.length === 0) {
+          console.log('[CodettePanel] No audio data, generating demo waveform for track:', selectedTrack.name);
+          const demoLength = 2048;
+          const demoData = new Float32Array(demoLength);
+          for (let i = 0; i < demoLength; i++) {
+            const t = (i / demoLength) * Math.PI * 8;
+            demoData[i] = Math.sin(t) * 0.6 + Math.sin(t * 2.5) * 0.3 + Math.sin(t * 4) * 0.1;
+          }
+          audioData = demoData;
+        }
+        
+        console.log('[CodettePanel] Drawing waveform for track:', selectedTrack.name, 'samples:', audioData?.length || 0);
+        drawWaveform(waveformCanvasRef.current, audioData);
+      }
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [selectedTrack, activeTab, getAudioBufferData]);
 
   if (!isVisible) return null;
 
@@ -593,7 +616,7 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-gray-200">CONFIDENCE FILTER</label>
                         <span className="text-xs font-mono px-2 py-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full font-semibold">
-                          {confidenceFilter}%
+                          {confidenceFilter}%'
                         </span>
                       </div>
                       <input
@@ -898,6 +921,18 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
                         </button>
                       </div>
                     ))}
+
+                    {/* Show more button */}
+                    {cocoonHistory.length > 5 && (
+                      <div className="text-center">
+                        <button
+                          onClick={loadCocoonHistory}
+                          className="text-xs text-blue-400 hover:underline"
+                        >
+                          Show more cocoons...
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDAW } from '../contexts/DAWContext';
-import { Zap, BarChart3 } from 'lucide-react';
+import { Zap, BarChart3, Cpu, Database, Users } from 'lucide-react';
 
 interface CodetteConnectionStatus {
   connected: boolean;
@@ -123,16 +123,22 @@ export function CodetteStatus() {
               <span>{tracks.length} Trk</span>
             </div>
           )}
+          {status.active_connections !== undefined && status.active_connections > 0 && (
+            <div className="flex items-center gap-1 text-green-400">
+              <Users className="w-3 h-3" />
+              <span>{status.active_connections}</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Enhanced Tooltip */}
       {showTooltip && (
-        <div className="absolute bottom-full left-0 mb-2 bg-gray-950 border border-purple-600 rounded-lg shadow-lg p-3 w-56 text-xs space-y-2 z-50">
+        <div className="absolute bottom-full left-0 mb-2 bg-gray-950 border border-purple-600 rounded-lg shadow-lg p-3 w-72 text-xs space-y-2 z-50">
           <div className="border-b border-purple-700/30 pb-2">
             <div className="font-semibold text-purple-400 flex items-center gap-1">
               <Zap className="w-3 h-3" />
-              Codette AI Status
+              Codette AI Server Stats
             </div>
           </div>
           
@@ -140,22 +146,69 @@ export function CodetteStatus() {
             <div className="flex justify-between">
               <span>Connection:</span>
               <span className={status.connected ? 'text-green-400' : 'text-red-400'}>
-                {status.connected ? '✓ Online' : '✗ Offline'}
+                {status.connected ? '? Online' : '? Offline'}
               </span>
             </div>
             <div className="flex justify-between">
               <span>Status:</span>
               <span className="text-gray-400">{status.status}</span>
             </div>
-            {status.codette_available && (
+            {status.codette_available !== undefined && (
               <div className="flex justify-between">
                 <span>AI Engine:</span>
-                <span className="text-green-400">Active</span>
+                <span className={status.codette_available ? 'text-green-400' : 'text-red-400'}>
+                  {status.codette_available ? 'Active' : 'Unavailable'}
+                </span>
+              </div>
+            )}
+            {status.engine_type && (
+              <div className="flex justify-between">
+                <span className="flex items-center gap-1"><Cpu className="w-3 h-3" /> Engine:</span>
+                <span className="text-purple-400">{status.engine_type}</span>
+              </div>
+            )}
+            {status.memory_size !== undefined && (
+              <div className="flex justify-between">
+                <span className="flex items-center gap-1"><Database className="w-3 h-3" /> Memory:</span>
+                <span className="text-blue-400">{status.memory_size} items</span>
+              </div>
+            )}
+            {status.active_connections !== undefined && (
+              <div className="flex justify-between">
+                <span className="flex items-center gap-1"><Users className="w-3 h-3" /> Connections:</span>
+                <span className="text-green-400">{status.active_connections} active</span>
               </div>
             )}
           </div>
 
-          <div className="border-b border-purple-700/30 pb-2">
+          {/* Quantum State */}
+          {status.quantum_state && (
+            <>
+              <div className="border-b border-purple-700/30 pb-2 pt-1">
+                <div className="font-semibold text-purple-400">Quantum State</div>
+              </div>
+              <div className="grid grid-cols-2 gap-1 text-gray-300">
+                <div className="flex justify-between">
+                  <span>Coherence:</span>
+                  <span className="text-cyan-400">{(status.quantum_state.coherence * 100).toFixed(0)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Entangle:</span>
+                  <span className="text-pink-400">{(status.quantum_state.entanglement * 100).toFixed(0)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Resonance:</span>
+                  <span className="text-yellow-400">{(status.quantum_state.resonance * 100).toFixed(0)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Fluctuation:</span>
+                  <span className="text-orange-400">{(status.quantum_state.fluctuation * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="border-b border-purple-700/30 pb-2 pt-1">
             <div className="font-semibold text-blue-400">DAW State</div>
           </div>
 
@@ -166,7 +219,7 @@ export function CodetteStatus() {
             </div>
             <div className="flex justify-between">
               <span>Selected:</span>
-              <span className="text-gray-400 truncate">{selectedTrack?.name || 'None'}</span>
+              <span className="text-gray-400 truncate max-w-[120px]">{selectedTrack?.name || 'None'}</span>
             </div>
             {selectedTrack && (
               <>
@@ -187,7 +240,7 @@ export function CodetteStatus() {
             <div className="flex justify-between">
               <span>Transport:</span>
               <span className={isPlaying ? 'text-green-400' : 'text-gray-400'}>
-                {isPlaying ? '▶ Playing' : '⏹ Stopped'}
+                {isPlaying ? '? Playing' : '? Stopped'}
               </span>
             </div>
           </div>
@@ -210,8 +263,14 @@ export function CodetteStatus() {
             </>
           )}
 
+          {status.error && (
+            <div className="text-red-400 text-xs bg-red-900/20 p-2 rounded">
+              ?? {status.error}
+            </div>
+          )}
+
           <div className="border-t border-purple-700/30 pt-2 text-gray-500 text-xs">
-            💡 Tip: Open Codette Panel (Actions tab) to use tool calls
+            ?? Hover for live server stats � Updates every 10s
           </div>
         </div>
       )}

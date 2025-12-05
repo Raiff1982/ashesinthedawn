@@ -68,7 +68,25 @@ class Codette:
             logging.info("[NOTE] Codette using fallback DAW knowledge")
         
         # DAW-specific knowledge base (fallback + enhancements)
-        self.daw_knowledge = {
+        self.daw_knowledge = self._initialize_daw_knowledge()
+        
+        # Configure PyMC settings for stability
+        self.mcmc_settings = {
+            'chains': 4,
+            'tune': 1000,
+            'draws': 1000,
+            'target_accept': 0.95,
+            'return_inferencedata': True
+        }
+        
+        # Set numpy error handling
+        np.seterr(divide='ignore', invalid='ignore')
+        
+        self.audit_log("Codette initialized", system=True)
+
+    def _initialize_daw_knowledge(self) -> Dict[str, Any]:
+        """Initialize DAW-specific knowledge base"""
+        return {
             "mixing": {
                 "gain_staging": "Set individual tracks to peak around -12dB to -6dB, leaving -6dB headroom on the master.",
                 "eq": "Cut before boost. Use high-pass filters on non-bass elements. EQ in context, not solo.",
@@ -90,20 +108,6 @@ class Codette:
             }
         }
         
-        # Configure PyMC settings for stability
-        self.mcmc_settings = {
-            'chains': 4,
-            'tune': 1000,
-            'draws': 1000,
-            'target_accept': 0.95,
-            'return_inferencedata': True
-        }
-        
-        # Set numpy error handling
-        np.seterr(divide='ignore', invalid='ignore')
-        
-        self.audit_log("Codette initialized", system=True)
-
     def audit_log(self, message, system=False):
         source = "SYSTEM" if system else self.user_name
         logging.info(f"{source}: {message}")

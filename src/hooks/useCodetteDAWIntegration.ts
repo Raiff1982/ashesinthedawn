@@ -40,7 +40,7 @@ export function useCodetteDAWIntegration(): CodetteDAWIntegration {
       try {
         switch (suggestion.type) {
           case 'effect': {
-            const effectType = suggestion.parameters.effectType || suggestion.title;
+            const effectType = String(suggestion.parameters.effectType || suggestion.title);
             // Use addEffectToTrack from DAW context
             addEffectToTrack(selectedTrack.id, effectType);
             return true;
@@ -52,7 +52,7 @@ export function useCodetteDAWIntegration(): CodetteDAWIntegration {
               // Update track parameter via DAW context
               const updates: Record<string, any> = {};
               if (paramName === 'volume' || paramName === 'pan' || paramName === 'inputGain') {
-                updates[paramName] = value;
+                updates[paramName as string] = value;
                 updateTrack(selectedTrack.id, updates);
                 return true;
               }
@@ -68,14 +68,14 @@ export function useCodetteDAWIntegration(): CodetteDAWIntegration {
 
           case 'routing': {
             const { destination } = suggestion.parameters;
-            updateTrack(selectedTrack.id, { routing: destination });
+            updateTrack(selectedTrack.id, { routing: String(destination || '') });
             return true;
           }
 
           case 'mixing': {
             const { adjustments } = suggestion.parameters;
             if (adjustments) {
-              updateTrack(selectedTrack.id, adjustments);
+              updateTrack(selectedTrack.id, adjustments as Record<string, unknown>);
               return true;
             }
             return false;

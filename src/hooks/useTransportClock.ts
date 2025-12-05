@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { getCodetteBridge } from "../lib/codetteBridge";
+import { getCodetteBridge, type EventCallback } from "../lib/codetteBridge";
 
 interface TransportState {
   playing: boolean;
@@ -32,56 +32,60 @@ export function useTransportClock() {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bridgeRef = useRef(getCodetteBridge());
-  const handlersRef = useRef<Array<{ event: string; handler: Function }>>([]);
+  const handlersRef = useRef<Array<{ event: string; handler: EventCallback }>>([]);
 
   // Connect to CodetteBridge WebSocket
   useEffect(() => {
     const bridge = bridgeRef.current;
 
     // Handler for transport state updates
-    const handleTransportChanged = (data: any) => {
-      if (data) {
+    const handleTransportChanged: EventCallback = (data) => {
+      if (data && typeof data === 'object') {
+        const transportData = data as Record<string, unknown>;
         setState((prev) => ({
           ...prev,
-          playing: data.is_playing ?? prev.playing,
-          time_seconds: data.current_time ?? prev.time_seconds,
-          bpm: data.bpm ?? prev.bpm,
-          loop_enabled: data.loop_enabled ?? prev.loop_enabled,
-          loop_start_seconds: data.loop_start ?? prev.loop_start_seconds,
-          loop_end_seconds: data.loop_end ?? prev.loop_end_seconds,
+          playing: (transportData.is_playing as boolean) ?? prev.playing,
+          time_seconds: (transportData.current_time as number) ?? prev.time_seconds,
+          bpm: (transportData.bpm as number) ?? prev.bpm,
+          loop_enabled: (transportData.loop_enabled as boolean) ?? prev.loop_enabled,
+          loop_start_seconds: (transportData.loop_start as number) ?? prev.loop_start_seconds,
+          loop_end_seconds: (transportData.loop_end as number) ?? prev.loop_end_seconds,
         }));
       }
     };
 
     // Handler for connection status
-    const handleConnected = () => {
+    const handleConnected: EventCallback = () => {
       setConnected(true);
       setError(null);
       console.debug("[useTransportClock] Connected to WebSocket");
     };
 
-    const handleDisconnected = () => {
+    const handleDisconnected: EventCallback = () => {
       setConnected(false);
       console.debug("[useTransportClock] Disconnected from WebSocket");
     };
 
-    const handleWebSocketError = (err: any) => {
+    const handleWebSocketError: EventCallback = (err) => {
       setError("WebSocket connection error");
       console.debug("[useTransportClock] WebSocket error:", err);
+    };
+
+    const handleWsConnected: EventCallback = (connected) => {
+      if (!connected) handleDisconnected();
     };
 
     // Register handlers
     bridge.on("transport_changed", handleTransportChanged);
     bridge.on("ws_connected", handleConnected);
-    bridge.on("ws_connected", (connected: any) => {
-      if (!connected) handleDisconnected();
-    });
+    bridge.on("ws_connected", handleWsConnected);
     bridge.on("ws_error", handleWebSocketError);
 
     // Store handlers for cleanup
     handlersRef.current = [
       { event: "transport_changed", handler: handleTransportChanged },
       { event: "ws_connected", handler: handleConnected },
+      { event: "ws_connected", handler: handleWsConnected },
       { event: "ws_error", handler: handleWebSocketError },
     ];
 

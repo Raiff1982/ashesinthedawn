@@ -13,8 +13,11 @@
 import { Track } from "../types";
 import { supabase } from "./supabase";
 
-// Configuration
+// Configuration - FIXED: use VITE_CODETTE_API with port 8000
 const CODETTE_API_BASE = import.meta.env.VITE_CODETTE_API || "http://localhost:8000";
+
+// Callback type for event listeners - EXPORTED
+export type EventCallback = (data?: unknown) => void;
 
 // Types
 export interface CodetteChatRequest {
@@ -47,7 +50,7 @@ export interface CodetteSuggestion {
   type: "effect" | "parameter" | "automation" | "routing" | "mixing";
   title: string;
   description: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   confidence: number;
   category: string;
 }
@@ -75,7 +78,7 @@ export interface CodetteAnalysisRequest {
 
 export interface CodetteAnalysisResponse {
   analysis_type: string;
-  results: Record<string, any>;
+  results: Record<string, unknown>;
   recommendations: string[];
   quality_score: number;
 }
@@ -83,13 +86,13 @@ export interface CodetteAnalysisResponse {
 export interface CodetteProcessRequest {
   id: string;
   type: "chat" | "suggest" | "analyze" | "sync";
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
 }
 
 export interface CodetteProcessResponse {
   id: string;
   type: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   status: "success" | "error";
   message?: string;
 }
@@ -116,7 +119,7 @@ interface ConnectionState {
 interface QueuedRequest {
   id: string;
   method: "chat" | "suggest" | "analyze" | "process";
-  data: any;
+  data: unknown;
   timestamp: number;
   retries: number;
 }
@@ -130,14 +133,14 @@ class CodetteBridge {
   };
 
   private requestQueue: Map<string, QueuedRequest> = new Map();
-  private listeners: Map<string, Set<Function>> = new Map();
+  private listeners: Map<string, Set<EventCallback>> = new Map();
 
   // Reconnection settings
   private maxReconnectAttempts: number = 10;
   private baseReconnectDelay: number = 1000; // 1 second
   private maxReconnectDelay: number = 30000; // 30 seconds
-  private reconnectTimeout: NodeJS.Timeout | null = null;
-  private healthCheckInterval: NodeJS.Timeout | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     try {
@@ -163,7 +166,7 @@ class CodetteBridge {
 
     this.healthCheckInterval = setInterval(() => {
       this.healthCheck().catch((err) => {
-        console.debug("[CodetteBridge] Health check failed:", err.message);
+        console.debug("[CodetteBridge] Health check failed:", err instanceof Error ? err.message : String(err));
       });
     }, 30000); // Every 30 seconds
   }
@@ -204,7 +207,7 @@ class CodetteBridge {
         
         return true;
       }
-    } catch (error) {
+    } catch {
       this.connectionState.connected = false;
       this.emit("disconnected");
       
@@ -271,9 +274,9 @@ class CodetteBridge {
           this.connectionState.isReconnecting = false;
           await this.attemptReconnect();
         }
-      } catch (error) {
+      } catch {
         this.connectionState.isReconnecting = false;
-        console.warn("[CodetteBridge] Reconnection attempt failed:", error);
+        console.warn("[CodetteBridge] Reconnection attempt failed");
         // Continue attempting to reconnect
         await this.attemptReconnect();
       }
@@ -330,7 +333,7 @@ class CodetteBridge {
 
     return this.makeRequest<CodetteChatResponse>(
       "chat",
-      "/api/codette/chat",  // Fixed: was /codette/chat
+      "/codette/chat",
       request
     );
   }
@@ -349,7 +352,7 @@ class CodetteBridge {
 
     return this.makeRequest<CodetteSuggestionResponse>(
       "suggest",
-      "/api/codette/suggest",  // Fixed: was /codette/suggest
+      "/codette/suggest",
       request
     );
   }
@@ -368,7 +371,7 @@ class CodetteBridge {
 
     return this.makeRequest<CodetteAnalysisResponse>(
       "analyze",
-      "/api/codette/analyze",  // Fixed: was /codette/analyze
+      "/codette/analyze",
       request
     );
   }
@@ -382,7 +385,7 @@ class CodetteBridge {
   ): Promise<{
     success: boolean;
     trackId: string;
-    appliedParameters: Record<string, any>;
+    appliedParameters: Record<string, unknown>;
   }> {
     const requestData = {
       action: "apply_suggestion",
@@ -392,8 +395,8 @@ class CodetteBridge {
     };
 
     return this.makeRequest(
-      "chat",
-      "/api/codette/apply-suggestion",  // Fixed: was /codette/suggest
+      "process",
+      "/codette/process",
       requestData
     );
   }
@@ -422,7 +425,7 @@ class CodetteBridge {
 
     return this.makeRequest(
       "process",
-      "/api/codette/sync-daw",  // Fixed: was /codette/process
+      "/codette/process",
       request
     );
   }
@@ -432,7 +435,7 @@ class CodetteBridge {
    */
   async getTransportState(): Promise<CodetteTransportState> {
     try {
-      const response = await fetch(`${CODETTE_API_BASE}/api/codette/status`, {  // Fixed: was /codette/status
+      const response = await fetch(`${CODETTE_API_BASE}/transport/status`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -445,17 +448,16 @@ class CodetteBridge {
 
       const data = await response.json();
       return {
-        is_playing: data.is_playing ?? false,
-        current_time: data.current_time ?? 0,
+        is_playing: data.playing ?? false,
+        current_time: data.time_seconds ?? 0,
         bpm: data.bpm ?? 120,
-        time_signature: data.time_signature ?? [4, 4],
+        time_signature: [4, 4],
         loop_enabled: data.loop_enabled ?? false,
-        loop_start: data.loop_start ?? 0,
-        loop_end: data.loop_end ?? 10,
+        loop_start: data.loop_start_seconds ?? 0,
+        loop_end: data.loop_end_seconds ?? 10,
       };
     } catch (error) {
       console.error("[CodetteBridge] Failed to get transport state:", error);
-      // Return default state on error
       return {
         is_playing: false,
         current_time: 0,
@@ -472,62 +474,108 @@ class CodetteBridge {
    * Control transport: Play
    */
   async transportPlay(): Promise<CodetteTransportState> {
-    const requestData = {
-      action: "transport_play",
-    };
-
-    return this.makeRequest(
-      "chat",
-      "/codette/chat",
-      requestData
-    ) as any;
+    try {
+      const response = await fetch(`${CODETTE_API_BASE}/transport/play`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          is_playing: data.state?.playing ?? true,
+          current_time: data.state?.time_seconds ?? 0,
+          bpm: data.state?.bpm ?? 120,
+          time_signature: [4, 4],
+          loop_enabled: data.state?.loop_enabled ?? false,
+          loop_start: data.state?.loop_start_seconds ?? 0,
+          loop_end: data.state?.loop_end_seconds ?? 10,
+        };
+      }
+    } catch (error) {
+      console.error("[CodetteBridge] transportPlay failed:", error);
+    }
+    return this.getTransportState();
   }
 
   /**
    * Control transport: Stop
    */
   async transportStop(): Promise<CodetteTransportState> {
-    const requestData = {
-      action: "transport_stop",
-    };
-
-    return this.makeRequest(
-      "chat",
-      "/codette/chat",
-      requestData
-    ) as any;
+    try {
+      const response = await fetch(`${CODETTE_API_BASE}/transport/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          is_playing: data.state?.playing ?? false,
+          current_time: data.state?.time_seconds ?? 0,
+          bpm: data.state?.bpm ?? 120,
+          time_signature: [4, 4],
+          loop_enabled: data.state?.loop_enabled ?? false,
+          loop_start: data.state?.loop_start_seconds ?? 0,
+          loop_end: data.state?.loop_end_seconds ?? 10,
+        };
+      }
+    } catch (error) {
+      console.error("[CodetteBridge] transportStop failed:", error);
+    }
+    return this.getTransportState();
   }
 
   /**
    * Control transport: Seek to position
    */
   async transportSeek(timeSeconds: number): Promise<CodetteTransportState> {
-    const requestData = {
-      action: "transport_seek",
-      time: timeSeconds,
-    };
-
-    return this.makeRequest(
-      "chat",
-      "/codette/chat",
-      requestData
-    ) as any;
+    try {
+      const response = await fetch(`${CODETTE_API_BASE}/transport/seek?seconds=${timeSeconds}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          is_playing: data.state?.playing ?? false,
+          current_time: data.state?.time_seconds ?? timeSeconds,
+          bpm: data.state?.bpm ?? 120,
+          time_signature: [4, 4],
+          loop_enabled: data.state?.loop_enabled ?? false,
+          loop_start: data.state?.loop_start_seconds ?? 0,
+          loop_end: data.state?.loop_end_seconds ?? 10,
+        };
+      }
+    } catch (error) {
+      console.error("[CodetteBridge] transportSeek failed:", error);
+    }
+    return this.getTransportState();
   }
 
   /**
    * Set tempo/BPM
    */
   async setTempo(bpm: number): Promise<CodetteTransportState> {
-    const requestData = {
-      action: "set_tempo",
-      bpm: bpm,
-    };
-
-    return this.makeRequest(
-      "chat",
-      "/codette/chat",
-      requestData
-    ) as any;
+    try {
+      const response = await fetch(`${CODETTE_API_BASE}/transport/tempo?bpm=${bpm}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          is_playing: data.state?.playing ?? false,
+          current_time: data.state?.time_seconds ?? 0,
+          bpm: data.state?.bpm ?? bpm,
+          time_signature: [4, 4],
+          loop_enabled: data.state?.loop_enabled ?? false,
+          loop_start: data.state?.loop_start_seconds ?? 0,
+          loop_end: data.state?.loop_end_seconds ?? 10,
+        };
+      }
+    } catch (error) {
+      console.error("[CodetteBridge] setTempo failed:", error);
+    }
+    return this.getTransportState();
   }
 
   /**
@@ -538,25 +586,37 @@ class CodetteBridge {
     startTime: number = 0,
     endTime: number = 10
   ): Promise<CodetteTransportState> {
-    const requestData = {
-      action: "set_loop",
-      enabled: enabled,
-      loop_start: startTime,
-      loop_end: endTime,
-    };
-
-    return this.makeRequest(
-      "chat",
-      "/codette/chat",
-      requestData
-    ) as any;
+    try {
+      const response = await fetch(
+        `${CODETTE_API_BASE}/transport/loop?enabled=${enabled}&start_seconds=${startTime}&end_seconds=${endTime}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          is_playing: data.state?.playing ?? false,
+          current_time: data.state?.time_seconds ?? 0,
+          bpm: data.state?.bpm ?? 120,
+          time_signature: [4, 4],
+          loop_enabled: data.state?.loop_enabled ?? enabled,
+          loop_start: data.state?.loop_start_seconds ?? startTime,
+          loop_end: data.state?.loop_end_seconds ?? endTime,
+        };
+      }
+    } catch (error) {
+      console.error("[CodetteBridge] setLoop failed:", error);
+    }
+    return this.getTransportState();
   }
 
   /**
    * Get production checklist from Codette
    */
   async getProductionChecklist(
-    projectState: Record<string, any>
+    projectState: Record<string, unknown>
   ): Promise<{
     items: Array<{
       category: string;
@@ -571,16 +631,11 @@ class CodetteBridge {
       project_state: projectState,
     };
 
-    return this.makeRequest("chat", "/codette/chat", requestData) as any;
+    return this.makeRequest("chat", "/codette/chat", requestData);
   }
 
   /**
    * Get Codette context JSON from Supabase RPC function
-   * Retrieves intelligent context for prompt processing
-   * 
-   * @param inputPrompt - The input prompt/query text
-   * @param optionallyFilename - Optional filename filter (nullable)
-   * @returns Promise with context data including snippets, files, and chat history
    */
   async getCodetteContextJson(
     inputPrompt: string,
@@ -596,12 +651,6 @@ class CodetteBridge {
         return { snippets: [], file: null, chat_history: [] };
       }
 
-      console.debug("[CodetteBridge] Calling get_codette_context_json RPC:", {
-        input_prompt: inputPrompt,
-        optionally_filename: optionallyFilename,
-      });
-
-      // Call Supabase RPC function with exact parameter names
       const result = await supabase.rpc("get_codette_context_json", {
         input_prompt: inputPrompt,
         optionally_filename: optionallyFilename || null,
@@ -613,13 +662,6 @@ class CodetteBridge {
       }
 
       const data = result.data;
-      console.debug("[CodetteBridge] RPC response:", {
-        snippets_count: data?.snippets?.length || 0,
-        has_file: !!data?.file,
-        history_count: data?.chat_history?.length || 0,
-      });
-
-      // Normalize response
       return {
         snippets: data?.snippets || [],
         file: data?.file || null,
@@ -627,14 +669,12 @@ class CodetteBridge {
       };
     } catch (error) {
       console.error("[CodetteBridge] Failed to get Codette context:", error);
-      // Return empty context on failure
       return { snippets: [], file: null, chat_history: [] };
     }
   }
 
   /**
    * Enhanced chat with Codette context from Supabase
-   * Combines local context retrieval with chat processing
    */
   async chatWithContext(
     message: string,
@@ -642,15 +682,8 @@ class CodetteBridge {
     perspective?: string
   ): Promise<CodetteChatResponse> {
     try {
-      // First, get context from Supabase
       const context = await this.getCodetteContextJson(message, null);
       
-      console.debug("[CodetteBridge] Chat context retrieved:", {
-        snippets: context.snippets.length,
-        hasFile: !!context.file,
-      });
-
-      // Build enhanced request with context
       const request: CodetteChatRequest = {
         user_message: message,
         conversation_id: conversationId,
@@ -662,7 +695,6 @@ class CodetteBridge {
         }),
       };
 
-      // Send to Codette with enriched context
       return this.makeRequest<CodetteChatResponse>(
         "chat",
         "/codette/chat",
@@ -670,7 +702,6 @@ class CodetteBridge {
       );
     } catch (error) {
       console.error("[CodetteBridge] Chat with context failed:", error);
-      // Fall back to regular chat
       return this.chat(message, conversationId, perspective);
     }
   }
@@ -678,25 +709,20 @@ class CodetteBridge {
   /**
    * Core request handler with error handling, retries, and reconnection
    */
-  private async makeRequest<T = any>(
+  private async makeRequest<T = unknown>(
     method: "chat" | "suggest" | "analyze" | "process",
     endpoint: string,
-    data: any,
+    data: unknown,
     retryCount: number = 0
   ): Promise<T> {
     const requestId = `${method}-${Date.now()}-${Math.random()}`;
     const maxRetries = 3;
 
     try {
-      // Check connection first, with retry
       if (!this.connectionState.connected) {
         const healthy = await this.healthCheck();
         if (!healthy && retryCount === 0) {
-          // Attempt one immediate reconnect
-          console.debug("[CodetteBridge] Connection check failed, attempting reconnect...");
           await this.attemptReconnect();
-          
-          // Wait a bit for reconnection attempt to start
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
       }
@@ -707,32 +733,22 @@ class CodetteBridge {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(data),
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+        signal: AbortSignal.timeout(10000),
       });
 
       if (!response.ok) {
-        // Retry on 5xx errors (server error)
         if (response.status >= 500 && retryCount < maxRetries) {
-          const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
-          console.debug(
-            `[CodetteBridge] Server error (${response.status}), retry ${retryCount + 1}/${maxRetries} after ${delay}ms`
-          );
-          
+          const delay = Math.pow(2, retryCount) * 1000;
           await new Promise((resolve) => setTimeout(resolve, delay));
           return this.makeRequest(method, endpoint, data, retryCount + 1);
         }
 
-        // Queue request for later retry
         this.queueRequest(requestId, method, data);
-
-        throw new Error(
-          `Codette API error: ${response.status} ${response.statusText}`
-        );
+        throw new Error(`Codette API error: ${response.status} ${response.statusText}`);
       }
 
       const result: T = await response.json();
       
-      // Mark connection as healthy
       if (!this.connectionState.connected) {
         this.connectionState.connected = true;
         this.emit("connected", { restored: true });
@@ -742,29 +758,18 @@ class CodetteBridge {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       
-      // Only queue if it's a network error, not a timeout
-      if (
-        errorMessage.includes("Failed to fetch") ||
-        errorMessage.includes("ERR_CONNECTION_REFUSED")
-      ) {
-        // Queue request for retry
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("ERR_CONNECTION_REFUSED")) {
         this.queueRequest(requestId, method, data);
         
-        // Trigger reconnection attempt
         if (!this.connectionState.isReconnecting) {
-          this.attemptReconnect().catch((err) =>
-            console.warn("[CodetteBridge] Reconnect attempt error:", err)
-          );
+          this.attemptReconnect().catch(() => {});
         }
       }
 
       this.connectionState.connected = false;
       this.emit("disconnected");
 
-      console.error(
-        `[CodetteBridge] ${method} request failed (retry: ${retryCount}/${maxRetries}):`,
-        errorMessage
-      );
+      console.error(`[CodetteBridge] ${method} request failed:`, errorMessage);
       throw error;
     }
   }
@@ -775,7 +780,7 @@ class CodetteBridge {
   private queueRequest(
     id: string,
     method: "chat" | "suggest" | "analyze" | "process",
-    data: any
+    data: unknown
   ): void {
     this.requestQueue.set(id, {
       id,
@@ -785,65 +790,43 @@ class CodetteBridge {
       retries: 0,
     });
 
-    // Emit queue update
-    this.emit("queue_updated", {
-      queueSize: this.requestQueue.size,
-    });
+    this.emit("queue_updated", { queueSize: this.requestQueue.size });
   }
 
   /**
    * Process queued requests when connection restored
    */
   async processQueuedRequests(): Promise<void> {
-    if (this.requestQueue.size === 0) {
-      return;
-    }
+    if (this.requestQueue.size === 0) return;
 
     const requests = Array.from(this.requestQueue.values());
 
     for (const req of requests) {
       try {
-        // Retry with exponential backoff
         const delay = Math.min(1000 * Math.pow(2, req.retries), 30000);
         await new Promise((resolve) => setTimeout(resolve, delay));
 
-        // Get endpoint based on method - FIXED paths
         let endpoint = "";
         switch (req.method) {
-          case "chat":
-            endpoint = "/api/codette/chat";  // Fixed
-            break;
-          case "suggest":
-            endpoint = "/api/codette/suggest";  // Fixed
-            break;
-          case "analyze":
-            endpoint = "/api/codette/analyze";  // Fixed
-            break;
-          case "process":
-            endpoint = "/api/codette/sync-daw";  // Fixed
-            break;
+          case "chat": endpoint = "/codette/chat"; break;
+          case "suggest": endpoint = "/codette/suggest"; break;
+          case "analyze": endpoint = "/codette/analyze"; break;
+          case "process": endpoint = "/codette/process"; break;
         }
 
         await this.makeRequest(req.method, endpoint, req.data);
         this.requestQueue.delete(req.id);
-      } catch (error) {
+      } catch {
         req.retries++;
-
-        // Give up after 5 retries
         if (req.retries >= 5) {
           this.requestQueue.delete(req.id);
-          this.emit("request_failed", {
-            requestId: req.id,
-            error: String(error),
-          });
+          this.emit("request_failed", { requestId: req.id });
         }
       }
     }
   }
 
-  /**
-   * WebSocket connection reference
-   */
+  // WebSocket properties
   private ws: WebSocket | null = null;
   private wsConnected: boolean = false;
   private wsReconnectAttempts: number = 0;
@@ -851,105 +834,63 @@ class CodetteBridge {
   private wsReconnectDelay: number = 1000;
 
   /**
-   * Initialize WebSocket connection for real-time updates with enhanced reconnection
+   * Initialize WebSocket connection for real-time updates
    */
   initializeWebSocket(): Promise<boolean> {
     return new Promise((resolve) => {
       try {
         const wsUrl = (CODETTE_API_BASE.replace("http", "ws")) + "/ws";
-        console.debug("[CodetteBridge] 🔌 Connecting to WebSocket:", wsUrl);
-
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
-          console.debug("[CodetteBridge] ✅ WebSocket connected successfully");
           this.wsConnected = true;
           this.wsReconnectAttempts = 0;
           this.emit("ws_connected", true);
-          this.emit("ws_ready", { status: "connected" });
           resolve(true);
         };
 
         this.ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            
-            // Enhanced logging with structured data
-            const logData = {
-              type: message.type,
-              hasData: !!message.data,
-              dataType: typeof message.data,
-              timestamp: new Date().toISOString(),
-              dataKeys: message.data && typeof message.data === 'object' ? Object.keys(message.data).slice(0, 5) : 'N/A'
-            };
-            console.debug("[CodetteBridge] WebSocket message received:", logData);
-
-            // Emit events based on message type
             if (message.type === "transport_state") {
-              console.debug("[CodetteBridge] → transport_changed event emitted");
               this.emit("transport_changed", message.data);
             } else if (message.type === "suggestion") {
-              console.debug("[CodetteBridge] → suggestion_received event emitted", { count: message.data?.length || 0 });
               this.emit("suggestion_received", message.data);
             } else if (message.type === "analysis_complete") {
-              console.debug("[CodetteBridge] → analysis_complete event emitted");
               this.emit("analysis_complete", message.data);
             } else if (message.type === "state_update") {
-              console.debug("[CodetteBridge] → state_update event emitted", { keys: Object.keys(message.data || {}) });
               this.emit("state_update", message.data);
             } else if (message.type === "error") {
-              console.warn("[CodetteBridge] → ws_error event emitted", message.data);
               this.emit("ws_error", message.data);
-            } else {
-              console.debug("[CodetteBridge] Unknown message type:", message.type);
             }
-          } catch (error) {
-            console.error("[CodetteBridge] Failed to parse WebSocket message:", error, { rawData: event.data?.substring(0, 100) });
+          } catch {
+            console.error("[CodetteBridge] Failed to parse WebSocket message");
           }
         };
 
         this.ws.onerror = (error) => {
-          console.error("[CodetteBridge] ❌ WebSocket error:", error);
           this.wsConnected = false;
           this.emit("ws_error", error);
         };
 
         this.ws.onclose = () => {
-          console.debug("[CodetteBridge] WebSocket disconnected (attempt " + (this.wsReconnectAttempts + 1) + "/" + this.maxWsReconnectAttempts + ")");
           this.wsConnected = false;
           this.emit("ws_connected", false);
 
-          // Attempt reconnection with exponential backoff
           if (this.wsReconnectAttempts < this.maxWsReconnectAttempts) {
             this.wsReconnectAttempts++;
-            const delay = Math.min(
-              this.wsReconnectDelay * Math.pow(2, this.wsReconnectAttempts - 1),
-              30000 // Max 30 seconds
-            );
-            console.debug(
-              `[CodetteBridge] 🔄 WebSocket reconnecting in ${delay}ms (attempt ${this.wsReconnectAttempts}/${this.maxWsReconnectAttempts})`
-            );
+            const delay = Math.min(this.wsReconnectDelay * Math.pow(2, this.wsReconnectAttempts - 1), 30000);
             setTimeout(() => this.initializeWebSocket(), delay);
-          } else {
-            console.warn(
-              `[CodetteBridge] ❌ WebSocket max reconnection attempts (${this.maxWsReconnectAttempts}) reached`
-            );
-            this.emit("ws_max_retries", {
-              attempts: this.maxWsReconnectAttempts,
-            });
           }
         };
 
-        // Timeout if connection takes too long
         setTimeout(() => {
           if (!this.wsConnected && this.ws) {
-            console.warn("[CodetteBridge] ⏱️ WebSocket connection timeout after 5s");
             this.ws?.close();
             resolve(false);
           }
         }, 5000);
-      } catch (error) {
-        console.error("[CodetteBridge] Failed to initialize WebSocket:", error);
+      } catch {
         resolve(false);
       }
     });
@@ -959,38 +900,26 @@ class CodetteBridge {
    * Force WebSocket reconnection
    */
   async forceWebSocketReconnect(): Promise<boolean> {
-    console.debug("[CodetteBridge] 🔄 Force WebSocket reconnect initiated");
     this.wsReconnectAttempts = 0;
-    
-    if (this.ws) {
-      this.ws.close();
-    }
-    
+    if (this.ws) this.ws.close();
     return this.initializeWebSocket();
   }
 
   /**
    * Send message over WebSocket
    */
-  sendWebSocketMessage(message: Record<string, any>): boolean {
-    if (!this.ws || !this.wsConnected) {
-      console.debug(
-        "[CodetteBridge] WebSocket not connected, falling back to REST"
-      );
-      return false;
-    }
-
+  sendWebSocketMessage(message: Record<string, unknown>): boolean {
+    if (!this.ws || !this.wsConnected) return false;
     try {
       this.ws.send(JSON.stringify(message));
       return true;
-    } catch (error) {
-      console.error("[CodetteBridge] Failed to send WebSocket message:", error);
+    } catch {
       return false;
     }
   }
 
   /**
-   * Close WebSocket connection and cleanup
+   * Close WebSocket connection
    */
   closeWebSocket(): void {
     if (this.ws) {
@@ -1001,7 +930,7 @@ class CodetteBridge {
   }
 
   /**
-   * Get WebSocket connection status with details
+   * Get WebSocket connection status
    */
   getWebSocketStatus(): {
     connected: boolean;
@@ -1018,45 +947,31 @@ class CodetteBridge {
   }
 
   /**
-   * Cleanup and destroy the bridge (for page unload)
+   * Cleanup and destroy the bridge
    */
   destroy(): void {
-    console.debug("[CodetteBridge] Destroying bridge instance");
-    
-    // Clear intervals
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-    }
-    
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
-    
-    // Close WebSocket
+    if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
+    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
     this.closeWebSocket();
-    
-    // Clear listeners
     this.listeners.clear();
-    
-    // Clear queue
     this.requestQueue.clear();
   }
 
   /**
    * Event emitter system
    */
-  on(event: string, callback: Function): void {
+  on(event: string, callback: EventCallback): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
     this.listeners.get(event)!.add(callback);
   }
 
-  off(event: string, callback: Function): void {
+  off(event: string, callback: EventCallback): void {
     this.listeners.get(event)?.delete(callback);
   }
 
-  private emit(event: string, data?: any): void {
+  private emit(event: string, data?: unknown): void {
     this.listeners.get(event)?.forEach((callback) => {
       try {
         callback(data);
@@ -1076,18 +991,12 @@ class CodetteBridge {
   /**
    * Get queue status
    */
-  getQueueStatus(): {
-    queueSize: number;
-    oldestRequest?: number;
-  } {
+  getQueueStatus(): { queueSize: number; oldestRequest?: number } {
     return {
       queueSize: this.requestQueue.size,
-      oldestRequest:
-        this.requestQueue.size > 0
-          ? Math.min(
-              ...Array.from(this.requestQueue.values()).map((r) => r.timestamp)
-            )
-          : undefined,
+      oldestRequest: this.requestQueue.size > 0
+        ? Math.min(...Array.from(this.requestQueue.values()).map((r) => r.timestamp))
+        : undefined,
     };
   }
 }
