@@ -22,6 +22,9 @@ dist-ssr
 *.sw?
 .env
 
+# Visual Studio cache/options directories
+.vs/
+
 # Codette Large Files & Artifacts (GitHub 100MB limit)
 # Build artifacts
 Codette/build/
