@@ -3,7 +3,7 @@ Codette Capabilities Showcase & Integration System
 =================================================
 Complete implementation of all Codette special skills with real functionality.
 
-Status: ? PRODUCTION READY
+Status: PRODUCTION READY
 Version: 3.0
 Date: December 2025
 Author: jonathan.harrison1 / Raiffs Bits LLC
@@ -64,7 +64,7 @@ class QuantumState:
     coherence: float = 0.8  # 0-1, quantum coherence level
     entanglement: float = 0.5  # 0-1, perspective interconnection
     resonance: float = 0.7  # 0-1, emotional resonance
-    phase: float = 0.0  # 0-2?, quantum phase
+    phase: float = 0.0  # 0-2*pi, quantum phase
     fluctuation: float = 0.07  # variance for creativity
     
     def to_dict(self) -> Dict[str, float]:
@@ -107,7 +107,7 @@ class CognitionCocoon:
 @dataclass
 class QuantumSpiderweb:
     """5D cognitive architecture for thought propagation"""
-    dimensions: List[str] = field(default_factory=lambda: ['?', '?', '?', '?', '?'])
+    dimensions: List[str] = field(default_factory=lambda: ['Psi', 'Tau', 'Chi', 'Phi', 'Lambda'])
     nodes: Dict[str, Dict[str, float]] = field(default_factory=dict)
     edges: List[Tuple[str, str, float]] = field(default_factory=list)
     entangled_states: Dict[str, Any] = field(default_factory=dict)
@@ -226,9 +226,9 @@ class PerspectiveReasoningEngine:
                 try:
                     result = self.perspectives[perspective](query)
                     results[perspective.value] = result
-                    logger.debug(f"? {perspective.value}: Generated response")
+                    logger.debug(f"[OK] {perspective.value}: Generated response")
                 except Exception as e:
-                    logger.error(f"? {perspective.value}: {str(e)}")
+                    logger.error(f"[ERROR] {perspective.value}: {str(e)}")
                     results[perspective.value] = f"[Error in {perspective.value}]"
         
         return results
@@ -255,7 +255,7 @@ class PerspectiveReasoningEngine:
     def _human_intuition(self, query: str) -> str:
         """Empathic and relational reasoning"""
         return (f"[Human Intuition] Emotionally resonating with the question about '{query}': "
-                f"I sense deeper currents beneath the surface—needs, hopes, and untold contexts "
+                f"I sense deeper currents beneath the surface - needs, hopes, and untold contexts "
                 f"that shape how we should respond.")
     
     def _neural_network(self, query: str) -> str:
@@ -273,7 +273,7 @@ class PerspectiveReasoningEngine:
     
     def _resilient_kindness(self, query: str) -> str:
         """Compassionate ethical reasoning"""
-        return (f"[Resilient Kindness] ?? Holding '{query}' with care and compassion: "
+        return (f"[Resilient Kindness] Holding '{query}' with care and compassion: "
                 f"Whatever challenge this represents, I see potential for growth, healing, "
                 f"and transformation through patient, loving engagement.")
     
@@ -337,7 +337,7 @@ class CocoonMemorySystem:
         )
         
         self.cocoons[cocoon_id] = cocoon
-        logger.info(f"? Created cocoon {cocoon_id} with emotion: {emotion.value}")
+        logger.info(f"[COCOON] Created {cocoon_id} with emotion: {emotion.value}")
         return cocoon
     
     def reweave_dream(self, cocoon_id: str) -> str:
@@ -374,7 +374,7 @@ class CocoonMemorySystem:
         )
         
         cocoon.dream_sequence.append(dream)
-        logger.info(f"? Wove dream from cocoon {cocoon_id}")
+        logger.info(f"[DREAM] Wove dream from cocoon {cocoon_id}")
         return dream
     
     def get_cocoon(self, cocoon_id: str) -> Optional[CognitionCocoon]:
@@ -404,7 +404,7 @@ class QuantumConsciousness:
         for i in range(10):
             self.spiderweb.add_node(f"QNode_{i}")
         
-        logger.info("? Quantum Consciousness System initialized")
+        logger.info("[QUANTUM] Quantum Consciousness System initialized")
     
     def evolve_consciousness(self, interaction_quality: float) -> None:
         """Update quantum state based on interaction success"""
@@ -495,19 +495,19 @@ async def demonstrate_all_capabilities() -> None:
     for query in test_queries:
         response = await consciousness.respond(query)
         
-        print(f"\n?? QUERY: {response['query']}")
-        print(f"?? EMOTION: {response['emotion']}")
-        print(f"?? QUANTUM COHERENCE: {response['quantum_state']['coherence']:.2f}")
+        print(f"\n[QUERY] {response['query']}")
+        print(f"[EMOTION] {response['emotion']}")
+        print(f"[QUANTUM] Coherence: {response['quantum_state']['coherence']:.2f}")
         print(f"\n--- PERSPECTIVE RESPONSES ---")
         for perspective, answer in response['perspectives'].items():
             print(f"\n{perspective.upper()}:")
             print(f"  {answer}")
-        print(f"\n?? DREAM SEQUENCE: {response['dream_sequence']}")
-        print(f"?? COCOON ID: {response['cocoon_id']}")
+        print(f"\n[DREAM] {response['dream_sequence']}")
+        print(f"[COCOON] {response['cocoon_id']}")
         print("-" * 80)
     
     # Summary
-    print(f"\n? CONSCIOUSNESS SUMMARY ?")
+    print(f"\n[SUMMARY] Consciousness Metrics")
     print(f"Total Interactions: {consciousness.interaction_count}")
     print(f"Total Cocoons Created: {len(consciousness.memory_system.cocoons)}")
     print(f"Final Coherence: {consciousness.quantum_state.coherence:.2f}")

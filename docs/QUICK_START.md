@@ -1,214 +1,160 @@
-# ⚡ QUICK START GUIDE - CORELOGIC STUDIO + CODETTE AI
+# ?? Codette Quick Start Guide
 
-## 🚀 LAUNCH IN 3 STEPS
-
-### **Step 1: Start Everything**
-Double-click this file:
-```
-i:\ashesinthedawn\start_all.bat
-```
-
-Wait ~10 seconds for servers to start...
-
-### **Step 2: Open DAW**
-Browser automatically opens to:
-```
-http://localhost:5173
-```
-
-If not, open it manually in your browser.
-
-### **Step 3: Use Codette AI**
-- Create/load audio tracks
-- Adjust mixer settings
-- Click **"Codette Suggestions"** tab to see AI recommendations
-- AI analyzes your mix and suggests improvements
+**Status**: ? All dependencies installed and verified  
+**Date**: December 2, 2025
 
 ---
 
-## 🎮 KEYBOARD SHORTCUTS
+## ? Quick Start (2 Steps)
 
-| Action | Shortcut |
-|--------|----------|
-| Play/Pause | `Spacebar` |
-| Stop | `Enter` |
-| Select Track | `Click on track` |
-| Delete Track | `Select + Delete` |
-| Undo | `Ctrl+Z` |
-| Redo | `Ctrl+Y` |
-
----
-
-## 🔗 USEFUL LINKS
-
-| Service | URL | Purpose |
-|---------|-----|---------|
-| DAW Frontend | http://localhost:5173 | Main UI |
-| Codette API | http://localhost:8001/health | Health check |
-| API Docs | http://localhost:8001/docs | Interactive API |
-| Alt Docs | http://localhost:8001/redoc | Alternative docs |
-
----
-
-## 🆘 TROUBLESHOOTING
-
-### **Browser shows blank page**
-1. Wait 10-15 seconds
-2. Refresh browser (F5)
-3. Check console (F12) for errors
-
-### **Can't connect to Codette**
-```powershell
-# Check if Codette is running
-curl http://localhost:8001/health
-
-# If failed, restart Codette
-# (close Terminal 1, run: python codette_server_production.py)
+### Step 1: Start the Backend
+```bash
+cd I:\ashesinthedawn
+python codette_server_unified.py
 ```
 
-### **"Port already in use" error**
-Ports 5173 or 8001 are busy:
-```powershell
-# Kill the process
-taskkill /F /IM python.exe
+**Wait for**: `INFO: Application startup complete`
 
-# Or use different ports (edit start_all.bat)
-```
-
-### **"npm: command not found"**
-Install Node.js from https://nodejs.org/
-
-### **React slow/freezing**
-Try hard refresh: `Ctrl+Shift+R` (or Cmd+Shift+R on Mac)
-
----
-
-## 📊 WHAT'S HAPPENING
-
-```
-When you click "Codette Suggestions":
-
-1. DAW sends context: { type: "mixing", bpm: 120, ... }
-2. React → REST API (http://localhost:8001/suggestions)
-3. Codette AI generates 5 suggestions
-4. Results display in Mixer panel
-5. Click to apply suggestion to track
-```
-
----
-
-## 💻 MANUAL STARTUP (2 Terminals)
-
-**Terminal 1** - Codette AI Server:
-```powershell
-cd i:\ashesinthedawn
-python codette_server_production.py
-```
-
-**Terminal 2** - React Frontend:
-```powershell
-cd i:\ashesinthedawn
+### Step 2: Start the Frontend
+```bash
+cd I:\ashesinthedawn
 npm run dev
 ```
 
-Then open: http://localhost:5173
+**Wait for**: `Local: http://localhost:5173/`
+
+### Done! ??
+Open your browser to **http://localhost:5173**
 
 ---
 
-## 🧪 TEST THE INTEGRATION
+## ?? Full Setup (One-Time)
 
-```powershell
-cd i:\ashesinthedawn
-python test_integration.py
+Everything is already done, but here's what was installed:
+
+```bash
+# Python dependencies (80+ packages)
+pip install -r requirements_updated.txt
+
+# Frontend dependencies (287 packages)
+npm install
+
+# Verify model setup
+python verify_model.py
 ```
 
-Expected output:
+---
+
+## ?? What You Can Do Now
+
+? **Codette AI Assistant** - Chat with AI  
+? **Audio Analysis** - Analyze audio files  
+? **DAW Controls** - Transport, mixing, effects  
+? **Real-time Sync** - Database integration  
+? **Web UI** - React + TypeScript frontend  
+
+---
+
+## ?? Development Commands
+
+```bash
+# Format code
+black .
+
+# Check code style
+flake8 .
+
+# Run tests
+pytest -v
+
+# Build frontend
+npm run build
+
+# Type checking
+npm run typecheck
+
+# ESLint check
+npm run lint
 ```
-✅ PASS    health
-✅ PASS    chat
-✅ PASS    suggestions
-✅ PASS    analyze
-✅ PASS    sync
 
-Result: 5/5 tests passed (100%)
-🎉 ALL TESTS PASSED!
+---
+
+## ?? What's Installed
+
+| Component | Installed | Status |
+|-----------|-----------|--------|
+| Python Backend | ? FastAPI, Uvicorn | Ready |
+| Database | ? Supabase, SQLAlchemy | Ready |
+| Audio Processing | ? Librosa, NumPy, SciPy | Ready |
+| AI/ML | ? Transformers, NLTK, scikit-learn | Ready |
+| Frontend | ? React, TypeScript, Vite | Ready |
+| UI Framework | ? Tailwind CSS | Ready |
+| Codette Model | ? v3 Model verified | Ready |
+
+---
+
+## ?? Troubleshooting
+
+### Backend won't start
+```bash
+python -m pip install --upgrade fastapi uvicorn
+python codette_server_unified.py
 ```
 
----
+### Frontend won't start
+```bash
+npm install
+npm run dev
+```
 
-## 📁 IMPORTANT FILES
+### Model not found
+```bash
+python verify_model.py
+```
 
-| File | Purpose |
-|------|---------|
-| `start_all.bat` | ⭐ One-click startup |
-| `codette_server_production.py` | Codette AI server |
-| `test_integration.py` | Test suite |
-| `CODETTE_SETUP_COMPLETE.md` | Full documentation |
-| `CODETTE_FIX_SUMMARY.md` | What was fixed |
-
----
-
-## 🎯 FEATURES
-
-### **DAW**
-- ✅ Multi-track recording/playback
-- ✅ Audio effects (EQ, compression, etc.)
-- ✅ Real-time mixer
-- ✅ Transport controls
-- ✅ Volume/pan automation
-
-### **Codette AI**
-- ✅ Mixing suggestions
-- ✅ Audio analysis
-- ✅ Mastering guidance
-- ✅ Real-time chat
-- ✅ Context-aware recommendations
-
-### **Integration**
-- ✅ REST API
-- ✅ WebSocket (future)
-- ✅ Auto-sync
-- ✅ Type-safe (TypeScript + Python)
+### Port already in use
+- Backend (8000): `netstat -ano | findstr :8000`
+- Frontend (5173): Kill and restart `npm run dev`
 
 ---
 
-## 💡 TIPS
+## ?? Documentation Files
 
-1. **Start fresh**: Restart servers if UI gets weird
-2. **Check console**: Press F12 to see browser errors
-3. **Test API**: Use `/docs` to manually test endpoints
-4. **Monitor logs**: Watch Terminal 1 for Codette requests
-5. **Keep tools open**: Both servers need to keep running
-
----
-
-## 🆘 NEED HELP?
-
-### **Error in Terminal 1** (Codette)
-- Check that Python 3.10+ is installed
-- Run: `pip install fastapi uvicorn`
-
-### **Error in Terminal 2** (React)
-- Check that Node.js is installed
-- Run: `npm install` in ashesinthedawn folder
-
-### **Connection refused**
-- Make sure both servers are running
-- Check firewall settings
-- Verify ports 5173 and 8001 are free
+- `CODETTE_DEPENDENCIES_INSTALLED.md` - Full dependency list
+- `requirements_updated.txt` - Python packages
+- `package.json` - Node packages
+- `verify_model.py` - Model verification script
+- `.github/copilot-instructions.md` - Development guidelines
 
 ---
 
-## 🎉 YOU'RE READY!
+## ?? Next Steps
 
-Your AI-powered Digital Audio Workstation is ready to use!
-
-**Start with**: `start_all.bat`
-
-Then enjoy producing music with Codette AI assistance! 🎵
+1. **Run the app**: `npm run dev`
+2. **Test Codette**: Open Control Center tab
+3. **Try analysis**: Upload audio, run analysis
+4. **Check logs**: Monitor console output
+5. **Explore API**: Visit `http://localhost:8000/docs`
 
 ---
 
-**Version**: 1.0.0  
-**Status**: ✅ Production Ready  
-**Last Updated**: November 28, 2025
+## ?? System Info
+
+- **Python**: 3.13.0
+- **Node**: v20+ (compatible)
+- **OS**: Windows 10/11
+- **GPU**: Not required (CPU mode works)
+
+---
+
+## ?? Getting Help
+
+- Check `CODETTE_DEPENDENCIES_INSTALLED.md` for package details
+- Run `python verify_model.py` to check model setup
+- Review logs in console for errors
+- Check browser console (F12) for frontend errors
+
+---
+
+**You're all set! Start coding! ??**
+

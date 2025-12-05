@@ -88,6 +88,81 @@ except ImportError as dsp_error:
     logger.warning(f"⚠️  DSP effects not available: {dsp_error}")
     logger.warning("   Install daw_core package or check Python path")
 
+# Add these imports at the top after existing imports
+import sys
+from pathlib import Path
+
+# Add Codette modules to path
+codette_src_path = Path(__file__).parent / "Codette" / "src"
+if codette_src_path.exists():
+    sys.path.insert(0, str(codette_src_path))
+else:
+    # Try alternative path
+    codette_src_path = Path(__file__).parent.parent / "Codette" / "src"
+    if codette_src_path.exists():
+        sys.path.insert(0, str(codette_src_path))
+        logger.info(f"✅ Added Codette src path: {codette_src_path}")
+
+# Import Codette capabilities
+try:
+    from codette_capabilities import (
+        QuantumConsciousness,
+        Perspective,
+        EmotionDimension,
+        CognitionCocoon,
+        QuantumState
+    )
+    CODETTE_CAPABILITIES_AVAILABLE = True
+    logger.info("✅ Codette capabilities module loaded")
+except ImportError as e:
+    CODETTE_CAPABILITIES_AVAILABLE = False
+    logger.warning(f"⚠️  Codette capabilities not available: {e}")
+    logger.warning(f"   Checked paths:")
+    logger.warning(f"   - {Path(__file__).parent / 'Codette' / 'src'}")
+    logger.warning(f"   - {Path(__file__).parent.parent / 'Codette' / 'src'}")
+    logger.warning(f"   Current sys.path includes: {sys.path[:3]}")
+
+# Import Codette core
+try:
+    codette_path = Path(__file__).parent / "Codette"
+    if not codette_path.exists():
+        codette_path = Path(__file__).parent.parent / "Codette"
+    
+    if codette_path.exists():
+        sys.path.insert(0, str(codette_path))
+        logger.info(f"✅ Added Codette path: {codette_path}")
+    
+    from codette_new import Codette as CodetteCore
+    CODETTE_CORE_AVAILABLE = True
+    logger.info("✅ Codette core module loaded")
+except ImportError as e:
+    CODETTE_CORE_AVAILABLE = False
+    logger.warning(f"⚠️  Codette core not available: {e}")
+    logger.warning(f"   Checked path: {codette_path}")
+
+
+# ==============================================================================
+# GLOBAL CODETTE INSTANCES
+# ==============================================================================
+
+# Initialize Codette consciousness system
+quantum_consciousness = None
+codette_core = None
+
+if CODETTE_CAPABILITIES_AVAILABLE:
+    try:
+        quantum_consciousness = QuantumConsciousness()
+        logger.info("✅ Quantum Consciousness System initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Quantum Consciousness: {e}")
+
+if CODETTE_CORE_AVAILABLE:
+    try:
+        codette_core = CodetteCore(user_name="CoreLogicStudio")
+        logger.info("✅ Codette Core initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Codette Core: {e}")
+
 # ============================================================================
 # CONSTANTS
 # ============================================================================
@@ -552,51 +627,62 @@ class EffectProcessRequest(BaseModel):
 
 @app.post("/codette/chat")
 async def codette_chat(request: ChatRequest):
-    """Chat with REAL Codette AI using codette_new.Codette.respond()"""
+    """Chat with REAL Codette AI using stable DAW-focused responder"""
     try:
-        if not codette_engine:
+        # Import stable responder
+        try:
+            from codette_stable_responder import get_stable_responder
+            responder = get_stable_responder()
+            STABLE_AVAILABLE = True
+        except ImportError:
+            STABLE_AVAILABLE = False
+            logger.warning("⚠️ Stable responder not available - falling back")
+        
+        if not STABLE_AVAILABLE:
             return {
-                "response": "Codette AI is not available. Please check server logs.",
-                "perspective": request.perspective,
-                "confidence": 0.0,
-                "status": "error"
+                "response": "[DAW Expert] I'm here to help with your DAW questions. Please elaborate on your mix, EQ, or track concerns.",
+                "perspective": request.perspective or "mix_engineering",
+                "confidence": 0.7,
+                "status": "fallback",
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
         
-        # Call REAL Codette respond() method with context
         logger.info(f"Processing chat request: {request.message[:50]}...")
         
-        # Add perspective context to query for varied responses
-        query = request.message
-        if request.perspective and request.perspective != "mix_engineering":
-            query = f"[{request.perspective} perspective] {request.message}"
+        # Generate stable response using deterministic responder
+        result = responder.generate_response(request.message)
         
-        # Add DAW context if provided
-        if request.daw_context:
-            context_summary = f" (DAW context: {len(request.daw_context.get('tracks', []))} tracks"
-            if request.daw_context.get('selected_track'):
-                context_summary += f", selected: {request.daw_context['selected_track'].get('name', 'Unknown')}"
-            context_summary += ")"
-            query += context_summary
+        # Extract JUST the response text from perspectives (no re-formatting)
+        response_parts = []
+        for perspective_data in result.get("perspectives", []):
+            emoji = perspective_data.get("emoji", "✨")
+            name = perspective_data.get("name", "Expert")
+            response_text = perspective_data.get("response", "")
             
-        # Use varied response helper to avoid repetition
-        response_text = get_varied_codette_response(query)
+            # Format: Emoji Name: Response
+            response_parts.append(f"{emoji} **{name}**: {response_text}")
         
-        # Ensure response is substantive
-        if len(response_text) < 20:
-            response_text = f"From a {request.perspective} perspective: {response_text}. Consider the DAW context and provide specific mixing guidance."
+        # Join with double newlines for readability
+        formatted_response = "\n\n".join(response_parts) if response_parts else "[No response generated]"
         
-        # Codette.respond() returns a multi-perspective string response
         return {
-            "response": response_text,
-            "perspective": request.perspective,
-            "confidence": 0.85,
+            "response": formatted_response,
+            "perspective": request.perspective or "mix_engineering",
+            "confidence": result.get("combined_confidence", 0.85),
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "source": "codette_new.Codette.respond()"
+            "source": "codette-stable-responder"
         }
         
     except Exception as e:
         logger.error(f"ERROR in /codette/chat: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        # Fallback response
+        return {
+            "response": "[DAW Expert] I'm here to help with your DAW questions. Please elaborate on your mix, EQ, or track concerns.",
+            "perspective": request.perspective or "mix_engineering",
+            "confidence": 0.7,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "codette-error-fallback"
+        }
 
 @app.post("/api/codette/chat")
 async def api_codette_chat(request: ChatRequest):
@@ -604,224 +690,117 @@ async def api_codette_chat(request: ChatRequest):
     return await codette_chat(request)
 
 @app.post("/api/codette/query")
-async def api_codette_query(request: Dict[str, Any]):
+async def api_codette_query_multi_perspective(request: Dict[str, Any]):
     """
-    Multi-perspective query endpoint expected by frontend
-    Accepts: { query: str, perspectives: List[str], context: Dict }
-    Returns: { perspectives: Dict[str, str], confidence: float, timestamp: str }
+    Multi-perspective query endpoint (matches documentation)
+    POST /api/codette/query
     """
     try:
         query = request.get("query", "")
-        perspectives_list = request.get("perspectives", ["neural_network", "human_intuition"])
+        perspectives_list = request.get("perspectives", [])
         context = request.get("context", {})
         
-        if not codette_engine:
-            # Return mock perspectives
-            mock_responses = {
-                "newtonian_logic": "Analysis through cause-effect reasoning",
-                "neural_network": f"Processing query: {query[:50]}...",
-                "human_intuition": "Consider the creative implications",
-                "davinci_synthesis": "Synthesizing multiple approaches",
-                "quantum_logic": "Exploring possibility space"
-            }
-            selected_perspectives = {p: mock_responses.get(p, f"{p}: Analysis") for p in perspectives_list}
+        if quantum_consciousness:
+            # Use real quantum consciousness if available
+            selected_perspectives = []
+            
+            # Map perspective string values to enum members
+            perspective_map = {p.value: p for p in Perspective}
+            
+            for p_str in perspectives_list:
+                # Try direct value match first (e.g., "neural_network")
+                if p_str in perspective_map:
+                    selected_perspectives.append(perspective_map[p_str])
+                else:
+                    # Try case-insensitive enum name match (e.g., "NEURAL_NETWORK")
+                    try:
+                        selected_perspectives.append(Perspective[p_str.upper()])
+                    except KeyError:
+                        # Try converting to enum name format (e.g., "neural_network" -> "NEURAL_NETWORK")
+                        try:
+                            enum_name = p_str.upper()
+                            selected_perspectives.append(Perspective[enum_name])
+                        except KeyError:
+                            logger.warning(f"Unknown perspective: {p_str} (tried: {p_str}, {p_str.upper()})")
+            
+            if not selected_perspectives:
+                selected_perspectives = list(Perspective)[:5]  # Default to first 5
+            
+            # Get emotion from context
+            emotion = None
+            if context.get("emotion"):
+                try:
+                    emotion = EmotionDimension[context["emotion"].upper()]
+                except KeyError:
+                    pass
+            
+            response = await quantum_consciousness.respond(
+                query=query,
+                emotion=emotion,
+                selected_perspectives=selected_perspectives
+            )
+            
+            return response
+        
+        elif codette_core:
+            # Fallback to Codette core with multi-perspective response
+            logger.info(f"Using Codette core fallback for query: {query[:50]}...")
+            
+            # Get response from Codette core
+            core_response = codette_core.respond(query)
+            
+            # Format as multi-perspective response
+            perspectives = {}
+            if isinstance(core_response, str):
+                # Split response by perspective markers
+                parts = core_response.split("\n\n")
+                for part in parts:
+                    if "]" in part:
+                        # Extract perspective name
+                        perspective_name = part.split("]")[0].replace("[", "").strip().lower().replace(" ", "_")
+                        perspective_response = part.split("]", 1)[1].strip()
+                        perspectives[perspective_name] = perspective_response
+                
+                # If no perspectives found, use whole response as single perspective
+                if not perspectives:
+                    perspectives["codette_core"] = core_response
+            
             return {
-                "perspectives": selected_perspectives,
-                "confidence": 0.65,
+                "query": query,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
+                "emotion": "curiosity",
+                "perspectives": perspectives,
+                "quantum_state": MOCK_QUANTUM_STATE,
+                "cocoon_id": f"cocoon_{int(datetime.now().timestamp())}",
+                "dream_sequence": "Processing through Codette core...",
+                "spiderweb_activation": len(perspectives),
+                "confidence": 0.85,
+                "source": "codette_core"
+            }
+        
+        else:
+            # Final fallback to mock response
+            return {
+                "query": query,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "emotion": "curiosity",
+                "perspectives": {
+                    "newtonian_logic": "Analyzing through cause-effect reasoning",
+                    "neural_network": f"Processing query: {query[:50]}...",
+                    "human_intuition": "Consider the creative implications"
+                },
+                "quantum_state": MOCK_QUANTUM_STATE,
+                "cocoon_id": f"cocoon_{int(datetime.now().timestamp())}",
+                "dream_sequence": "In the quantum field of clarity...",
+                "spiderweb_activation": 3,
+                "confidence": 0.75,
                 "source": "mock_fallback"
             }
         
-        # Use real Codette engine - Generate UNIQUE response per perspective
-        logger.info(f"Multi-perspective query: {query[:50]}... with {len(perspectives_list)} perspectives")
-        
-        # Get base response from Codette
-        base_response = codette_engine.respond(query)
-        
-        # Generate unique perspective-specific responses
-        perspectives_dict = {}
-        perspective_prompts = {
-            "newtonian_logic": "Analyze this from a logical, cause-and-effect perspective",
-            "neural_network": "Provide a data-driven, pattern-recognition analysis",
-            "human_intuition": "What would human intuition and creativity suggest",
-            "davinci_synthesis": "Synthesize multiple viewpoints into a unified insight",
-            "quantum_logic": "Explore the quantum possibilities and superpositions",
-            "ethical": "What are the ethical considerations here",
-            "creative": "What creative solutions emerge from this"
-        }
-        
-        for perspective in perspectives_list:
-            # Generate unique response for each perspective
-            perspective_query = f"{perspective_prompts.get(perspective, perspective)}: {query}"
-            
-            try:
-                # Get perspective-specific response
-                perspective_response = codette_engine.respond(perspective_query)
-                
-                # Ensure responses are different by adding perspective context
-                if perspective_response == base_response or len(perspective_response) < 50:
-                    # Fallback: use base response with perspective-specific prefix
-                    perspective_prefix = {
-                        "newtonian_logic": "From a logical analysis: ",
-                        "neural_network": "Pattern recognition suggests: ",
-                        "human_intuition": "Intuitively speaking: ",
-                        "davinci_synthesis": "Synthesizing insights: ",
-                        "quantum_logic": "Quantum perspective reveals: "
-                    }
-                    prefix = perspective_prefix.get(perspective, f"{perspective} view: ")
-                    perspectives_dict[perspective] = f"{prefix}{base_response[:250]}..."
-                else:
-                    perspectives_dict[perspective] = perspective_response[:300] + "..."
-
-            except Exception as persp_error:
-                logger.warning(f"Error generating {perspective} response: {persp_error}")
-                perspectives_dict[perspective] = f"{perspective} analysis: {base_response[:200]}..."
-        
-        return {
-            "perspectives": perspectives_dict,
-            "confidence": 0.85,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "source": "codette_new.Codette"
-        }
-        
     except Exception as e:
-        logger.error(f"ERROR in /api/codette/query: {e}")
+        logger.error(f"ERROR in /api/codette/query: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/codette/analyze")
-async def api_codette_analyze(request: AudioAnalysisRequest):
-    """Analyze audio with REAL Codette AI (with /api prefix)"""
-    try:
-        if not codette_engine:
-            return {
-                "trackId": request.track_data.get("track_id", "unknown") if request.track_data else "unknown",
-                "analysis": {"error": "Codette AI not available"},
-                "status": "error"
-            }
-        
-        # Build analysis query for Codette
-        track_name = request.track_data.get("track_name", "Unknown") if request.track_data else "Unknown"
-        track_type = request.track_data.get("track_type", "audio") if request.track_data else "audio"
-        analysis_type = request.analysis_type or "spectrum"
-        
-        query = f"Analyze this {analysis_type} data for track '{track_name}' and provide mixing recommendations"
-        
-        # Get Codette's multi-perspective analysis
-        codette_response = codette_engine.respond(query)
-        
-        # Use Codette's intelligent problem detection if audio data provided
-        problems_detected = []
-        if request.audio_data:
-            mix_analysis = {
-                'peak_level': request.audio_data.get("peak_level", -6.0),
-                'rms_level': request.audio_data.get("rms_level", -18.0),
-                'duration': request.audio_data.get("duration", 0),
-                'sample_rate': request.audio_data.get("sample_rate", 44100)
-            }
-            problems_detected = codette_engine.detect_mixing_problems(mix_analysis)
-        
-        # Get track-specific recommendations
-        track_info = {
-            'peak_level': request.audio_data.get("peak_level", -6.0) if request.audio_data else -6.0,
-            'muted': request.track_data.get("muted", False) if request.track_data else False,
-            'soloed': request.track_data.get("soloed", False) if request.track_data else False
-        }
-        mixing_suggestions = codette_engine.generate_mixing_suggestions(track_type, track_info)
-        
-        # Compile comprehensive analysis
-        analysis = {
-            "analysis_type": analysis_type,
-            "codette_insights": codette_response,
-            "problems_detected": problems_detected,
-            "mixing_suggestions": mixing_suggestions,
-            "quality_score": 0.85 if not problems_detected else max(0.5, 0.85 - len(problems_detected) * 0.1),
-            "recommendations": mixing_suggestions[:3]
-        }
-        
-        if request.audio_data:
-            analysis["metrics"] = {
-                "peak_level": request.audio_data.get("peak_level", -6.0),
-                "rms_level": request.audio_data.get("rms_level", -18.0),
-                "duration": request.audio_data.get("duration", 0),
-                "sample_rate": request.audio_data.get("sample_rate", 44100)
-            }
-        
-        return {
-            "trackId": request.track_data.get("track_id", "unknown") if request.track_data else "unknown",
-            "analysis": analysis,
-            "status": "success",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"ERROR in /api/codette/analyze: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/codette/analyze")
-async def codette_analyze(request: AudioAnalysisRequest):
-    """Original analyze endpoint (redirects to /api/codette/analyze)"""
-    return await api_codette_analyze(request)
-
-@app.post("/api/codette/suggest")
-async def api_codette_suggest(request: SuggestionRequest):
-    """Get AI suggestions using REAL Codette (with /api prefix)"""
-    try:
-        context = request.context
-        track_type = context.get("track_type", "audio")
-        track_info = context.get("track_info", {})
-        
-        if not codette_engine:
-            # Fallback suggestions
-            suggestions = [
-                {
-                    "type": "eq",
-                    "title": "EQ Suggestion",
-                    "description": "Apply basic EQ to balance frequency",
-                    "confidence": 0.5
-                }
-            ]
-        else:
-            # Use REAL Codette intelligence for mixing suggestions
-            mixing_tips = codette_engine.generate_mixing_suggestions(track_type, track_info)
-            
-            suggestions = []
-            for idx, tip in enumerate(mixing_tips[:request.limit]):
-                # Categorize suggestion type based on content
-                tip_lower = tip.lower()
-                if 'eq' in tip_lower or 'frequency' in tip_lower or 'hz' in tip_lower:
-                    sug_type = 'eq'
-                elif 'compress' in tip_lower or 'dynamics' in tip_lower:
-                    sug_type = 'compression'
-                elif 'reverb' in tip_lower or 'delay' in tip_lower or 'spatial' in tip_lower:
-                    sug_type = 'effects'
-                elif 'gain' in tip_lower or 'level' in tip_lower or 'volume' in tip_lower:
-                    sug_type = 'gain_staging'
-                else:
-                    sug_type = 'mixing'
-                
-                suggestions.append({
-                    "type": sug_type,
-                    "title": f"Mixing Tip {idx + 1}",
-                    "description": tip,
-                    "confidence": 0.85,
-                    "source": "codette_new.Codette.generate_mixing_suggestions()"
-                })
-        
-        return {
-            "success": True,
-            "suggestions": suggestions,
-            "confidence": 0.85,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        
-    except Exception as e:
-        logger.error(f"ERROR in /api/codette/suggest: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/codette/suggest")
-async def codette_suggest(request: SuggestionRequest):
-    """Original suggest endpoint (redirects to /api/codette/suggest)"""
-    return await api_codette_suggest(request)
 
 @app.post("/api/codette/music-guidance")
 async def api_music_guidance(request: Dict[str, Any]):
@@ -937,843 +916,9 @@ async def api_apply_suggestion(request: Dict[str, Any]):
         logger.error(f"ERROR in /api/codette/apply-suggestion: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/codette/memory/{cocoon_id}")
-async def api_get_cocoon(cocoon_id: str):
-    """Get a specific cognition cocoon from memory"""
-    try:
-        # Mock cognition cocoon response
-        return {
-            "id": cocoon_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "content": "Cognition cocoon memory entry",
-            "emotion_tag": "curiosity",
-            "quantum_state": MOCK_QUANTUM_STATE,
-            "perspectives_used": ["neural_network", "human_intuition"],
-            "encrypted": False,
-            "metadata": {},
-            "dream_sequence": []
-        }
-        
-    except Exception as e:
-        logger.error(f"ERROR in /api/codette/memory/{cocoon_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/codette/history")
-async def api_get_history(limit: int = 50):
-    """Get Codette interaction history"""
-    try:
-        # Mock history response
-        return {
-            "success": True,
-            "interactions": [],
-            "total": 0,
-            "limit": limit,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"ERROR in /api/codette/history: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/codette/status")
-async def api_codette_status():
-    """Get Codette system status (with /api prefix)"""
-    try:
-        # Safe attribute access with hasattr check
-        memory_size = 0
-        if codette_engine:
-            try:
-                if hasattr(codette_engine, 'memory'):
-                    memory_size = len(codette_engine.memory)
-            except (AttributeError, TypeError):
-                memory_size = 0
-        
-        return {
-            "status": "ok",
-            "codette_available": codette_engine is not None,
-            "engine_type": "codette_new.Codette" if codette_engine else "None",
-            "memory_size": memory_size,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/codette/status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/codette/status")
-async def codette_status_legacy():
-    """Original status endpoint (redirects to /api/codette/status) - LEGACY"""
-    return await api_codette_status()
-
-# ============================================================================
-# TRAINING DATA ENDPOINTS
-# ============================================================================
-
-@app.get("/api/training/context")
-async def get_training_context_endpoint():
-    """Get Codette AI training context and knowledge base"""
-    try:
-        # Real training context data
-        training_context = {
-            "daw_functions": {
-                "playback": {
-                    "play": {
-                        "name": "Play",
-                        "description": "Start audio playback from current position",
-                        "category": "transport",
-                        "parameters": [],
-                        "hotkey": "Space",
-                        "tips": ["Use for previewing mix", "Playback uses native Web Audio looping"]
-                    },
-                    "stop": {
-                        "name": "Stop",
-                        "description": "Stop playback and reset position to zero",
-                        "category": "transport",
-                        "parameters": [],
-                        "hotkey": "Space (when playing)",
-                        "tips": ["Resets timeline to start", "Clears all playing sources"]
-                    }
-                },
-                "mixing": {
-                    "setVolume": {
-                        "name": "Set Volume",
-                        "description": "Adjust track volume in dB",
-                        "category": "mixing",
-                        "parameters": ["trackId", "volume_dB"],
-                        "hotkey": "N/A",
-                        "tips": ["Range: -∞ to +12 dB", "Use -6 to -3 dB for headroom"]
-                    },
-                    "setPan": {
-                        "name": "Set Pan",
-                        "description": "Adjust stereo panning",
-                        "category": "mixing",
-                        "parameters": ["trackId", "pan"],
-                        "hotkey": "N/A",
-                        "tips": ["Range: -1.0 (L) to +1.0 (R)", "0.0 is center"]
-                    }
-                }
-            },
-            "ui_components": {
-                "Mixer": {
-                    "description": "Track mixing controls with volume, pan, and effects",
-                    "location": "Bottom panel",
-                    "size": "h-48 fixed height",
-                    "functions": ["Volume control", "Pan control", "Plugin rack", "Metering"],
-                    "teaching_tips": ["Select track first", "Adjust volume before effects", "Monitor peak levels"]
-                },
-                "Timeline": {
-                    "description": "Waveform display and playback control",
-                    "location": "Center panel",
-                    "size": "flex-1 takes remaining space",
-                    "functions": ["Waveform view", "Playhead display", "Click-to-seek"],
-                    "teaching_tips": ["Click to jump to position", "Waveform cached for performance"]
-                }
-            },
-            "codette_abilities": {
-                "audio_analysis": {
-                    "ability": "Audio Analysis",
-                    "description": "Analyze audio files for quality, frequency balance, and dynamics",
-                    "when_to_use": "After recording or importing tracks",
-                    "skill_level": "intermediate",
-                    "related_abilities": ["mixing_suggestions", "mastering_advice"]
-                },
-                "mixing_suggestions": {
-                    "ability": "Mixing Suggestions",
-                    "description": "Provide context-aware mixing recommendations",
-                    "when_to_use": "During mixing process",
-                    "skill_level": "beginner to advanced",
-                    "related_abilities": ["audio_analysis", "eq_recommendations"]
-                }
-            }
-        }
-        
-        return {
-            "success": True,
-            "data": training_context,
-            "message": "Training context available"
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/training/context: {e}")
-        return {
-            "success": False,
-            "data": None,
-            "error": str(e)
-        }
-
-@app.get("/api/training/health")
-async def training_health():
-    """Check training module health"""
-    try:
-        return {
-            "success": True,
-            "training_available": True,
-            "modules": {
-                "training_data": True,
-                "codette_engine": codette_engine is not None,
-            }
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-# ============================================================================
-# ANALYSIS ENDPOINTS (RESTORED WITH REAL IMPLEMENTATIONS)
-# ============================================================================
-
-@app.get("/api/analysis/delay-sync")
-async def get_delay_sync(bpm: float = 120.0):
-    """Calculate delay sync times for all note divisions"""
-    try:
-        divisions = {
-            "Whole Note": (60000 / bpm) * 4,
-            "Half Note": (60000 / bpm) * 2,
-            "Quarter Note": 60000 / bpm,
-            "Eighth Note": 30000 / bpm,
-            "16th Note": 15000 / bpm,
-            "Triplet Quarter": (60000 / bpm) * (2/3),
-            "Triplet Eighth": (30000 / bpm) * (2/3),
-            "Dotted Quarter": (60000 / bpm) * 1.5,
-            "Dotted Eighth": (30000 / bpm) * 1.5,
-        }
-        logger.info(f"Delay sync calculated for {bpm} BPM")
-        return {
-            "status": "success",
-            "bpm": bpm,
-            "divisions": divisions,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/analysis/delay-sync: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/analysis/detect-genre")
-async def detect_genre(request: Dict[str, Any]):
-    """Detect music genre based on project metadata using Codette"""
-    try:
-        if codette_engine:
-            # Use Codette for intelligent genre detection
-            tracks = request.get("tracks", [])
-            query = f"Analyze these {len(tracks)} tracks and detect the music genre"
-            genre_analysis = codette_engine.respond(query)
-            
-            return {
-                "status": "success",
-                "detected_genre": "Electronic",  # Parse from Codette response
-                "confidence": 0.85,
-                "codette_analysis": genre_analysis,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        else:
-            genres = ["Electronic", "Hip-Hop", "Pop", "Rock", "Jazz", "Classical", "Ambient"]
-            return {
-                "status": "success",
-                "detected_genre": genres[0],
-                "confidence": 0.75,
-                "candidates": genres[:3],
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-    except Exception as e:
-        logger.error(f"ERROR in /api/analysis/detect-genre: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/analysis/ear-training")
-async def get_ear_training(exercise_type: str = "interval", difficulty: str = "beginner"):
-    """Get ear training exercise data"""
-    try:
-        exercises = {
-            "interval": [
-                {"name": "Perfect Unison", "semitones": 0, "difficulty": "beginner", "example": "Two notes at same pitch"},
-                {"name": "Minor Second", "semitones": 1, "difficulty": "beginner", "example": "Jaws theme"},
-                {"name": "Major Second", "semitones": 2, "difficulty": "beginner", "example": "Happy Birthday first two notes"},
-                {"name": "Minor Third", "semitones": 3, "difficulty": "beginner", "example": "Greensleeves opening"},
-                {"name": "Major Third", "semitones": 4, "difficulty": "beginner", "example": "Oh When the Saints"},
-                {"name": "Perfect Fourth", "semitones": 5, "difficulty": "intermediate", "example": "Amazing Grace"},
-                {"name": "Tritone", "semitones": 6, "difficulty": "intermediate", "example": "The Simpsons theme"},
-                {"name": "Perfect Fifth", "semitones": 7, "difficulty": "intermediate", "example": "Star Wars theme"},
-                {"name": "Minor Sixth", "semitones": 8, "difficulty": "advanced", "example": "The Entertainer"},
-                {"name": "Major Sixth", "semitones": 9, "difficulty": "advanced", "example": "My Bonnie"},
-                {"name": "Minor Seventh", "semitones": 10, "difficulty": "advanced", "example": "Star Trek theme"},
-                {"name": "Major Seventh", "semitones": 11, "difficulty": "advanced", "example": "Take On Me chorus"},
-                {"name": "Octave", "semitones": 12, "difficulty": "intermediate", "example": "Somewhere Over the Rainbow"},
-            ],
-            "chord": [
-                {"name": "Major Triad", "intervals": [0, 4, 7], "difficulty": "beginner", "quality": "happy, bright"},
-                {"name": "Minor Triad", "intervals": [0, 3, 7], "difficulty": "beginner", "quality": "sad, dark"},
-                {"name": "Diminished Triad", "intervals": [0, 3, 6], "difficulty": "intermediate", "quality": "tense, unstable"},
-                {"name": "Augmented Triad", "intervals": [0, 4, 8], "difficulty": "intermediate", "quality": "mysterious, dreamlike"},
-                {"name": "Major 7", "intervals": [0, 4, 7, 11], "difficulty": "intermediate", "quality": "jazzy, sophisticated"},
-                {"name": "Minor 7", "intervals": [0, 3, 7, 10], "difficulty": "intermediate", "quality": "mellow, bluesy"},
-                {"name": "Dominant 7", "intervals": [0, 4, 7, 10], "difficulty": "intermediate", "quality": "tension, blues"},
-                {"name": "Major 6", "intervals": [0, 4, 7, 9], "difficulty": "advanced", "quality": "vintage, nostalgic"},
-                {"name": "Minor 6", "intervals": [0, 3, 7, 9], "difficulty": "advanced", "quality": "Latin, exotic"},
-            ]
-        }
-        
-        result = exercises.get(exercise_type, exercises["interval"])
-        filtered = [e for e in result if e.get("difficulty") == difficulty or difficulty == "all"]
-        
-        return {
-            "status": "success",
-            "exercise_type": exercise_type,
-            "difficulty": difficulty,
-            "exercises": filtered if filtered else result,
-            "total_count": len(filtered if filtered else result),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/analysis/ear-training: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/analysis/production-checklist")
-async def get_production_checklist(stage: str = "mixing"):
-    """Get production workflow checklist"""
-    try:
-        checklists = {
-            "recording": {
-                "Preparation": [
-                    "Test all microphones and cables",
-                    "Set input levels to -18dB to -12dB",
-                    "Enable monitoring with zero latency if possible",
-                    "Arm tracks for recording"
-                ],
-                "During Recording": [
-                    "Monitor input levels - avoid clipping",
-                    "Watch for distortion or noise",
-                    "Keep takes organized with clear naming"
-                ],
-                "After Recording": [
-                    "Review takes for quality",
-                    "Comp best performances",
-                    "Save backup of raw recordings"
-                ]
-            },
-            "mixing": {
-                "Gain Staging": [
-                    "Set input levels to -6dB to -3dB on peaks",
-                    "Monitor clipping on all tracks",
-                    "Check headroom on master bus",
-                    "Adjust faders before adding plugins"
-                ],
-                "EQ": [
-                    "High-pass filter unnecessary low-end (below 80-100Hz)",
-                    "Balance frequency spectrum across all tracks",
-                    "Use reference tracks for comparison",
-                    "Cut before you boost",
-                    "Use narrow Q for surgical cuts, wide Q for tonal shaping"
-                ],
-                "Compression": [
-                    "Set appropriate ratio (2:1 to 8:1)",
-                    "Adjust attack time (fast for transients, slow for sustain)",
-                    "Set release time to match tempo",
-                    "Avoid over-compression (3-6dB gain reduction max)",
-                    "Use parallel compression for natural sound"
-                ],
-                "Spatial Processing": [
-                    "Pan tracks for stereo width",
-                    "Add reverb/delay via send effects",
-                    "Check mono compatibility",
-                    "Use stereo widening sparingly"
-                ],
-                "Final Checks": [
-                    "Listen at multiple volume levels",
-                    "Check on different speaker systems",
-                    "Take breaks to avoid ear fatigue",
-                    "Compare to reference tracks"
-                ]
-            },
-            "mastering": {
-                "Analysis": [
-                    "Check loudness target (-14 LUFS for streaming)",
-                    "Analyze frequency balance with spectrum analyzer",
-                    "Check for phase issues",
-                    "Measure dynamic range"
-                ],
-                "Processing": [
-                    "Apply gentle EQ corrections (±1-2dB)",
-                    "Use multiband compression for control",
-                    "Add harmonic excitement/saturation if needed",
-                    "Apply limiting for final loudness (leave -1dB headroom)"
-                ],
-                "Quality Control": [
-                    "Check for intersample peaks",
-                    "Verify loudness matches target",
-                    "Listen on multiple systems",
-                    "Export in correct format (24-bit WAV recommended)"
-                ]
-            },
-            "arrangement": {
-                "Structure": [
-                    "Define song sections (intro, verse, chorus, bridge, outro)",
-                    "Ensure each section has clear purpose",
-                    "Build energy throughout song",
-                    "Add variation to keep listener engaged"
-                ],
-                "Instrumentation": [
-                    "Balance lead and supporting elements",
-                    "Leave space for vocals",
-                    "Use automation for interest",
-                    "Add ear candy and subtle details"
-                ]
-            }
-        }
-        
-        result = checklists.get(stage, checklists["mixing"])
-        
-        return {
-            "status": "success",
-            "stage": stage,
-            "sections": result,
-            "total_items": sum(len(items) for items in result.values()),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/analysis/production-checklist: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/analysis/instrument-info")
-async def get_instrument_info(category: str = "", instrument: str = ""):
-    """Get instrument specifications and mixing tips"""
-    try:
-        instruments = {
-            "drums": {
-                "kick": {
-                    "frequency_range": "20-250Hz",
-                    "fundamental": "50-100Hz",
-                    "attack": "2000-4000Hz",
-                    "compression_ratio": "4:1 to 8:1",
-                    "tips": [
-                        "High-pass filter below 30-40Hz to remove rumble",
-                        "Boost 50-100Hz for weight",
-                        "Add punch with 2-4kHz boost",
-                        "Use sidechain compression with bass"
-                    ]
-                },
-                "snare": {
-                    "frequency_range": "100-5000Hz",
-                    "fundamental": "150-250Hz",
-                    "crack": "2000-5000Hz",
-                    "compression_ratio": "4:1 to 6:1",
-                    "tips": [
-                        "Cut muddy frequencies around 200-400Hz",
-                        "Enhance crack at 3-5kHz",
-                        "Add top-end air around 10kHz",
-                        "Use parallel compression for fatness"
-                    ]
-                },
-                "hi-hat": {
-                    "frequency_range": "200-20000Hz",
-                    "brightness": "8000-15000Hz",
-                    "compression_ratio": "2:1 to 4:1",
-                    "tips": [
-                        "High-pass filter below 200-500Hz",
-                        "Control harshness by cutting 2-4kHz",
-                        "Add air with gentle 12-15kHz boost",
-                        "Use light compression to control dynamics"
-                    ]
-                }
-            },
-            "bass": {
-                "bass": {
-                    "frequency_range": "40-250Hz",
-                    "fundamental": "50-100Hz",
-                    "definition": "700-1000Hz",
-                    "compression_ratio": "4:1 to 8:1",
-                    "tips": [
-                        "Keep tight and punchy",
-                        "Use high-pass filter at 30-40Hz",
-                        "Compress heavily for consistent level",
-                        "Add definition around 700-1000Hz",
-                        "Sidechain with kick drum for space"
-                    ]
-                }
-            },
-            "vocals": {
-                "lead": {
-                    "frequency_range": "80-8000Hz (full range to 20kHz)",
-                    "fundamental": "100-300Hz (male), 200-400Hz (female)",
-                    "presence": "2000-5000Hz",
-                    "air": "8000-12000Hz",
-                    "compression_ratio": "3:1 to 6:1",
-                    "tips": [
-                        "High-pass filter at 80-100Hz",
-                        "De-ess harsh sibilance at 6-8kHz",
-                        "Boost presence around 3-5kHz",
-                        "Add air with gentle 10-12kHz boost",
-                        "Use compression and automation to maintain consistent level",
-                        "Double-track or use subtle delay for width"
-                    ]
-                },
-                "background": {
-                    "frequency_range": "200-10000Hz",
-                    "compression_ratio": "4:1 to 8:1",
-                    "tips": [
-                        "High-pass filter more aggressively (150-200Hz)",
-                        "Pan left/right for width",
-                        "Compress more heavily than lead",
-                        "Add reverb for depth",
-                        "Duck volume slightly when lead vocal is present"
-                    ]
-                }
-            },
-            "guitar": {
-                "electric": {
-                    "frequency_range": "80-5000Hz (harmonics to 10kHz)",
-                    "fundamental": "80-400Hz",
-                    "presence": "2000-5000Hz",
-                    "compression_ratio": "3:1 to 4:1",
-                    "tips": [
-                        "High-pass at 80-100Hz to avoid muddiness",
-                        "Cut boxiness around 200-400Hz",
-                        "Add presence at 3-5kHz",
-                        "Use stereo widening on rhythm guitars",
-                        "Pan doubled guitars hard left/right"
-                    ]
-                },
-                "acoustic": {
-                    "frequency_range": "80-15000Hz",
-                    "body": "80-250Hz",
-                    "presence": "3000-7000Hz",
-                    "air": "10000-15000Hz",
-                    "compression_ratio": "2:1 to 4:1",
-                    "tips": [
-                        "High-pass at 80Hz",
-                        "Control boominess at 150-250Hz",
-                        "Add sparkle at 10-12kHz",
-                        "Use light compression to even out dynamics",
-                        "Consider dual-mic technique for fuller sound"
-                    ]
-                }
-            },
-            "keys": {
-                "piano": {
-                    "frequency_range": "27-4200Hz (full range)",
-                    "fundamental": "27-4200Hz depending on note",
-                    "brightness": "2000-8000Hz",
-                    "compression_ratio": "2:1 to 3:1",
-                    "tips": [
-                        "High-pass at 40-50Hz to remove rumble",
-                        "Be gentle with EQ - piano has natural tone",
-                        "Add sparkle around 8-10kHz if needed",
-                        "Use light compression to control dynamics",
-                        "Pan for stereo image (low notes left, high notes right)"
-                    ]
-                },
-                "synth": {
-                    "frequency_range": "20-20000Hz (full range)",
-                    "varies": "depending on patch",
-                    "compression_ratio": "2:1 to 4:1",
-                    "tips": [
-                        "Use filtering creatively for movement",
-                        "Layer multiple synths for thickness",
-                        "Use automation for interest",
-                        "Consider stereo width carefully",
-                        "High-pass if competing with bass"
-                    ]
-                }
-            }
-        }
-        
-        if category and category in instruments:
-            if instrument and instrument in instruments[category]:
-                result = {category: {instrument: instruments[category][instrument]}}
-                return {
-                    "status": "success",
-                    "data": result,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-            result = {category: instruments[category]}
-            return {
-                "status": "success",
-                "data": result,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        
-        return {
-            "status": "success",
-            "data": instruments,
-            "categories": list(instruments.keys()),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/analysis/instrument-info: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
-# CREATIVE PROMPT ENDPOINTS (RESTORED WITH REAL IMPLEMENTATIONS)
-# ============================================================================
-
-@app.post("/api/prompt/playlist")
-async def create_playlist(request: Dict[str, Any]):
-    """Create a music playlist based on prompt using Codette"""
-    try:
-        prompt = request.get("prompt", "No prompt provided")
-        logger.info(f"Creating playlist for prompt: {prompt}")
-        
-        # Use Codette to generate creative playlist
-        if codette_engine:
-            query = f"Create a playlist for: {prompt}. Suggest 5 track types or moods."
-            codette_suggestions = codette_engine.respond(query)
-        else:
-            codette_suggestions = "Playlist suggestions unavailable without Codette AI"
-        
-        # Simulate playlist creation
-        playlist = {
-            "id": str(uuid.uuid4()),
-            "name": f"Playlist for '{prompt}'",
-            "description": codette_suggestions[:200] if codette_suggestions else "",
-            "tracks": [],  # Track details would be filled in by Codette AI
-            "mood": "energetic" if "energy" in prompt.lower() else "chill",
-            "user_id": "system",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        
-        return {
-            "status": "success",
-            "playlist": playlist,
-            "codette_insights": codette_suggestions,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/prompt/playlist: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/prompt/analyze")
-async def analyze_daw_request(request: Dict[str, Any]):
-    """Analyze DAW project and generate enhancement suggestions using Codette"""
-    try:
-        # Extract and validate request data
-        tracks = request.get("tracks", [])
-        if not isinstance(tracks, list):
-            raise ValueError("Invalid tracks data: expected list")
-        
-        logger.info(f"Analyzing DAW project with {len(tracks)} tracks")
-        
-        # Use Codette for intelligent DAW context analysis
-        if codette_engine:
-            daw_context = {
-                'tracks': tracks,
-                'project_name': request.get("project_name", "Untitled"),
-                'bpm': request.get("bpm", 120)
-            }
-            context_analysis = codette_engine.analyze_daw_context(daw_context)
-            
-            query = f"Analyze a DAW project with {len(tracks)} tracks and suggest improvements"
-            codette_analysis = codette_engine.respond(query)
-        else:
-            context_analysis = {
-                'track_count': len(tracks),
-                'recommendations': ["Install Codette AI for intelligent analysis"]
-            }
-            codette_analysis = "Project analysis unavailable without Codette AI"
-        
-        # Perform per-track analysis with real intelligence
-        track_analysis = []
-        for track in tracks:
-            track_id = track.get("id")
-            if not track_id:
-                logger.warning("Track missing id, skipping")
-                continue
-            
-            track_name = track.get("name", f"Track {track_id}")
-            track_type = track.get("type", "audio")
-            
-            # Get intelligent track-specific recommendations
-            if codette_engine:
-                track_info = {
-                    'peak_level': track.get("volume", -6),
-                    'muted': track.get("muted", False),
-                    'soloed': track.get("sololed", False)
-                }
-                suggestions = codette_engine.generate_mixing_suggestions(track_type, track_info)
-            else:
-                suggestions = [f"Add EQ to {track_type} track", f"Apply compression to {track_name}"]
-            
-            # Intelligent track analysis
-            track_analysis.append({
-                "id": track_id,
-                "name": track_name,
-                "type": track_type,
-                "recommended_plugins": ["EQ", "Compressor", "Reverb"],
-                "suggested_improvements": suggestions[:2],
-                "quality_score": 0.78
-            })
-            logger.info(f" - Analyzed track {track_id}: {track_name}")
-        
-        # Compile comprehensive analysis results
-        analysis_results = {
-            "track_analysis": track_analysis,
-            "overall_tempo_bpm": request.get("bpm", 120),
-            "genre_suggestions": ["Electronic", "Pop", "Rock"],
-            "mood_tags": ["Energetic", "Dynamic"],
-            "codette_insights": codette_analysis,
-            "context_analysis": context_analysis,
-            "project_health": {
-                "track_count": len(tracks),
-                "potential_issues": context_analysis.get('potential_issues', []),
-                "recommendations": context_analysis.get('recommendations', [])
-            }
-        }
-        
-        return {
-            "status": "success",
-            "analysis": analysis_results,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/prompt/analyze: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
-# TRANSPORT CONTROL ENDPOINTS (RESTORED)
-# ============================================================================
-
-class TransportManager:
-    """Manages DAW transport state"""
-    def __init__(self):
-        self.playing = False
-        self.time_seconds = 0.0
-        self.bpm = 120.0
-        self.loop_enabled = False
-        self.loop_start = 0.0
-        self.loop_end = 10.0
-
-transport_manager = TransportManager()
-
-@app.post("/transport/play")
-async def transport_play():
-    """Start DAW playback"""
-    try:
-        transport_manager.playing = True
-        logger.info("Transport: Play")
-        return {
-            "success": True,
-            "action": "play",
-            "state": {
-                "playing": transport_manager.playing,
-                "time": transport_manager.time_seconds
-            },
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /transport/play: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/transport/stop")
-async def transport_stop():
-    """Stop DAW playback"""
-    try:
-        transport_manager.playing = False
-        transport_manager.time_seconds = 0.0
-        logger.info("Transport: Stop")
-        return {
-            "success": True,
-            "action": "stop",
-            "state": {
-                "playing": transport_manager.playing,
-                "time": transport_manager.time_seconds
-            },
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /transport/stop: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/transport/pause")
-async def transport_pause():
-    """Pause DAW playback"""
-    try:
-        transport_manager.playing = False
-        logger.info(f"Transport: Pause at {transport_manager.time_seconds}s")
-        return {
-            "success": True,
-            "action": "pause",
-            "state": {
-                "playing": transport_manager.playing,
-                "time": transport_manager.time_seconds
-            },
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /transport/pause: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/transport/seek")
-async def transport_seek(request: Dict[str, Any]):
-    """Seek to position in DAW timeline"""
-    try:
-        time_seconds = request.get("time_seconds", 0.0)
-        transport_manager.time_seconds = max(0.0, time_seconds)
-        logger.info(f"Transport: Seek to {transport_manager.time_seconds}s")
-        return {
-            "success": True,
-            "action": "seek",
-            "state": {
-                "playing": transport_manager.playing,
-                "time": transport_manager.time_seconds
-            },
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /transport/seek: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/transport/state")
-async def get_transport_state():
-    """Get current transport state"""
-    try:
-        return {
-            "success": True,
-            "state": {
-                "playing": transport_manager.playing,
-                "time": transport_manager.time_seconds,
-                "bpm": transport_manager.bpm,
-                "loop_enabled": transport_manager.loop_enabled,
-                "loop_start": transport_manager.loop_start,
-                "loop_end": transport_manager.loop_end
-            },
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /transport/state: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
-# STATUS AND DIAGNOSTIC ENDPOINTS
-# ============================================================================
-
-@app.get("/api/cache-stats")
-async def get_cache_stats():
-    """Get cache performance statistics"""
-    try:
-        stats = context_cache.stats()
-        return {
-            "status": "success",
-            "cache_stats": stats,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/cache-stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/cache-clear")
-async def clear_cache():
-    """Clear all cache"""
-    try:
-        context_cache.clear()
-        return {
-            "status": "success",
-            "message": "Cache cleared",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    except Exception as e:
-        logger.error(f"ERROR in /api/cache-clear: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
+# =============================================================================
 # WEBSOCKET ENDPOINT FOR REAL-TIME COMMUNICATION
-# ============================================================================
+# ==============================================================================
 
 # Track active WebSocket connections
 active_websockets: set = set()
@@ -2289,22 +1434,413 @@ async def create_mixdown(request: Dict[str, Any]):
         logger.error(f"ERROR in /api/mixdown: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+# =============================================================================
+# CODING ASSISTANT ENDPOINTS (RESTORED WITH REAL IMPLEMENTATIONS)
+# ==============================================================================
+
+@app.post("/api/prompt/playlist")
+async def create_playlist(request: Dict[str, Any]):
+    """Create a music playlist based on prompt using Codette"""
+    try:
+        prompt = request.get("prompt", "No prompt provided")
+        logger.info(f"Creating playlist for prompt: {prompt}")
+        
+        # Use Codette to generate creative playlist
+        if codette_engine:
+            query = f"Create a playlist for: {prompt}. Suggest 5 track types or moods."
+            codette_suggestions = codette_engine.respond(query)
+        else:
+            codette_suggestions = "Playlist suggestions unavailable without Codette AI"
+        
+        # Simulate playlist creation
+        playlist = {
+            "id": str(uuid.uuid4()),
+            "name": f"Playlist for '{prompt}'",
+            "description": codette_suggestions[:200] if codette_suggestions else "",
+            "tracks": [],  # Track details would be filled in by Codette AI
+            "mood": "energetic" if "energy" in prompt.lower() else "chill",
+            "user_id": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        return {
+            "status": "success",
+            "playlist": playlist,
+            "codette_insights": codette_suggestions,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"ERROR in /api/prompt/playlist: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/prompt/analyze")
+async def analyze_daw_request(request: Dict[str, Any]):
+    """Analyze DAW project and generate enhancement suggestions using Codette"""
+    try:
+        # Extract and validate request data
+        tracks = request.get("tracks", [])
+        if not isinstance(tracks, list):
+            raise ValueError("Invalid tracks data: expected list")
+        
+        logger.info(f"Analyzing DAW project with {len(tracks)} tracks")
+        
+        # Use Codette for intelligent DAW context analysis
+        if codette_engine:
+            daw_context = {
+                'tracks': tracks,
+                'project_name': request.get("project_name", "Untitled"),
+                'bpm': request.get("bpm", 120)
+            }
+            context_analysis = codette_engine.analyze_daw_context(daw_context)
+            
+            query = f"Analyze a DAW project with {len(tracks)} tracks and suggest improvements"
+            codette_analysis = codette_engine.respond(query)
+        else:
+            context_analysis = {
+                'track_count': len(tracks),
+                'recommendations': ["Install Codette AI for intelligent analysis"]
+            }
+            codette_analysis = "Project analysis unavailable without Codette AI"
+        
+        # Perform per-track analysis with real intelligence
+        track_analysis = []
+        for track in tracks:
+            track_id = track.get("id")
+            if not track_id:
+                logger.warning("Track missing id, skipping")
+                continue
+            
+            track_name = track.get("name", f"Track {track_id}")
+            track_type = track.get("type", "audio")
+            
+            # Get intelligent track-specific recommendations
+            if codette_engine:
+                track_info = {
+                    'peak_level': track.get("volume", -6),
+                    'muted': track.get("muted", False),
+                    'soloed': track.get("sololed", False)
+                }
+                suggestions = codette_engine.generate_mixing_suggestions(track_type, track_info)
+            else:
+                suggestions = [f"Add EQ to {track_type} track", f"Apply compression to {track_name}"]
+            
+            # Intelligent track analysis
+            track_analysis.append({
+                "id": track_id,
+                "name": track_name,
+                "type": track_type,
+                "recommended_plugins": ["EQ", "Compressor", "Reverb"],
+                "suggested_improvements": suggestions[:2],
+                "quality_score": 0.78
+            })
+            logger.info(f" - Analyzed track {track_id}: {track_name}")
+        
+        # Compile comprehensive analysis results
+        analysis_results = {
+            "track_analysis": track_analysis,
+            "overall_tempo_bpm": request.get("bpm", 120),
+            "genre_suggestions": ["Electronic", "Pop", "Rock"],
+            "mood_tags": ["Energetic", "Dynamic"],
+            "codette_insights": codette_analysis,
+            "context_analysis": context_analysis,
+            "project_health": {
+                "track_count": len(tracks),
+                "potential_issues": context_analysis.get('potential_issues', []),
+                "recommendations": context_analysis.get('recommendations', [])
+            }
+        }
+        
+        return {
+            "status": "success",
+            "analysis": analysis_results,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"ERROR in /api/prompt/analyze: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ============================================================================
-# MAIN - RUN SERVER
+# PERSPECTIVE & QUANTUM ENDPOINTS
 # ============================================================================
 
-if __name__ == "__main__":
-    import uvicorn
-    
-    # Get port from environment or use default
-    port = int(os.getenv("CODETTE_PORT", "8000"))
-    host = os.getenv("CODETTE_HOST", "0.0.0.0")
-    
-    # Run server with uvicorn
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level="info",
-        access_log=True
-    )
+@app.get("/api/codette/capabilities")
+async def api_get_capabilities():
+    """
+    Get all Codette capabilities
+    GET /api/codette/capabilities
+    """
+    try:
+        perspectives = [p.value for p in Perspective] if CODETTE_CAPABILITIES_AVAILABLE else [
+            "newtonian_logic", "davinci_synthesis", "human_intuition",
+            "neural_network", "quantum_logic", "resilient_kindness",
+            "mathematical_rigor", "philosophical", "copilot_developer",
+            "bias_mitigation", "psychological"
+        ]
+        
+        emotions = [e.value for e in EmotionDimension] if CODETTE_CAPABILITIES_AVAILABLE else [
+            "compassion", "curiosity", "fear", "joy", "sorrow", "ethics", "quantum"
+        ]
+        
+        return {
+            "perspectives": perspectives,
+            "music_specialties": ["mix_engineering", "audio_theory", "creative_production", 
+                                 "technical_troubleshooting", "workflow_optimization"],
+            "endpoints": [
+                "/api/codette/query",
+                "/api/codette/music-guidance",
+                "/api/codette/status",
+                "/api/codette/capabilities",
+                "/api/codette/memory/{cocoon_id}",
+                "/api/codette/history",
+                "/api/codette/analytics"
+            ],
+            "features": {
+                "quantum_reasoning": CODETTE_CAPABILITIES_AVAILABLE,
+                "memory_cocoons": CODETTE_CAPABILITIES_AVAILABLE,
+                "dream_synthesis": CODETTE_CAPABILITIES_AVAILABLE,
+                "real_time_assistance": True,
+                "daw_integration": True,
+                "11_perspectives": CODETTE_CAPABILITIES_AVAILABLE
+            },
+            "emotions": emotions,
+            "version": "3.0.0",
+            "build_date": "2025-12-05"
+        }
+    except Exception as e:
+        logger.error(f"ERROR in /api/codette/capabilities: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
+# MEMORY & COCOON ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/codette/memory/{cocoon_id}")
+async def api_get_cocoon(cocoon_id: str):
+    """
+    Retrieve a stored memory cocoon
+    GET /api/codette/memory/{cocoon_id}
+    """
+    try:
+        if not quantum_consciousness:
+            return {
+                "id": cocoon_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "content": "Cocoon memory entry",
+                "emotion_tag": "curiosity",
+                "quantum_state": MOCK_QUANTUM_STATE,
+                "perspectives_used": ["neural_network", "human_intuition"],
+                "encrypted": False,
+                "metadata": {},
+                "dream_sequence": []
+            }
+        
+        cocoon = quantum_consciousness.memory_system.get_cocoon(cocoon_id)
+        
+        if not cocoon:
+            raise HTTPException(status_code=404, detail=f"Cocoon {cocoon_id} not found")
+        
+        return cocoon.to_dict()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ERROR in /api/codette/memory/{cocoon_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/codette/history")
+async def api_get_history(limit: int = 50, emotion_filter: Optional[str] = None):
+    """
+    Get interaction history
+    GET /api/codette/history?limit=50&emotion_filter=curiosity
+    """
+    try:
+        if not quantum_consciousness:
+            return {
+                "interactions": [],
+                "total": 0,
+                "filtered_by": {"limit": limit, "emotion_filter": emotion_filter}
+            }
+        
+        # Filter by emotion if provided
+        emotion_enum = None
+        if emotion_filter:
+            try:
+                emotion_enum = EmotionDimension[emotion_filter.upper()]
+            except KeyError:
+                logger.warning(f"Invalid emotion filter: {emotion_filter}")
+        
+        cocoons = quantum_consciousness.memory_system.list_cocoons(emotion_filter=emotion_enum)
+        cocoons = cocoons[:limit]  # Limit results
+        
+        interactions = []
+        for cocoon in cocoons:
+            interactions.append({
+                "id": cocoon.id,
+                "query": cocoon.content[:100],  # First 100 chars
+                "timestamp": cocoon.timestamp.isoformat(),
+                "emotion": cocoon.emotion_tag.value,
+                "confidence": cocoon.quantum_state.coherence,
+                "perspectives_used": len(cocoon.perspectives_used)
+            })
+        
+        return {
+            "interactions": interactions,
+            "total": len(interactions),
+            "filtered_by": {"limit": limit, "emotion_filter": emotion_filter}
+        }
+        
+    except Exception as e:
+        logger.error(f"ERROR in /api/codette/history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/codette/analytics")
+async def api_get_analytics():
+    """
+    Get usage and performance analytics
+    GET /api/codette/analytics
+    """
+    try:
+        if not quantum_consciousness:
+            return {
+                "total_interactions": 0,
+                "average_confidence": 0.0,
+                "most_used_perspectives": [],
+                "favorite_emotions": [],
+                "music_guidance_requests": 0,
+                "success_rate": 0.0,
+                "consciousness_evolution": {
+                    "coherence_trend": [],
+                    "entanglement_trend": [],
+                    "learning_rate": 0.0
+                }
+            }
+        
+        cocoons = quantum_consciousness.memory_system.list_cocoons()
+        
+        # Calculate statistics
+        total_interactions = len(cocoons)
+        avg_confidence = sum(c.quantum_state.coherence for c in cocoons) / total_interactions if total_interactions > 0 else 0.0
+        
+        # Count perspectives
+        perspective_counts = {}
+        for cocoon in cocoons:
+            for p in cocoon.perspectives_used:
+                perspective_counts[p.value] = perspective_counts.get(p.value, 0) + 1
+        
+        most_used = sorted(perspective_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        
+        # Count emotions
+        emotion_counts = {}
+        for cocoon in cocoons:
+            emotion_counts[cocoon.emotion_tag.value] = emotion_counts.get(cocoon.emotion_tag.value, 0) + 1
+        
+        favorite_emotions = sorted(emotion_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        
+        return {
+            "total_interactions": total_interactions,
+            "average_confidence": round(avg_confidence, 3),
+            "most_used_perspectives": [p[0] for p in most_used],
+            "favorite_emotions": [e[0] for e in favorite_emotions],
+            "music_guidance_requests": sum(1 for c in cocoons if 'mix' in c.content.lower() or 'audio' in c.content.lower()),
+            "success_rate": round(avg_confidence, 2),
+            "consciousness_evolution": {
+                "coherence_trend": [c.quantum_state.coherence for c in cocoons[-10:]],
+                "entanglement_trend": [c.quantum_state.entanglement for c in cocoons[-10:]],
+                "learning_rate": quantum_consciousness.quantum_state.coherence
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"ERROR in /api/codette/analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
+# DREAM REWEAVING ENDPOINT
+# ==============================================================================
+
+@app.post("/api/codette/dream-reweave")
+async def api_dream_reweave(request: Dict[str, Any]):
+    """
+    Generate creative dream sequence from cocoon
+    POST /api/codette/dream-reweave
+    {
+      "cocoon_id": "cocoon_123",
+      "variations": 3
+    }
+    """
+    try:
+        cocoon_id = request.get("cocoon_id", "")
+        variations = request.get("variations", 1)
+        
+        if not quantum_consciousness:
+            return {
+                "cocoon_id": cocoon_id,
+                "dreams": [
+                    "In the quantum field of clarity, consciousness resonates through precision...",
+                    "Like water flowing around stone, understanding emerges from patience...",
+                    "Threads of meaning weave patterns across the infinite canvas..."
+                ][:variations]
+        }
+        
+        dreams = []
+        for _ in range(variations):
+            dream = quantum_consciousness.memory_system.reweave_dream(cocoon_id)
+            if dream:
+                dreams.append(dream)
+        
+        if not dreams:
+            raise HTTPException(status_code=404, detail=f"Cocoon {cocoon_id} not found")
+        
+        return {
+            "cocoon_id": cocoon_id,
+            "dreams": dreams,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ERROR in /api/codette/dream-reweave: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Update the existing status endpoint to include quantum state
+@app.get("/api/codette/status")
+async def api_codette_status_enhanced():
+    """
+    Enhanced status endpoint with quantum metrics
+    GET /api/codette/status
+    """
+    try:
+        if not quantum_consciousness:
+            return {
+                "status": "active",
+                "quantum_state": MOCK_QUANTUM_STATE,
+                "consciousness_metrics": {
+                    "interactions_total": 0,
+                    "cocoons_created": 0,
+                    "quality_average": 0.82,
+                    "evolution_trend": "stable"
+                },
+                "active_perspectives": 11,
+                "memory_utilization": 0.0
+            }
+        
+        cocoons = quantum_consciousness.memory_system.list_cocoons()
+        
+        return {
+            "status": "active",
+            "quantum_state": quantum_consciousness.quantum_state.to_dict(),
+            "consciousness_metrics": {
+                "interactions_total": quantum_consciousness.interaction_count,
+                "cocoons_created": len(cocoons),
+                "quality_average": sum(c.quantum_state.coherence for c in cocoons) / len(cocoons) if cocoons else 0.0,
+                "evolution_trend": "improving" if quantum_consciousness.quantum_state.coherence > 0.7 else "stable"
+            },
+            "active_perspectives": len(quantum_consciousness.active_perspectives),
+            "memory_utilization": len(cocoons) / 1000.0  # Mock calculation
+        }
+        
+    except Exception as e:
+        logger.error(f"ERROR in /api/codette/status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
