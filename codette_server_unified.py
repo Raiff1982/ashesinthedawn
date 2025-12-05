@@ -572,6 +572,128 @@ async def analytics_dashboard():
     return {"total_queries": 0, "avg_response_time": 0, "popular_topics": [], "timestamp": get_timestamp()}
 
 # ============================================================================
+# ANALYSIS ENDPOINTS
+# ============================================================================
+
+@app.get("/api/analysis/ear-training")
+async def ear_training(exercise_type: str = "interval", difficulty: str = "beginner"):
+    """Generate ear training exercises for music production"""
+    
+    # Interval exercises
+    intervals = {
+        "beginner": [
+            {"name": "Perfect Unison", "semitones": 0, "example": "C to C"},
+            {"name": "Perfect Fifth", "semitones": 7, "example": "C to G"},
+            {"name": "Perfect Octave", "semitones": 12, "example": "C to C (octave)"},
+        ],
+        "intermediate": [
+            {"name": "Major Third", "semitones": 4, "example": "C to E"},
+            {"name": "Minor Third", "semitones": 3, "example": "C to Eb"},
+            {"name": "Perfect Fourth", "semitones": 5, "example": "C to F"},
+            {"name": "Major Sixth", "semitones": 9, "example": "C to A"},
+        ],
+        "advanced": [
+            {"name": "Minor Second", "semitones": 1, "example": "C to Db"},
+            {"name": "Major Second", "semitones": 2, "example": "C to D"},
+            {"name": "Tritone", "semitones": 6, "example": "C to F#"},
+            {"name": "Minor Seventh", "semitones": 10, "example": "C to Bb"},
+            {"name": "Major Seventh", "semitones": 11, "example": "C to B"},
+        ]
+    }
+    
+    # Chord exercises
+    chords = {
+        "beginner": [
+            {"name": "Major Triad", "intervals": [0, 4, 7], "quality": "bright, happy"},
+            {"name": "Minor Triad", "intervals": [0, 3, 7], "quality": "dark, sad"},
+        ],
+        "intermediate": [
+            {"name": "Dominant 7th", "intervals": [0, 4, 7, 10], "quality": "tension, wants to resolve"},
+            {"name": "Major 7th", "intervals": [0, 4, 7, 11], "quality": "jazzy, dreamy"},
+            {"name": "Minor 7th", "intervals": [0, 3, 7, 10], "quality": "smooth, mellow"},
+        ],
+        "advanced": [
+            {"name": "Diminished 7th", "intervals": [0, 3, 6, 9], "quality": "tense, unstable"},
+            {"name": "Augmented", "intervals": [0, 4, 8], "quality": "dreamy, unresolved"},
+            {"name": "Sus4", "intervals": [0, 5, 7], "quality": "open, ambiguous"},
+            {"name": "Add9", "intervals": [0, 4, 7, 14], "quality": "colorful, modern"},
+        ]
+    }
+    
+    # Frequency exercises for mixing
+    frequencies = {
+        "beginner": [
+            {"range": "Sub Bass", "hz": "20-60", "description": "Felt more than heard, rumble"},
+            {"range": "Bass", "hz": "60-250", "description": "Warmth, fullness, kick drum body"},
+            {"range": "Low Mids", "hz": "250-500", "description": "Muddiness zone, body of instruments"},
+        ],
+        "intermediate": [
+            {"range": "Mids", "hz": "500-2k", "description": "Clarity, vocal presence, guitar body"},
+            {"range": "Upper Mids", "hz": "2k-4k", "description": "Presence, attack, intelligibility"},
+            {"range": "Presence", "hz": "4k-6k", "description": "Definition, edge, sibilance zone"},
+        ],
+        "advanced": [
+            {"range": "Brilliance", "hz": "6k-10k", "description": "Air, sparkle, cymbal shimmer"},
+            {"range": "Air", "hz": "10k-20k", "description": "Openness, breathiness, high harmonics"},
+            {"range": "Problem Zones", "hz": "Various", "description": "200-400Hz mud, 3-4kHz harshness, 7-8kHz sibilance"},
+        ]
+    }
+    
+    if exercise_type == "interval":
+        exercises = intervals.get(difficulty, intervals["beginner"])
+    elif exercise_type == "chord":
+        exercises = chords.get(difficulty, chords["beginner"])
+    elif exercise_type == "frequency":
+        exercises = frequencies.get(difficulty, frequencies["beginner"])
+    else:
+        exercises = intervals.get(difficulty, intervals["beginner"])
+    
+    return {
+        "success": True,
+        "exercise_type": exercise_type,
+        "difficulty": difficulty,
+        "exercises": exercises,
+        "tips": [
+            "Practice daily for best results",
+            "Start with easier exercises and progress gradually",
+            "Use headphones for accurate frequency perception",
+            "Compare exercises to real songs you know"
+        ],
+        "timestamp": get_timestamp()
+    }
+
+@app.get("/api/analysis/frequency-quiz")
+async def frequency_quiz(difficulty: str = "beginner"):
+    """Generate frequency identification quiz"""
+    import random
+    
+    frequency_bands = [
+        {"name": "Sub Bass", "range": "20-60 Hz", "characteristic": "Rumble, felt vibration"},
+        {"name": "Bass", "range": "60-250 Hz", "characteristic": "Warmth, punch"},
+        {"name": "Low Mids", "range": "250-500 Hz", "characteristic": "Body, potential mud"},
+        {"name": "Mids", "range": "500-2k Hz", "characteristic": "Clarity, presence"},
+        {"name": "Upper Mids", "range": "2k-4k Hz", "characteristic": "Attack, definition"},
+        {"name": "Presence", "range": "4k-6k Hz", "characteristic": "Edge, sibilance"},
+        {"name": "Brilliance", "range": "6k-12k Hz", "characteristic": "Sparkle, air"},
+        {"name": "Air", "range": "12k-20k Hz", "characteristic": "Shimmer, openness"},
+    ]
+    
+    if difficulty == "beginner":
+        quiz_bands = frequency_bands[:4]
+    elif difficulty == "intermediate":
+        quiz_bands = frequency_bands[:6]
+    else:
+        quiz_bands = frequency_bands
+    
+    return {
+        "success": True,
+        "difficulty": difficulty,
+        "quiz_items": quiz_bands,
+        "instructions": "Listen to the audio and identify which frequency band is being boosted",
+        "timestamp": get_timestamp()
+    }
+
+# ============================================================================
 # TRANSPORT ENDPOINTS
 # ============================================================================
 

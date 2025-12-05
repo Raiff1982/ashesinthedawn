@@ -258,8 +258,18 @@ class Codette:
         try:
             from supabase import create_client, Client
             
-            supabase_url = os.environ.get('SUPABASE_URL', os.environ.get('NEXT_PUBLIC_SUPABASE_URL'))
-            supabase_key = os.environ.get('SUPABASE_KEY', os.environ.get('NEXT_PUBLIC_SUPABASE_ANON_KEY'))
+            # Check all possible environment variable names
+            supabase_url = (
+                os.environ.get('VITE_SUPABASE_URL') or
+                os.environ.get('SUPABASE_URL') or
+                os.environ.get('NEXT_PUBLIC_SUPABASE_URL')
+            )
+            supabase_key = (
+                os.environ.get('VITE_SUPABASE_ANON_KEY') or
+                os.environ.get('SUPABASE_KEY') or
+                os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or
+                os.environ.get('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+            )
             
             if supabase_url and supabase_key:
                 client = create_client(supabase_url, supabase_key)

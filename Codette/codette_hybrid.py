@@ -5,24 +5,57 @@ Combines Codette's lightweight quantum consciousness with AICore's optimization 
 """
 
 import logging
+import sys
+import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import asyncio
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Import base systems
+# Ensure Codette directory is in path
+_current_dir = Path(__file__).parent
+if str(_current_dir) not in sys.path:
+    sys.path.insert(0, str(_current_dir))
+
+# Import base systems - try multiple import strategies
+CODETTE_ADVANCED_AVAILABLE = False
+CodetteAdvanced = None
+SentimentAnalyzer = None
+ExplainableAI = None
+
+# Strategy 1: Direct import (when running from Codette dir)
 try:
     from codette_advanced import CodetteAdvanced, SentimentAnalyzer, ExplainableAI
     CODETTE_ADVANCED_AVAILABLE = True
+    logger.info("Codette Advanced loaded (direct import)")
 except ImportError:
+    pass
+
+# Strategy 2: Relative import with Codette prefix
+if not CODETTE_ADVANCED_AVAILABLE:
     try:
-        # Try with Codette prefix
         from Codette.codette_advanced import CodetteAdvanced, SentimentAnalyzer, ExplainableAI
         CODETTE_ADVANCED_AVAILABLE = True
+        logger.info("Codette Advanced loaded (Codette prefix)")
     except ImportError:
-        CODETTE_ADVANCED_AVAILABLE = False
-        logger.warning("Codette Advanced not available")
+        pass
+
+# Strategy 3: Try importing from parent directory
+if not CODETTE_ADVANCED_AVAILABLE:
+    try:
+        parent_dir = Path(__file__).parent.parent
+        if str(parent_dir) not in sys.path:
+            sys.path.insert(0, str(parent_dir))
+        from Codette.codette_advanced import CodetteAdvanced, SentimentAnalyzer, ExplainableAI
+        CODETTE_ADVANCED_AVAILABLE = True
+        logger.info("Codette Advanced loaded (parent path)")
+    except ImportError:
+        pass
+
+if not CODETTE_ADVANCED_AVAILABLE:
+    logger.warning("Codette Advanced not available - using standalone mode")
 
 # Optional heavy ML imports (only if needed)
 TORCH_AVAILABLE = False
