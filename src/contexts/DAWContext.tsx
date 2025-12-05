@@ -344,9 +344,30 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 
   // Monitor Codette connection status
   React.useEffect(() => {
+    const bridge = codetteBridgeRef.current;
+
+    // Kick off immediate connectivity attempts
+    try {
+      // Fire WS connect immediately
+      void bridge.initializeWebSocket();
+      // Ping REST health right away
+      void bridge.healthCheck();
+    } catch (e) {
+      console.debug("[DAWContext] Bridge init/connect failed", e);
+    }
+
+    const handleConnected = () => setCodetteConnected(true);
+    const handleDisconnected = () => setCodetteConnected(false);
+    const handleWsConnected = (val: unknown) => setCodetteConnected(!!val);
+    const handleServerStatus = () => setCodetteConnected(true);
+
+    bridge.on("connected", handleConnected);
+    bridge.on("disconnected", handleDisconnected);
+    bridge.on("ws_connected", handleWsConnected);
+    bridge.on("server_status", handleServerStatus);
+
     const checkConnection = () => {
       try {
-        const bridge = codetteBridgeRef.current;
         const status = bridge.getConnectionStatus();
         setCodetteConnected(status.connected);
       } catch (error) {
@@ -354,10 +375,18 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
         setCodetteConnected(false);
       }
     };
-    
+
+    // initial check + periodic polling as a fallback
     checkConnection();
     const interval = setInterval(checkConnection, 5000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      bridge.off("connected", handleConnected);
+      bridge.off("disconnected", handleDisconnected);
+      bridge.off("ws_connected", handleWsConnected);
+      bridge.off("server_status", handleServerStatus);
+    };
   }, []);
 
   // Demo waveform and duration cache
@@ -959,9 +988,22 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
     setCurrentTime(timeSeconds);
     if (isPlaying) {
       try {
+        // Stop current playback
         audioEngineRef.current.stopAllAudio();
-        setIsPlaying(false);
-        setIsPlaying(true);
+        // Resume audio context if needed
+        audioEngineRef.current.resumeAudioContext();
+        // Restart playback for all eligible tracks from new position
+        tracks.forEach((track) => {
+          if (!track.muted && (track.type === "audio" || track.type === "instrument")) {
+            audioEngineRef.current.playAudio(
+              track.id,
+              timeSeconds,
+              track.volume,
+              track.pan,
+              track.inserts
+            );
+          }
+        });
       } catch (error) {
         console.error("[DAWContext] Seek failed:", error);
       }
@@ -1342,10 +1384,10 @@ export function DAWProvider({ children }: { children: React.ReactNode }) {
 }
 
 // Custom hook to use DAW context
-export function useDAW() {
+export const useDAW = (): DAWContextType => {
   const context = React.useContext(DAWContext);
   if (!context) {
     throw new Error("useDAW must be used within a DAWProvider");
   }
   return context;
-}
+};

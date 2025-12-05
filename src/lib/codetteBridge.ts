@@ -845,23 +845,40 @@ class CodetteBridge {
         this.ws.onopen = () => {
           this.wsConnected = true;
           this.wsReconnectAttempts = 0;
+          this.connectionState.connected = true;
+          this.connectionState.isReconnecting = false;
           this.emit("ws_connected", true);
+          this.emit("connected", { ws: true });
           resolve(true);
         };
 
         this.ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            if (message.type === "transport_state") {
-              this.emit("transport_changed", message.data);
-            } else if (message.type === "suggestion") {
-              this.emit("suggestion_received", message.data);
-            } else if (message.type === "analysis_complete") {
-              this.emit("analysis_complete", message.data);
-            } else if (message.type === "state_update") {
-              this.emit("state_update", message.data);
-            } else if (message.type === "error") {
-              this.emit("ws_error", message.data);
+            const type = message.type;
+            const data = message.data;
+            if (type === "transport_state") {
+              this.emit("transport_changed", data);
+            } else if (type === "suggestion") {
+              this.emit("suggestion_received", data);
+            } else if (type === "analysis_complete") {
+              this.emit("analysis_complete", data);
+            } else if (type === "state_update") {
+              this.emit("state_update", data);
+            } else if (type === "server_status") {
+              // periodic server status broadcast
+              console.debug("[CodetteBridge] server_status", data);
+              this.emit("server_status", data);
+              this.connectionState.connected = true;
+            } else if (type === "connected") {
+              // initial handshake
+              console.debug("[CodetteBridge] ws connected handshake", data);
+              this.emit("ws_handshake", data);
+              this.connectionState.connected = true;
+            } else if (type === "error") {
+              this.emit("ws_error", data);
+            } else {
+              this.emit("ws_message", message);
             }
           } catch {
             console.error("[CodetteBridge] Failed to parse WebSocket message");
@@ -870,12 +887,15 @@ class CodetteBridge {
 
         this.ws.onerror = (error) => {
           this.wsConnected = false;
+          this.connectionState.connected = false;
           this.emit("ws_error", error);
         };
 
         this.ws.onclose = () => {
           this.wsConnected = false;
+          this.connectionState.connected = false;
           this.emit("ws_connected", false);
+          this.emit("disconnected");
 
           if (this.wsReconnectAttempts < this.maxWsReconnectAttempts) {
             this.wsReconnectAttempts++;

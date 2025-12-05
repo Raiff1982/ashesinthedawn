@@ -55,6 +55,34 @@ logger = logging.getLogger(__name__)
 # WebSocket connections tracking
 active_websockets: List[WebSocket] = []
 
+async def broadcast_status_periodically(interval_seconds: float = 2.0):
+    """Broadcast server health and transport status to all WS clients periodically."""
+    import asyncio
+    while True:
+        try:
+            payload = {
+                "type": "server_status",
+                "data": {
+                    "health": {"status": "healthy", "timestamp": get_timestamp()},
+                    "transport": transport_manager.get_state(),
+                    "connections": len(active_websockets),
+                },
+            }
+            # Send to all active websockets
+            for ws in list(active_websockets):
+                try:
+                    await ws.send_json(payload)
+                except Exception:
+                    # Drop dead sockets
+                    try:
+                        active_websockets.remove(ws)
+                    except ValueError:
+                        pass
+            await asyncio.sleep(interval_seconds)
+        except Exception:
+            # Continue loop on any unexpected error
+            await asyncio.sleep(interval_seconds)
+
 # Mock quantum state for fallback
 MOCK_QUANTUM_STATE = {
     "coherence": 0.85,
@@ -694,6 +722,139 @@ async def frequency_quiz(difficulty: str = "beginner"):
     }
 
 # ============================================================================
+# ADDITIONAL ANALYSIS ENDPOINTS (PRODUCTION CHECKLIST, INSTRUMENT INFO)
+# ============================================================================
+
+@app.get("/api/analysis/production-checklist")
+async def production_checklist(stage: str = "mixing"):
+    """Provide a practical production checklist for a given stage.
+    Stages: recording, arrangement, mixing, mastering
+    """
+    stage_lower = (stage or "mixing").strip().lower()
+
+    base = {
+        "recording": [
+            {"category": "Gain Staging", "task": "Set input gain to avoid clipping (peaks -12dB to -6dB)", "priority": "high"},
+            {"category": "Mic Technique", "task": "Check proximity effect and sibilance", "priority": "medium"},
+            {"category": "Phase", "task": "Verify phase on multi-mic sources", "priority": "high"},
+        ],
+        "arrangement": [
+            {"category": "Frequency Space", "task": "Ensure instruments don’t mask each other in 200-500Hz", "priority": "high"},
+            {"category": "Rhythm", "task": "Tighten timing; quantize tastefully", "priority": "medium"},
+            {"category": "Transitions", "task": "Add fills, risers, impacts for sections", "priority": "low"},
+        ],
+        "mixing": [
+            {"category": "Levels", "task": "Balance faders, vocals forward, kick/bass foundation", "priority": "high"},
+            {"category": "EQ", "task": "High-pass non-bass, tame 200-400Hz mud, add 2-5k presence", "priority": "high"},
+            {"category": "Compression", "task": "Control dynamics; avoid pumping unless stylistic", "priority": "medium"},
+            {"category": "Space", "task": "Use short room + plate/hall; pre-delay for clarity", "priority": "medium"},
+            {"category": "Stereo", "task": "Pan for width; keep low-end mono", "priority": "medium"},
+            {"category": "Headroom", "task": "Leave -6dBFS peak on master, -14 to -10 LUFS mix", "priority": "high"},
+        ],
+        "mastering": [
+            {"category": "Prep", "task": "Receive mix with -6dB headroom, no limiter on master", "priority": "high"},
+            {"category": "Tonal Balance", "task": "Broad EQ for target curve; fix harshness/resonance", "priority": "high"},
+            {"category": "Dynamics", "task": "Gentle bus comp (1-2dB GR), multiband if needed", "priority": "medium"},
+            {"category": "Loudness", "task": "Limiter to target: streaming ~ -14 LUFS, EDM up to -8 LUFS", "priority": "high"},
+            {"category": "Translation", "task": "Check on speakers, headphones, phone, mono", "priority": "high"},
+            {"category": "Delivery", "task": "Export 24-bit WAV, embedded metadata, 44.1k/48k as required", "priority": "medium"},
+        ],
+    }
+
+    items = base.get(stage_lower, base["mixing"])[:]
+
+    # Mark all as incomplete by default and add ids
+    for i, it in enumerate(items):
+        it["completed"] = False
+        it["id"] = f"{stage_lower}-{i}"
+
+    return {
+        "success": True,
+        "stage": stage_lower,
+        "items": items,
+        "completionPercentage": 0,
+        "timestamp": get_timestamp(),
+    }
+
+
+@app.get("/api/analysis/instrument-info")
+async def instrument_info(category: str = "vocals", instrument: str = "lead"):
+    """Return guidance for processing different instruments/categories."""
+    cat = (category or "vocals").strip().lower()
+    inst = (instrument or "lead").strip().lower()
+
+    db: Dict[str, Any] = {
+        "vocals": {
+            "lead": {
+                "typical_range_hz": [100, 12000],
+                "target_levels": {"peaks_dbfs": -6, "avg_lufs": -18},
+                "common_issues": ["sibilance 6-8k", "mud 200-400Hz", "nasal 800-1.2k"],
+                "recommended_processing": {
+                    "eq": [
+                        "HPF 80-100Hz",
+                        "Tame 200-400Hz if muddy",
+                        "Presence +2dB @ 3-5k if needed",
+                        "Air shelf 10-14k for sheen"
+                    ],
+                    "compression": [
+                        "2:1 to 4:1, 2-6dB GR",
+                        "Fast attack/release for control, or slower for punch"
+                    ],
+                    "effects": ["Short room/plate reverb", "Slapback or 100-150ms delay"],
+                    "de-esser": "Target 6-8k, broadband or split-band",
+                },
+            },
+            "bgv": {
+                "typical_range_hz": [150, 10000],
+                "tips": ["HPF more aggressively", "Pan for width", "Use more reverb/chorus than lead"],
+            },
+        },
+        "drums": {
+            "kick": {
+                "typical_range_hz": [30, 5000],
+                "common_issues": ["boxiness 200-300Hz", "click too sharp >5k"],
+                "recommended_processing": {
+                    "eq": ["Boost 50-80Hz for thump", "Cut 250Hz box", "Add 3-5k click if needed"],
+                    "compression": ["4:1, medium attack, medium-fast release"],
+                },
+                "target_levels": {"peaks_dbfs": -6},
+            },
+            "snare": {
+                "typical_range_hz": [100, 12000],
+                "eq": ["HPF 80-100Hz", "Body 150-250Hz", "Crack 2-5k", "Air 10k+"],
+            },
+        },
+        "guitars": {
+            "electric": {
+                "typical_range_hz": [80, 8000],
+                "common_issues": ["mud 200-400Hz", "harsh 2-4k"],
+                "tips": ["High-pass 80-120Hz", "Notch harsh bands", "Double-track + pan L/R"],
+            }
+        },
+        "bass": {
+            "electric": {
+                "typical_range_hz": [40, 5000],
+                "tips": ["Low-pass around 5-8k if noisy", "Compress 4-8dB GR for consistency"],
+                "stereo": "Keep mono below 120Hz",
+            }
+        }
+    }
+
+    # Fallbacks if not found
+    result = db.get(cat, {}).get(inst) or {
+        "typical_range_hz": [50, 10000],
+        "tips": ["High-pass to clear sub rumble", "Pan for space", "Cut before boost"],
+    }
+
+    return {
+        "success": True,
+        "category": cat,
+        "instrument": inst,
+        "info": result,
+        "timestamp": get_timestamp(),
+    }
+
+# ============================================================================
 # TRANSPORT ENDPOINTS
 # ============================================================================
 
@@ -911,15 +1072,18 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_websockets.append(websocket)
     logger.info(f"✅ WebSocket connected. Total: {len(active_websockets)}")
-    
+
+    # Send initial handshake & immediate status
+    await websocket.send_json({"type": "connected", "data": {"status": "connected", "timestamp": get_timestamp()}}
+    )
+    await websocket.send_json({"type": "server_status", "data": {"health": {"status": "healthy", "timestamp": get_timestamp()}, "transport": transport_manager.get_state(), "connections": len(active_websockets)}})
+
     try:
-        await websocket.send_json({"type": "connected", "data": {"status": "connected", "timestamp": get_timestamp()}})
-        
         while True:
             try:
                 data = await websocket.receive_json()
                 message_type = data.get("type", "unknown")
-                
+
                 if message_type == "ping":
                     await websocket.send_json({"type": "pong", "data": {"timestamp": get_timestamp()}})
                 elif message_type == "get_status":
@@ -1031,6 +1195,14 @@ async def startup_event():
     deps.append("Redis ✅")  # Placeholder
     logger.info(f"   {' | '.join(deps)}")
     logger.info("")
+
+    # Start live monitoring broadcast task
+    try:
+        import asyncio
+        asyncio.create_task(broadcast_status_periodically(2.0))
+        logger.info("✅ Live server monitoring broadcast started (2s interval)")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to start monitoring broadcast: {e}")
     
     # Cache system status
     logger.info("🗄️  Cache System:")
