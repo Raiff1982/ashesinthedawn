@@ -666,6 +666,12 @@ async def get_suggestions(request: SuggestionRequest):
         print(f"Error generating suggestions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Add API prefix alias for frontend compatibility
+@app.post("/api/codette/suggest", response_model=SuggestionResponse)
+async def api_get_suggestions(request: SuggestionRequest):
+    """API prefix alias for /codette/suggest (frontend compatibility)"""
+    return await get_suggestions(request)
+
 @app.post("/codette/process", response_model=ProcessResponse)
 async def process_request(request: ProcessRequest):
     """Generic request processor for various Codette functions"""
@@ -1109,14 +1115,17 @@ async def analyze_session(request: Dict[str, Any]) -> AnalysisResponse:
 @app.websocket("/ws")
 async def websocket_general(websocket: WebSocket):
     """General WebSocket endpoint - routes to transport clock"""
+    connection_id = id(websocket)
+    is_connected = False
+    
     try:
         await websocket.accept()
+        is_connected = True
+        transport_manager.connected_clients.add(websocket)
+        print(f"WebSocket client connected to /ws. Total clients: {len(transport_manager.connected_clients)}")
     except Exception as e:
         print(f"Failed to accept WebSocket on /ws: {e}")
         return
-    
-    transport_manager.connected_clients.add(websocket)
-    print(f"WebSocket client connected to /ws. Total clients: {len(transport_manager.connected_clients)}")
     
     try:
         import asyncio
@@ -1127,16 +1136,18 @@ async def websocket_general(websocket: WebSocket):
         
         # Send initial state
         try:
-            state = transport_manager.get_state()
-            await websocket.send_json({
-                "type": "state",
-                "data": state.dict()
-            })
+            if is_connected:
+                state = transport_manager.get_state()
+                await websocket.send_json({
+                    "type": "state",
+                    "data": state.dict()
+                })
         except Exception as e:
             print(f"Failed to send initial state on /ws: {e}")
+            is_connected = False
             return
         
-        while True:
+        while is_connected:
             try:
                 # Non-blocking receive with very short timeout
                 try:
@@ -1174,7 +1185,7 @@ async def websocket_general(websocket: WebSocket):
                 
                 # Send state at regular interval
                 current_time = time_module.time()
-                if current_time - last_send >= send_interval:
+                if is_connected and current_time - last_send >= send_interval:
                     try:
                         state = transport_manager.get_state()
                         await websocket.send_json({
@@ -1185,9 +1196,11 @@ async def websocket_general(websocket: WebSocket):
                     except RuntimeError as e:
                         # Connection closed
                         print(f"Connection closed on /ws: {e}")
+                        is_connected = False
                         break
                     except Exception as e:
-                        print(f"Unexpected error in /ws loop: {e}")
+                        print(f"Send error on /ws: {e}")
+                        is_connected = False
                         break
                 
                 # Small sleep to prevent CPU spinning
@@ -1195,12 +1208,15 @@ async def websocket_general(websocket: WebSocket):
                 
             except WebSocketDisconnect:
                 print("WebSocket /ws disconnected")
+                is_connected = False
                 break
             except Exception as e:
                 print(f"Unexpected error in /ws loop: {e}")
+                is_connected = False
                 break
     
     finally:
+        is_connected = False
         try:
             transport_manager.connected_clients.discard(websocket)
             print(f"WebSocket cleanup on /ws. Remaining clients: {len(transport_manager.connected_clients)}")
@@ -1210,14 +1226,17 @@ async def websocket_general(websocket: WebSocket):
 @app.websocket("/ws/transport/clock")
 async def websocket_transport_clock(websocket: WebSocket):
     """WebSocket endpoint for DAW transport clock synchronization"""
+    connection_id = id(websocket)
+    is_connected = False
+    
     try:
         await websocket.accept()
+        is_connected = True
+        transport_manager.connected_clients.add(websocket)
+        print(f"WebSocket client connected. Total clients: {len(transport_manager.connected_clients)}")
     except Exception as e:
         print(f"Failed to accept WebSocket: {e}")
         return
-    
-    transport_manager.connected_clients.add(websocket)
-    print(f"WebSocket client connected. Total clients: {len(transport_manager.connected_clients)}")
     
     try:
         import asyncio
@@ -1228,16 +1247,18 @@ async def websocket_transport_clock(websocket: WebSocket):
         
         # Send initial state
         try:
-            state = transport_manager.get_state()
-            await websocket.send_json({
-                "type": "state",
-                "data": state.dict()
-            })
+            if is_connected:
+                state = transport_manager.get_state()
+                await websocket.send_json({
+                    "type": "state",
+                    "data": state.dict()
+                })
         except Exception as e:
             print(f"Failed to send initial state: {e}")
+            is_connected = False
             return
         
-        while True:
+        while is_connected:
             try:
                 # Non-blocking receive with very short timeout
                 try:
@@ -1275,7 +1296,7 @@ async def websocket_transport_clock(websocket: WebSocket):
                 
                 # Send state at regular interval
                 current_time = time_module.time()
-                if current_time - last_send >= send_interval:
+                if is_connected and current_time - last_send >= send_interval:
                     try:
                         state = transport_manager.get_state()
                         await websocket.send_json({
@@ -1286,9 +1307,11 @@ async def websocket_transport_clock(websocket: WebSocket):
                     except RuntimeError as e:
                         # Connection closed
                         print(f"Connection closed: {e}")
+                        is_connected = False
                         break
                     except Exception as e:
                         print(f"Send error: {e}")
+                        is_connected = False
                         break
                 
                 # Very minimal sleep
@@ -1296,18 +1319,26 @@ async def websocket_transport_clock(websocket: WebSocket):
             
             except asyncio.CancelledError:
                 print("WebSocket task cancelled")
+                is_connected = False
                 break
             except Exception as e:
                 print(f"Unexpected error in loop: {type(e).__name__}: {e}")
+                is_connected = False
                 break
     
     except WebSocketDisconnect:
         print("WebSocket client disconnected (clean disconnect)")
+        is_connected = False
     except Exception as e:
         print(f"WebSocket handler error: {type(e).__name__}: {e}")
+        is_connected = False
     finally:
-        transport_manager.connected_clients.discard(websocket)
-        print(f"WebSocket cleanup. Remaining clients: {len(transport_manager.connected_clients)}")
+        is_connected = False
+        try:
+            transport_manager.connected_clients.discard(websocket)
+            print(f"WebSocket cleanup. Remaining clients: {len(transport_manager.connected_clients)}")
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
 
 # ==================== ADVANCED TOOLS API ENDPOINTS ====================
 

@@ -1,0 +1,55 @@
+# Codette AI Hybrid System - Build Requirements
+# ==============================================
+# Install with: pip install -r requirements-build.txt
+
+# Build Tools
+pyinstaller>=6.0.0
+setuptools>=68.0.0
+
+# Core Server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-dotenv==1.0.0
+pydantic==2.5.0
+
+# AI/ML Core
+numpy>=1.24.3,<2.0.0
+scipy>=1.11.3
+torch>=2.0.0
+transformers>=4.30.0
+tokenizers>=0.13.3
+
+# NLP
+nltk>=3.8.1
+vaderSentiment>=3.3.2
+
+# Database
+supabase>=2.0.3
+httpx>=0.25.0
+websockets>=12.0
+
+# Utilities
+tqdm>=4.66.0
+colorama>=0.4.6
+regex>=2023.10.3
+requests>=2.31.0
+certifi>=2023.7.22
+
+# Optional (for full features)
+# Uncomment if you want these features:
+
+# PyTorch with CUDA (for ML enhancement)
+# --extra-index-url https://download.pytorch.org/whl/cu118
+# torch>=2.0.0+cu118
+
+# Quantum computing (optional)
+# qiskit>=0.45.0
+# networkx>=3.2.1
+
+# Advanced statistics (optional)
+# arviz>=0.16.0
+# pymc>=5.9.0
+
+# Audio processing (if using DSP effects)
+# soundfile>=0.12.1
+# librosa>=0.10.1

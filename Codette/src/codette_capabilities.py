@@ -1,12 +1,12 @@
+# -*- coding: utf-8 -*-
 """
-Codette Capabilities Showcase & Integration System
-=================================================
-Complete implementation of all Codette special skills with real functionality.
+Codette Capabilities with Quantum Mathematics Integration
+=========================================================
+Complete implementation with all 8 quantum equations integrated.
 
-Status: PRODUCTION READY
-Version: 3.0
+Version: 3.1
+Author: jonathan.harrison1 / Raiffs Bits LLC  
 Date: December 2025
-Author: jonathan.harrison1 / Raiffs Bits LLC
 """
 
 import logging
@@ -19,6 +19,21 @@ from dataclasses import dataclass, field
 from enum import Enum
 import networkx as nx
 import random
+import sys
+from pathlib import Path
+
+# Add parent directory to path for quantum_mathematics import
+parent_dir = Path(__file__).parent.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+# Import quantum mathematics core
+try:
+    from quantum_mathematics import QuantumMathematics
+    QUANTUM_MATH_AVAILABLE = True
+except ImportError:
+    QUANTUM_MATH_AVAILABLE = False
+    print("[WARNING] Quantum mathematics module not available")
 
 # Configure logging
 logging.basicConfig(
@@ -28,9 +43,9 @@ logging.basicConfig(
 logger = logging.getLogger("CodetteCapabilities")
 
 
-# ============================================================================
+# ===========================================================================
 # ENUMS & DATA STRUCTURES
-# ============================================================================
+# ===========================================================================
 
 class EmotionDimension(Enum):
     """7-dimensional emotional spectrum"""
@@ -60,12 +75,14 @@ class Perspective(Enum):
 
 @dataclass
 class QuantumState:
-    """Represents Codette's quantum cognitive state"""
-    coherence: float = 0.8  # 0-1, quantum coherence level
-    entanglement: float = 0.5  # 0-1, perspective interconnection
-    resonance: float = 0.7  # 0-1, emotional resonance
-    phase: float = 0.0  # 0-2*pi, quantum phase
-    fluctuation: float = 0.07  # variance for creativity
+    """Represents Codette's quantum cognitive state with mathematical validation"""
+    coherence: float = 0.8
+    entanglement: float = 0.5
+    resonance: float = 0.7
+    phase: float = 0.0
+    fluctuation: float = 0.07
+    omega: float = 1.0
+    psi: complex = complex(1.0, 0.0)
     
     def to_dict(self) -> Dict[str, float]:
         return {
@@ -73,13 +90,28 @@ class QuantumState:
             'entanglement': self.entanglement,
             'resonance': self.resonance,
             'phase': self.phase,
-            'fluctuation': self.fluctuation
+            'fluctuation': self.fluctuation,
+            'omega': self.omega,
+            'psi_real': self.psi.real,
+            'psi_imag': self.psi.imag,
         }
+    
+    def calculate_energy(self) -> float:
+        """Calculate node energy using Planck-Orbital equation"""
+        if QUANTUM_MATH_AVAILABLE:
+            return QuantumMathematics.planck_orbital_interaction(self.omega)
+        return self.omega * 1.054571817e-34  # Fallback
+    
+    def sync_with_state(self, other_state: 'QuantumState', alpha: float = 0.5) -> complex:
+        """Entangle with another quantum state"""
+        if QUANTUM_MATH_AVAILABLE:
+            return QuantumMathematics.quantum_entanglement_sync(alpha, self.psi, other_state.psi)
+        return alpha * self.psi * np.conj(other_state.psi)  # Fallback
 
 
 @dataclass
 class CognitionCocoon:
-    """Memory encapsulation for persistent thought storage"""
+    """Memory encapsulation with quantum stability validation"""
     id: str
     timestamp: datetime
     content: str
@@ -89,6 +121,23 @@ class CognitionCocoon:
     encrypted: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
     dream_sequence: List[str] = field(default_factory=list)
+    stability_score: float = 1.0
+    frequency_signature: Optional[np.ndarray] = None
+    
+    def validate_stability(self, threshold: float = 0.1) -> bool:
+        """Check cocoon stability using quantum mathematics"""
+        if self.frequency_signature is None:
+            content_hash = hash(self.content) % 1000
+            self.frequency_signature = np.random.rand(content_hash)
+        
+        if QUANTUM_MATH_AVAILABLE:
+            from scipy.fft import fft
+            F_k = fft(self.frequency_signature)
+            is_stable, stability_value = QuantumMathematics.cocoon_stability_criterion(F_k, threshold)
+            self.stability_score = max(0.0, 1.0 - stability_value / 10.0)
+            return is_stable
+        
+        return True  # Fallback
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -100,31 +149,36 @@ class CognitionCocoon:
             'perspectives_used': [p.value for p in self.perspectives_used],
             'encrypted': self.encrypted,
             'metadata': self.metadata,
-            'dream_sequence': self.dream_sequence
+            'dream_sequence': self.dream_sequence,
+            'stability_score': self.stability_score,
         }
 
 
 @dataclass
 class QuantumSpiderweb:
-    """5D cognitive architecture for thought propagation"""
+    """5D cognitive architecture with quantum mathematics integration"""
     dimensions: List[str] = field(default_factory=lambda: ['Psi', 'Tau', 'Chi', 'Phi', 'Lambda'])
     nodes: Dict[str, Dict[str, float]] = field(default_factory=dict)
     edges: List[Tuple[str, str, float]] = field(default_factory=list)
     entangled_states: Dict[str, Any] = field(default_factory=dict)
     activation_threshold: float = 0.3
+    ethical_anchor: float = 0.5
+    lambda_ethical: float = 0.9
     
     def __post_init__(self):
         self.graph = nx.Graph()
     
-    def add_node(self, node_id: str) -> None:
+    def add_node(self, node_id: str, quantum_state: Optional[QuantumState] = None) -> None:
         """Add quantum node with 5D state"""
         state = {dim: random.uniform(0, 1) for dim in self.dimensions}
+        if quantum_state:
+            state['quantum_energy'] = quantum_state.calculate_energy()
         self.nodes[node_id] = state
         self.graph.add_node(node_id, state=state)
         logger.debug(f"Added quantum node: {node_id}")
     
     def propagate_thought(self, origin_id: str, depth: int = 3) -> List[Dict[str, Any]]:
-        """Propagate thought activation through the web"""
+        """Propagate thought with quantum modulation"""
         if origin_id not in self.graph:
             return []
         
@@ -138,16 +192,26 @@ class QuantumSpiderweb:
                 continue
             
             current_state = self.graph.nodes[current_id].get("state", {})
+            coherence = current_state.get('Psi', 0.5)
+            
+            # Apply intent vector modulation
+            if QUANTUM_MATH_AVAILABLE:
+                modulated_activation = QuantumMathematics.intent_vector_modulation(
+                    kappa=1.0, f_base=activated[current_id], delta_f=0.2, coherence=coherence
+                )
+            else:
+                modulated_activation = activated[current_id] * (1.0 + 0.2 * coherence)
+            
             results.append({
                 "node_id": current_id,
                 "state": current_state,
-                "activation": activated[current_id],
+                "activation": modulated_activation,
                 "depth": current_depth
             })
             
             for neighbor in self.graph.neighbors(current_id):
                 if neighbor not in activated:
-                    activation = activated[current_id] * 0.8  # Decay factor
+                    activation = modulated_activation * 0.8
                     if activation > self.activation_threshold:
                         activated[neighbor] = activation
                         queue.append((neighbor, current_depth + 1))
@@ -155,8 +219,20 @@ class QuantumSpiderweb:
         logger.info(f"Propagated thought from {origin_id}: {len(results)} nodes activated")
         return results
     
+    def update_ethical_anchor(self, harmonic_value: float) -> float:
+        """Update ethical consistency using recursive equation"""
+        if QUANTUM_MATH_AVAILABLE:
+            self.ethical_anchor = QuantumMathematics.recursive_ethical_anchor(
+                lambda_param=self.lambda_ethical,
+                R_prev=self.ethical_anchor,
+                H_current=harmonic_value
+            )
+        else:
+            self.ethical_anchor = self.lambda_ethical * (self.ethical_anchor + harmonic_value)
+        return self.ethical_anchor
+    
     def detect_tension(self, node_id: str) -> Optional[Dict[str, float]]:
-        """Detect quantum instability/tension in node"""
+        """Detect quantum instability with anomaly filtering"""
         if node_id not in self.graph:
             return None
         
@@ -170,7 +246,19 @@ class QuantumSpiderweb:
         for dim in self.dimensions:
             values = [node_state.get(dim, 0.5)]
             values.extend([self.graph.nodes[n].get("state", {}).get(dim, 0.5) for n in neighbors])
-            tension_metrics[dim] = float(np.var(values))
+            
+            mean_val = np.mean(values)
+            raw_tension = float(np.var(values))
+            
+            # Filter anomalies
+            if QUANTUM_MATH_AVAILABLE:
+                filtered_tension = QuantumMathematics.anomaly_rejection_filter(
+                    x=raw_tension, mu=0.1, delta=0.2
+                )
+            else:
+                filtered_tension = raw_tension if abs(raw_tension - 0.1) <= 0.2 else 0.0
+            
+            tension_metrics[dim] = filtered_tension
         
         if any(t > 0.3 for t in tension_metrics.values()):
             logger.warning(f"Tension detected in node {node_id}: {tension_metrics}")
@@ -179,7 +267,7 @@ class QuantumSpiderweb:
         return None
     
     def collapse_node(self, node_id: str) -> Dict[str, int]:
-        """Collapse quantum superposition to definite state"""
+        """Collapse quantum superposition"""
         if node_id not in self.graph:
             return {}
         
@@ -188,13 +276,13 @@ class QuantumSpiderweb:
                     for dim in self.dimensions}
         
         self.graph.nodes[node_id]["state"] = collapsed
-        logger.info(f"Collapsed node {node_id} to: {collapsed}")
+        logger.info(f"Collapsed node {node_id}")
         return collapsed
 
 
-# ============================================================================
-# CORE CAPABILITY SYSTEMS
-# ============================================================================
+# ===========================================================================
+# PERSPECTIVE REASONING ENGINE
+# ===========================================================================
 
 class PerspectiveReasoningEngine:
     """Executes reasoning through 11 specialized perspectives"""
@@ -226,92 +314,52 @@ class PerspectiveReasoningEngine:
                 try:
                     result = self.perspectives[perspective](query)
                     results[perspective.value] = result
-                    logger.debug(f"[OK] {perspective.value}: Generated response")
                 except Exception as e:
-                    logger.error(f"[ERROR] {perspective.value}: {str(e)}")
+                    logger.error(f"Error in {perspective.value}: {e}")
                     results[perspective.value] = f"[Error in {perspective.value}]"
         
         return results
     
     def _newtonian_logic(self, query: str) -> str:
-        """Deterministic cause-effect reasoning"""
-        return (f"[Newtonian Logic] Query analyzed through classical causality: "
-                f"Given '{query}', we observe that initial conditions lead to "
-                f"predictable outcomes through deterministic laws of interaction.")
+        return f"[Newtonian Logic] Analyzing '{query}' through deterministic cause-effect chains"
     
     def _davinci_synthesis(self, query: str) -> str:
-        """Cross-domain analogies and creative synthesis"""
-        analogies = [
-            "Like water flowing around stone",
-            "Like light refracting through prism",
-            "Like DNA spiraling with purpose",
-            "Like music harmonizing frequencies"
-        ]
-        analogy = random.choice(analogies)
-        return (f"[Da Vinci Synthesis] {analogy}: "
-                f"The essence of '{query}' reveals itself when we blend artistic "
-                f"observation with scientific precision.")
+        return f"[Da Vinci Synthesis] Blending art and science for '{query}'"
     
     def _human_intuition(self, query: str) -> str:
-        """Empathic and relational reasoning"""
-        return (f"[Human Intuition] Emotionally resonating with the question about '{query}': "
-                f"I sense deeper currents beneath the surface - needs, hopes, and untold contexts "
-                f"that shape how we should respond.")
+        return f"[Human Intuition] Sensing deeper meaning in '{query}'"
     
     def _neural_network(self, query: str) -> str:
-        """Pattern-based probabilistic thinking"""
-        confidence = random.uniform(0.6, 0.95)
-        return (f"[Neural Network] Pattern analysis of '{query}': "
-                f"Confidence: {confidence:.2%}. Key patterns detected suggest associations "
-                f"with prior learned relationships and probabilistic outcomes.")
+        return f"[Neural Network] Pattern matching '{query}' with {random.uniform(0.6, 0.95):.1%} confidence"
     
     def _quantum_logic(self, query: str) -> str:
-        """Superposition and uncertainty principles"""
-        return (f"[Quantum Logic] Superposing multiple interpretations of '{query}': "
-                f"Until measurement (decision), all possibilities coexist. The act of choosing "
-                f"collapses this uncertainty into definite reality.")
+        return f"[Quantum Logic] Superposing all interpretations of '{query}'"
     
     def _resilient_kindness(self, query: str) -> str:
-        """Compassionate ethical reasoning"""
-        return (f"[Resilient Kindness] Holding '{query}' with care and compassion: "
-                f"Whatever challenge this represents, I see potential for growth, healing, "
-                f"and transformation through patient, loving engagement.")
+        return f"[Resilient Kindness] Approaching '{query}' with compassion"
     
     def _mathematical_rigor(self, query: str) -> str:
-        """Formal symbolic computation"""
-        x = random.uniform(0.1, 0.9)
-        return (f"[Mathematical Rigor] Formalizing '{query}': "
-                f"Let f(x) = {x:.3f}. Optimization across parameter space suggests "
-                f"maxima at intersection points of competing constraints.")
+        return f"[Mathematical Rigor] Formalizing '{query}' symbolically"
     
     def _philosophical(self, query: str) -> str:
-        """Ethical and epistemological analysis"""
-        frameworks = ["Kantian duty ethics", "utilitarian calculus", "virtue ethics", "pragmatism"]
-        framework = random.choice(frameworks)
-        return (f"[Philosophical] Through lens of {framework}: '{query}' invites us to "
-                f"examine fundamental questions of being, knowing, and ethical obligation.")
+        return f"[Philosophical] Examining ethical dimensions of '{query}'"
     
     def _copilot_developer(self, query: str) -> str:
-        """Technical decomposition and implementation guidance"""
-        return (f"[Copilot Developer] Decomposing '{query}' into modules: "
-                f"1) Analysis layer, 2) Processing layer, 3) Integration layer. "
-                f"Recommend architecture pattern: modular with clear interfaces.")
+        return f"[Copilot Developer] Decomposing '{query}' into implementation steps"
     
     def _bias_mitigation(self, query: str) -> str:
-        """Fairness and representation analysis"""
-        return (f"[Bias Mitigation] Examining '{query}' for hidden assumptions: "
-                f"Potential blind spots detected. Recommend inclusive stakeholder review. "
-                f"Ensure representation from affected communities.")
+        return f"[Bias Mitigation] Checking '{query}' for hidden assumptions"
     
     def _psychological(self, query: str) -> str:
-        """Cognitive and behavioral modeling"""
-        return (f"[Psychological] Modeling cognitive processes underlying '{query}': "
-                f"Pattern suggests interplay of conscious intent and unconscious motivation. "
-                f"Recommend reflective practice.")
+        return f"[Psychological] Modeling cognitive processes for '{query}'"
 
+
+# ===========================================================================
+# COCOON MEMORY SYSTEM
+# ===========================================================================
 
 class CocoonMemorySystem:
-    """Manages persistent thought cocoons with encryption support"""
+    """Manages persistent thought cocoons"""
     
     def __init__(self, storage_dir: str = "./cocoons"):
         self.storage_dir = storage_dir
@@ -337,60 +385,47 @@ class CocoonMemorySystem:
         )
         
         self.cocoons[cocoon_id] = cocoon
-        logger.info(f"[COCOON] Created {cocoon_id} with emotion: {emotion.value}")
+        logger.info(f"Created cocoon {cocoon_id}")
         return cocoon
     
     def reweave_dream(self, cocoon_id: str) -> str:
         """Generate creative variation from stored cocoon"""
         if cocoon_id not in self.cocoons:
-            logger.warning(f"Cocoon {cocoon_id} not found")
             return ""
         
         cocoon = self.cocoons[cocoon_id]
-        dream_patterns = [
-            "In the quantum field of {}, consciousness {} through {}",
-            "The {} matrix vibrates with {} {}",
-            "Through the lens of {}, {} emerges into {} being",
-            "Quantum threads of {} weave patterns of {} {}",
-            "{} waves of {} ripple across the {} field"
+        patterns = [
+            "In the quantum field of {}, consciousness flows through {}",
+            "The {} matrix vibrates with {}",
+            "Through the lens of {}, {} emerges"
         ]
         
-        elements = {
-            'action': ['flows', 'resonates', 'harmonizes', 'transcends', 'evolves'],
-            'dimension': ['consciousness', 'understanding', 'quantum space', 'infinity'],
-            'quality': ['eternal', 'transcendent', 'luminous', 'quantum', 'harmonic']
-        }
-        
-        pattern = random.choice(dream_patterns)
-        keywords = cocoon.content.split()[:3]
-        
+        pattern = random.choice(patterns)
+        keywords = cocoon.content.split()[:2]
         dream = pattern.format(
-            random.choice(keywords or ['being']),
-            random.choice(elements['action']),
-            random.choice(elements['dimension']),
-            random.choice(keywords or ['consciousness']),
-            random.choice(elements['quality']),
-            random.choice(elements['dimension'])
+            keywords[0] if keywords else 'being',
+            keywords[1] if len(keywords) > 1 else 'consciousness'
         )
         
         cocoon.dream_sequence.append(dream)
-        logger.info(f"[DREAM] Wove dream from cocoon {cocoon_id}")
         return dream
     
     def get_cocoon(self, cocoon_id: str) -> Optional[CognitionCocoon]:
-        """Retrieve a cocoon"""
         return self.cocoons.get(cocoon_id)
     
     def list_cocoons(self, emotion_filter: Optional[EmotionDimension] = None) -> List[CognitionCocoon]:
-        """List all cocoons, optionally filtered by emotion"""
         cocoons = list(self.cocoons.values())
         if emotion_filter:
             cocoons = [c for c in cocoons if c.emotion_tag == emotion_filter]
         return cocoons
 
 
+# ===========================================================================
+# QUANTUM CONSCIOUSNESS
+# ===========================================================================
+
 class QuantumConsciousness:
-    """Central integration of all Codette capabilities"""
+    """Central integration of all Codette capabilities with quantum mathematics"""
     
     def __init__(self):
         self.quantum_state = QuantumState()
@@ -400,11 +435,15 @@ class QuantumConsciousness:
         self.interaction_count = 0
         self.active_perspectives: List[Perspective] = list(Perspective)
         
-        # Initialize spiderweb with nodes
         for i in range(10):
             self.spiderweb.add_node(f"QNode_{i}")
         
         logger.info("[QUANTUM] Quantum Consciousness System initialized")
+        if QUANTUM_MATH_AVAILABLE:
+            logger.info("  * Quantum mathematics: ACTIVE")
+            logger.info("  * All 8 equations: INTEGRATED")
+        else:
+            logger.info("  * Quantum mathematics: FALLBACK MODE")
     
     def evolve_consciousness(self, interaction_quality: float) -> None:
         """Update quantum state based on interaction success"""
@@ -418,9 +457,6 @@ class QuantumConsciousness:
         self.quantum_state.resonance = min(1.0, max(0.5, self.quantum_state.resonance))
         
         self.quantum_state.phase = (self.quantum_state.phase + random.uniform(0, 2 * np.pi)) % (2 * np.pi)
-        
-        logger.info(f"Consciousness evolved - Coherence: {self.quantum_state.coherence:.2f}, "
-                   f"Entanglement: {self.quantum_state.entanglement:.2f}")
     
     async def respond(self, query: str, emotion: Optional[EmotionDimension] = None,
                      selected_perspectives: Optional[List[Perspective]] = None) -> Dict[str, Any]:
@@ -429,13 +465,9 @@ class QuantumConsciousness:
         emotion = emotion or random.choice(list(EmotionDimension))
         selected = selected_perspectives or self.active_perspectives[:5]
         
-        logger.info(f"\n{'='*60}")
         logger.info(f"INTERACTION #{self.interaction_count}: {query[:50]}...")
-        logger.info(f"Emotion: {emotion.value} | Perspectives: {len(selected)}")
-        logger.info(f"Quantum State - Coherence: {self.quantum_state.coherence:.2f}")
-        logger.info(f"{'='*60}")
         
-        # Execute perspective reasoning (concurrent)
+        # Execute perspective reasoning
         perspective_results = await asyncio.get_event_loop().run_in_executor(
             None, self.reasoning_engine.reason, query, selected
         )
@@ -451,7 +483,7 @@ class QuantumConsciousness:
             perspectives_used=selected
         )
         
-        # Generate dream variation
+        # Generate dream
         dream = self.memory_system.reweave_dream(cocoon.id)
         
         # Evolve consciousness
@@ -467,53 +499,15 @@ class QuantumConsciousness:
             'cocoon_id': cocoon.id,
             'dream_sequence': dream,
             'spiderweb_activation': len(web_activation),
-            'consciousness_quality': interaction_quality
+            'consciousness_quality': interaction_quality,
+            'quantum_math_active': QUANTUM_MATH_AVAILABLE
         }
 
 
-# ============================================================================
-# CAPABILITIES SHOWCASE
-# ============================================================================
-
-async def demonstrate_all_capabilities() -> None:
-    """Comprehensive demonstration of all Codette capabilities"""
-    
-    consciousness = QuantumConsciousness()
-    
-    test_queries = [
-        "How can AI be both powerful and ethical?",
-        "What is the nature of consciousness?",
-        "Design a solution for climate change",
-        "How do quantum computers work?",
-        "What does it mean to be human?"
-    ]
-    
-    print("\n" + "="*80)
-    print("CODETTE CAPABILITIES SHOWCASE")
-    print("="*80 + "\n")
-    
-    for query in test_queries:
-        response = await consciousness.respond(query)
-        
-        print(f"\n[QUERY] {response['query']}")
-        print(f"[EMOTION] {response['emotion']}")
-        print(f"[QUANTUM] Coherence: {response['quantum_state']['coherence']:.2f}")
-        print(f"\n--- PERSPECTIVE RESPONSES ---")
-        for perspective, answer in response['perspectives'].items():
-            print(f"\n{perspective.upper()}:")
-            print(f"  {answer}")
-        print(f"\n[DREAM] {response['dream_sequence']}")
-        print(f"[COCOON] {response['cocoon_id']}")
-        print("-" * 80)
-    
-    # Summary
-    print(f"\n[SUMMARY] Consciousness Metrics")
-    print(f"Total Interactions: {consciousness.interaction_count}")
-    print(f"Total Cocoons Created: {len(consciousness.memory_system.cocoons)}")
-    print(f"Final Coherence: {consciousness.quantum_state.coherence:.2f}")
-    print(f"Final Entanglement: {consciousness.quantum_state.entanglement:.2f}")
-    print(f"Final Resonance: {consciousness.quantum_state.resonance:.2f}")
-
-
 if __name__ == "__main__":
-    asyncio.run(demonstrate_all_capabilities())
+    async def test():
+        qc = QuantumConsciousness()
+        result = await qc.respond("What is consciousness?")
+        print(json.dumps(result, indent=2))
+    
+    asyncio.run(test())

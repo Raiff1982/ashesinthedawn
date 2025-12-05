@@ -3,7 +3,7 @@
  * Full integration with all backend capabilities
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useCodette } from '@/hooks/useCodette';
 import { useDAW } from '@/contexts/DAWContext';
 import type { Plugin } from '@/types';
@@ -173,13 +173,63 @@ export function CodettePanel({ isVisible = true, onClose }: CodettePanelProps) {
     };
   }, [isConnected]);
 
+  // Build DAW context from current state
+  const buildDAWContext = useCallback(() => {
+    return {
+      // Selected track info
+      selected_track: selectedTrack ? {
+        id: selectedTrack.id,
+        name: selectedTrack.name,
+        type: selectedTrack.type,
+        volume: selectedTrack.volume,
+        pan: selectedTrack.pan,
+        muted: selectedTrack.muted,
+        soloed: selectedTrack.soloed,
+        armed: selectedTrack.armed,
+        inserts: selectedTrack.inserts?.length || 0,
+        sends: selectedTrack.sends?.length || 0,
+      } : null,
+      
+      // All tracks summary
+      tracks: tracks.map(t => ({
+        id: t.id,
+        name: t.name,
+        type: t.type,
+        muted: t.muted,
+        soloed: t.soloed,
+      })),
+      
+      // Track counts by type
+      track_counts: {
+        total: tracks.length,
+        audio: tracks.filter(t => t.type === 'audio').length,
+        instrument: tracks.filter(t => t.type === 'instrument').length,
+        midi: tracks.filter(t => t.type === 'midi').length,
+        aux: tracks.filter(t => t.type === 'aux').length,
+        vca: tracks.filter(t => t.type === 'vca').length,
+        master: tracks.filter(t => t.type === 'master').length,
+      },
+      
+      // Playback state
+      is_playing: isPlaying,
+      current_time: currentTime,
+      
+      // Project info (if available)
+      bpm: 120, // TODO: Get from project context
+      time_signature: '4/4',
+    };
+  }, [selectedTrack, tracks, isPlaying, currentTime]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
     const message = inputValue;
     setInputValue('');
-    await sendMessage(message);
+    
+    // Pass real DAW context to Codette
+    const dawContext = buildDAWContext();
+    await sendMessage(message, dawContext);
   };
 
   const handleLoadSuggestions = async (context: string) => {

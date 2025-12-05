@@ -62,6 +62,19 @@ Codette/**/__pycache__/
 *.h5
 *.joblib
 
+# Hugging Face & Transformers Cache
+.cache/
+transformers_cache/
+**/.cache/
+**/transformers_cache/
+sentence-transformers/
+**/.huggingface/
+
+# PyTorch & TensorFlow
+torch_extensions/
+.torch/
+.tensorflow/
+
 # Data files
 Codette/data/
 Codette/*.csv

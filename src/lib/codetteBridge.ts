@@ -330,7 +330,7 @@ class CodetteBridge {
 
     return this.makeRequest<CodetteChatResponse>(
       "chat",
-      "/codette/chat",
+      "/api/codette/chat",  // Fixed: was /codette/chat
       request
     );
   }
@@ -349,7 +349,7 @@ class CodetteBridge {
 
     return this.makeRequest<CodetteSuggestionResponse>(
       "suggest",
-      "/codette/suggest",
+      "/api/codette/suggest",  // Fixed: was /codette/suggest
       request
     );
   }
@@ -368,7 +368,7 @@ class CodetteBridge {
 
     return this.makeRequest<CodetteAnalysisResponse>(
       "analyze",
-      "/codette/analyze",
+      "/api/codette/analyze",  // Fixed: was /codette/analyze
       request
     );
   }
@@ -393,7 +393,7 @@ class CodetteBridge {
 
     return this.makeRequest(
       "chat",
-      "/codette/suggest",
+      "/api/codette/apply-suggestion",  // Fixed: was /codette/suggest
       requestData
     );
   }
@@ -422,7 +422,7 @@ class CodetteBridge {
 
     return this.makeRequest(
       "process",
-      "/codette/process",
+      "/api/codette/sync-daw",  // Fixed: was /codette/process
       request
     );
   }
@@ -432,7 +432,7 @@ class CodetteBridge {
    */
   async getTransportState(): Promise<CodetteTransportState> {
     try {
-      const response = await fetch(`${CODETTE_API_BASE}/codette/status`, {
+      const response = await fetch(`${CODETTE_API_BASE}/api/codette/status`, {  // Fixed: was /codette/status
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -807,20 +807,20 @@ class CodetteBridge {
         const delay = Math.min(1000 * Math.pow(2, req.retries), 30000);
         await new Promise((resolve) => setTimeout(resolve, delay));
 
-        // Get endpoint based on method
+        // Get endpoint based on method - FIXED paths
         let endpoint = "";
         switch (req.method) {
           case "chat":
-            endpoint = "/codette/chat";
+            endpoint = "/api/codette/chat";  // Fixed
             break;
           case "suggest":
-            endpoint = "/codette/suggest";
+            endpoint = "/api/codette/suggest";  // Fixed
             break;
           case "analyze":
-            endpoint = "/codette/analyze";
+            endpoint = "/api/codette/analyze";  // Fixed
             break;
           case "process":
-            endpoint = "/codette/process";
+            endpoint = "/api/codette/sync-daw";  // Fixed
             break;
         }
 
