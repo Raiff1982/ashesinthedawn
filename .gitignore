@@ -63,6 +63,16 @@ Codette/*.parquet
 Codette/*.spec
 Codette/**/*.spec
 
+# Kaggle Credentials & API Keys (SECURITY)
+.kaggle/
+kaggle.json
+**/kaggle.json
+KAGGLE_CODETTE_MODEL_GUIDE.md
+
+# Security scan results and sensitive docs
+URGENT_KAGGLE_SECURITY_BREACH.md
+*SECURITY*.md
+
 /.vs/ashesinthedawn.slnx/FileContentIndex/134252c8-f48e-443c-a8e4-f9d2ef69ce8f.vsidx
 /.vs/ashesinthedawn.slnx/FileContentIndex/1cb2a1a8-58f4-429a-87df-7796b9c9143d.vsidx
 /.vs/ashesinthedawn.slnx/FileContentIndex/400d3510-21f9-4945-8db9-6cbe2029a103.vsidx
@@ -72,3 +82,4 @@ Codette/**/*.spec
 /.vs/ashesinthedawn.slnx/FileContentIndex/6b09a500-398f-4b56-a416-98d314d535e2.vsidx
 /.vs/ashesinthedawn.slnx/FileContentIndex/e8362143-cd93-4356-8344-3dfa6032b513.vsidx
 *.vsidx
+/PRODUCTION_READY_FINAL_GUIDE.md
