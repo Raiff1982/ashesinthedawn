@@ -64,14 +64,14 @@ Navigate to: **http://localhost:5173**
 ### Keys Properly Separated
 ```
 Frontend:  Uses VITE_SUPABASE_ANON_KEY
-           • Browser-safe (exposed in frontend)
-           • RLS policies enforced
-           • Read-only recommended
+           ï¿½ Browser-safe (exposed in frontend)
+           ï¿½ RLS policies enforced
+           ï¿½ Read-only recommended
 
 Backend:   Uses SUPABASE_SERVICE_ROLE_KEY
-           • Server-secret (in .env only)
-           • RLS policies bypassed
-           • Full read/write access
+           ï¿½ Server-secret (in .env only)
+           ï¿½ RLS policies bypassed
+           ï¿½ Full read/write access
 ```
 
 ### RLS Policy Status
