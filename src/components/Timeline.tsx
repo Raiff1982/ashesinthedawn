@@ -24,6 +24,9 @@ const generateSyntheticWaveform = (trackId: string, seed: number) => {
   return data;
 };
 
+// SHARED TRACK HEIGHT CONSTANT - must match TrackList
+export const TRACK_ROW_HEIGHT = 80;
+
 /**
  * Enhanced Timeline with Professional Audio Waveform Visualization
  * Features:
@@ -33,6 +36,7 @@ const generateSyntheticWaveform = (trackId: string, seed: number) => {
  * - Interactive track editing
  * - Peak metering overlay
  * - Professional ruler with time markers
+ * - PARALLEL ALIGNMENT with TrackList
  */
 export default function Timeline() {
   const {
@@ -49,12 +53,11 @@ export default function Timeline() {
   const timelineRef = useRef<HTMLDivElement>(null);
   const waveformContainerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1.0);
-  const [showTrackHeaders, setShowTrackHeaders] = useState(true);
+  const [showTrackHeaders, setShowTrackHeaders] = useState(false);
   const [selectedTrackForWaveform, setSelectedTrackForWaveform] = useState<
     string | null
   >(null);
   const [smartScaleEnabled, setSmartScaleEnabled] = useState(true);
-  const [trackHeight, setTrackHeight] = useState(80);
   const basePixelsPerBar = 120;
 
   const maxDuration = Math.max(
@@ -243,7 +246,7 @@ export default function Timeline() {
       maxs.push(block.length ? Math.max(...block) : 0);
     }
 
-    const heightPx = Math.max(trackHeight - 8, 32);
+    const heightPx = TRACK_ROW_HEIGHT - 8; // Match track row height minus padding
 
     return (
       <div
@@ -376,19 +379,6 @@ export default function Timeline() {
           {smartScaleEnabled ? "Smart Scale On" : "Smart Scale Off"}
         </button>
 
-        <div className="flex items-center gap-2 ml-4">
-          <span className="text-xs text-gray-400 whitespace-nowrap">Track Height</span>
-          <input
-            type="range"
-            min={48}
-            max={160}
-            value={trackHeight}
-            onChange={(e) => setTrackHeight(Number(e.target.value))}
-            className="accent-blue-500 cursor-pointer"
-          />
-          <span className="text-xs text-gray-500 w-10 text-right">{trackHeight}px</span>
-        </div>
-
         <div className="flex-1" />
 
         <div className="text-sm text-gray-300 font-mono">
@@ -419,7 +409,7 @@ export default function Timeline() {
         </div>
       </div>
 
-      {/* Waveform Container */}
+      {/* Waveform Container - SYNCHRONIZED WITH TRACKLIST */}
       <div
         ref={waveformContainerRef}
         className="flex-1 overflow-auto bg-gray-950 relative min-h-0"
@@ -440,12 +430,12 @@ export default function Timeline() {
           {/* Markers */}
           {renderMarkers()}
 
-          {/* Media Tracks */}
+          {/* Media Tracks - PARALLEL WITH TRACKLIST */}
           {tracks.map((track, idx) => (
             <div
               key={`track-${track.id}`}
               className="relative bg-gray-900 border-b border-gray-800 group"
-              style={{ height: `${trackHeight}px` }}
+              style={{ height: `${TRACK_ROW_HEIGHT}px` }}
             >
               {showTrackHeaders && (
                 <div className="absolute left-0 top-0 bottom-0 w-28 bg-gray-800 border-r border-gray-700 flex flex-col justify-center px-2 z-10">
