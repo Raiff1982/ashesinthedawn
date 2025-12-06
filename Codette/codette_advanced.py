@@ -19,17 +19,26 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# Import base Codette
+# Import base Codette - prefer codette_enhanced which supports daw_context
+CODETTE_AVAILABLE = False
+Codette = None
+
+# Try codette_enhanced first (supports daw_context parameter)
 try:
-    from codette_new import Codette
+    from codette_enhanced import Codette
     CODETTE_AVAILABLE = True
+    logger.info("Codette Enhanced loaded (supports DAW context)")
 except ImportError:
+    pass
+
+# Fallback to codette_new (no daw_context support)
+if not CODETTE_AVAILABLE:
     try:
-        from codette_enhanced import Codette
+        from codette_new import Codette
         CODETTE_AVAILABLE = True
+        logger.info("Codette New loaded (basic mode)")
     except ImportError:
-        CODETTE_AVAILABLE = False
-        logger.error("Codette base class not available")
+        logger.error("No Codette base class available")
 
 # Optional imports
 try:
@@ -284,7 +293,33 @@ class CodetteAdvanced:
     def respond(self, query: str, daw_context: Dict = None) -> str:
         """Generate response - main entry point"""
         if self._base_codette and hasattr(self._base_codette, 'respond'):
-            return self._base_codette.respond(query, daw_context)
+            # Check if the base Codette supports daw_context
+            import inspect
+            try:
+                sig = inspect.signature(self._base_codette.respond)
+                # Count positional parameters (excluding self and default params)
+                positional_count = sum(1 for p in sig.parameters.values() 
+                                      if p.default == inspect.Parameter.empty and 
+                                      p.name != 'self' and
+                                      p.kind in (inspect.Parameter.POSITIONAL_ONLY, 
+                                                inspect.Parameter.POSITIONAL_OR_KEYWORD))
+                
+                # Check if daw_context is in the signature
+                has_daw_context = 'daw_context' in sig.parameters
+                
+                if has_daw_context or positional_count >= 2:
+                    # Supports daw_context - pass it through
+                    return self._base_codette.respond(query, daw_context)
+                else:
+                    # Doesn't support daw_context - pass query only
+                    return self._base_codette.respond(query)
+            except Exception as e:
+                # Try with daw_context first, fallback without
+                try:
+                    return self._base_codette.respond(query, daw_context)
+                except TypeError:
+                    # Doesn't support daw_context
+                    return self._base_codette.respond(query)
         
         # Fallback response
         return self._generate_fallback_response(query, daw_context)

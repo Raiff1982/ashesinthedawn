@@ -279,22 +279,78 @@ class CodetteHybrid:
         # Apply input filtering
         filtered_query = self.defense_system.apply_filters(query)
         
-        # Engineer prompt with context
-        if daw_context:
-            engineered_query = self.prompt_engineer.add_context(filtered_query, daw_context)
-        else:
-            engineered_query = self.prompt_engineer.engineer_prompt(filtered_query)
-        
-        # Try advanced system first
+        # Try advanced system first - pass ORIGINAL filtered query (not engineered)
+        # This preserves follow-up detection in the underlying Codette
         if self._use_advanced:
             try:
-                response = self._advanced.respond(engineered_query, daw_context)
+                # Check if the underlying Codette supports daw_context parameter
+                import inspect
+                respond_sig = inspect.signature(self._advanced.respond)
+                param_names = list(respond_sig.parameters.keys())
+                
+                if len(param_names) >= 2 or 'daw_context' in param_names:
+                    # Supports daw_context - pass original filtered query to preserve follow-up detection
+                    response = self._advanced.respond(filtered_query, daw_context)
+                else:
+                    # Doesn't support daw_context - only engineer if NOT a follow-up
+                    # Check for follow-up patterns ourselves
+                    is_followup = self._is_followup_query(filtered_query)
+                    if daw_context and not is_followup:
+                        engineered_query = self.prompt_engineer.add_context(filtered_query, daw_context)
+                    else:
+                        engineered_query = filtered_query
+                    response = self._advanced.respond(engineered_query)
                 return self.defense_system.apply_modifiers(response)
+            except TypeError as e:
+                # Handle case where respond() doesn't accept daw_context
+                if "positional arguments" in str(e):
+                    logger.warning(f"Advanced Codette doesn't support daw_context, using query only")
+                    try:
+                        # Check for follow-up before engineering
+                        is_followup = self._is_followup_query(filtered_query)
+                        if daw_context and not is_followup:
+                            engineered_query = self.prompt_engineer.add_context(filtered_query, daw_context)
+                        else:
+                            engineered_query = filtered_query
+                        response = self._advanced.respond(engineered_query)
+                        return self.defense_system.apply_modifiers(response)
+                    except Exception as e2:
+                        logger.warning(f"Advanced respond (no context) failed: {e2}")
+                else:
+                    logger.warning(f"Advanced respond failed: {e}")
             except Exception as e:
                 logger.warning(f"Advanced respond failed: {e}")
         
         # Fallback to basic response
         return self._generate_basic_response(query, daw_context)
+    
+    def _is_followup_query(self, prompt: str) -> bool:
+        """Detect if this is a follow-up question (duplicated from codette_enhanced)"""
+        prompt_lower = prompt.lower().strip()
+        
+        # Common follow-up phrases
+        followup_patterns = [
+            'what else', 'anything else', 'more tips', 'more advice', 'tell me more',
+            'go on', 'continue', 'and', 'also', 'what about', 'how about',
+            'any other', 'other suggestions', 'other ideas', 'more ideas', 'next',
+            'then what', 'what next', 'ok', 'okay', 'got it', 'thanks', 'thank you',
+            'cool', 'nice', 'great', 'good', 'yes', 'yeah', 'yep', 'sure', 'right',
+            'hmm', 'interesting',
+        ]
+        
+        # Check if prompt is a short follow-up
+        if len(prompt_lower.split()) <= 4:
+            for pattern in followup_patterns:
+                if pattern in prompt_lower:
+                    return True
+        
+        # Check if prompt starts with follow-up words
+        followup_starters = ['and ', 'also ', 'what else', 'anything else', 'more ', 'other ']
+        for starter in followup_starters:
+            if prompt_lower.startswith(starter):
+                return True
+        
+        return False
     
     def _generate_basic_response(self, query: str, daw_context: Optional[Dict] = None) -> str:
         """Generate a basic DAW-focused response"""

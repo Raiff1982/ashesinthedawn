@@ -54,10 +54,12 @@ logger = logging.getLogger(__name__)
 
 # WebSocket connections tracking
 active_websockets: List[WebSocket] = []
+LAST_BROADCAST_AT: Optional[str] = None
 
 async def broadcast_status_periodically(interval_seconds: float = 2.0):
     """Broadcast server health and transport status to all WS clients periodically."""
     import asyncio
+    global LAST_BROADCAST_AT
     while True:
         try:
             payload = {
@@ -68,6 +70,7 @@ async def broadcast_status_periodically(interval_seconds: float = 2.0):
                     "connections": len(active_websockets),
                 },
             }
+            LAST_BROADCAST_AT = get_timestamp()
             # Send to all active websockets
             for ws in list(active_websockets):
                 try:
@@ -486,6 +489,11 @@ class EmbeddingRequest(BaseModel):
 class UpsertRequest(BaseModel):
     rows: List[Dict[str, str]]
 
+class GenreDetectRequest(BaseModel):
+    bpm: Optional[float] = 120.0
+    tracks: Optional[List[Dict[str, Any]]] = None
+    project_name: Optional[str] = None
+
 # ============================================================================
 # HEALTH & STATUS
 # ============================================================================
@@ -513,11 +521,65 @@ async def codette_status():
 @app.post("/codette/chat")
 @app.post("/api/codette/chat")
 async def codette_chat(request: ChatRequest):
+    """Chat with Codette AI - returns multi-perspective analysis"""
     response = "I'm Codette. How can I help with your production?"
-    if codette_core and hasattr(codette_core, 'respond'):
-        try: response = codette_core.respond(request.message, request.daw_context) if request.daw_context else codette_core.respond(request.message)
-        except: pass
-    return {"response": response, "perspective": request.perspective, "confidence": 0.85, "timestamp": get_timestamp(), "source": "codette"}
+    source = "fallback"
+    
+    # Log incoming request for debugging
+    logger.info(f"[Chat] Message: {request.message[:50]}... | DAW context: {bool(request.daw_context)}")
+    
+    if codette_engine and hasattr(codette_engine, 'respond'):
+        try:
+            if request.daw_context:
+                response = codette_engine.respond(request.message, request.daw_context)
+            else:
+                response = codette_engine.respond(request.message)
+            source = codette_engine_type or "codette"
+            logger.info(f"[Chat] Response generated from {source} ({len(response)} chars)")
+        except Exception as e:
+            logger.error(f"[Chat] Codette engine error: {e}")
+            response = f"I encountered an issue processing your request. Let me give you general advice:\n\n"
+            response += "**copilot_agent**: For audio production, consider:\n"
+            response += "1. Start with proper gain staging (-6dB headroom)\n"
+            response += "2. Use EQ to carve space for each element\n"
+            response += "3. Apply compression for dynamics control\n"
+            response += "4. Add spatial effects (reverb/delay) for depth"
+            source = "fallback_error"
+    else:
+        logger.warning("[Chat] No Codette engine available, using fallback")
+        # Enhanced fallback when no engine is available
+        prompt_lower = request.message.lower()
+        if any(kw in prompt_lower for kw in ['mix', 'eq', 'compress', 'reverb', 'vocal', 'drum', 'bass']):
+            response = "**copilot_agent**: [Mixing Advice]\n"
+            if 'vocal' in prompt_lower:
+                response += "1. Apply high-pass filter at 80-100Hz\n"
+                response += "2. Use compression (4:1 ratio) for consistency\n"
+                response += "3. Add presence boost at 3-5kHz\n"
+                response += "4. De-ess if sibilant (6-8kHz)"
+            elif 'drum' in prompt_lower or 'kick' in prompt_lower or 'snare' in prompt_lower:
+                response += "1. Gate for clean hits\n"
+                response += "2. EQ for punch and clarity\n"
+                response += "3. Compress for consistency\n"
+                response += "4. Add room reverb for depth"
+            elif 'bass' in prompt_lower:
+                response += "1. High-pass at 30-40Hz\n"
+                response += "2. Compress for consistency (4:1)\n"
+                response += "3. Keep centered in stereo\n"
+                response += "4. Consider sidechain to kick"
+            else:
+                response += "1. Set levels to -6dB peaks for headroom\n"
+                response += "2. High-pass non-bass elements\n"
+                response += "3. EQ to carve frequency space\n"
+                response += "4. Compress for dynamics control"
+        source = "fallback"
+    
+    return {
+        "response": response,
+        "perspective": request.perspective,
+        "confidence": 0.85 if source != "fallback_error" else 0.5,
+        "timestamp": get_timestamp(),
+        "source": source
+    }
 
 @app.post("/codette/suggest")
 @app.post("/api/codette/suggest")
@@ -721,6 +783,194 @@ async def frequency_quiz(difficulty: str = "beginner"):
         "timestamp": get_timestamp()
     }
 
+@app.post("/api/analysis/detect-genre")
+async def detect_genre(request: GenreDetectRequest):
+    """Detect music genre based on project characteristics (BPM, tracks, instruments)"""
+    
+    bpm = request.bpm or 120.0
+    tracks = request.tracks or []
+    project_name = request.project_name or ""
+    
+    # Genre database with BPM ranges and characteristics
+    genre_db = {
+        "electronic": {
+            "name": "Electronic/EDM",
+            "bpm_range": (120, 150),
+            "instruments": ["synth", "bass", "drums", "pad", "lead"],
+            "characteristics": ["synthesizers", "drum machines", "heavy bass", "build-ups", "drops"]
+        },
+        "house": {
+            "name": "House",
+            "bpm_range": (118, 130),
+            "instruments": ["synth", "bass", "drums", "vocals"],
+            "characteristics": ["four-on-the-floor", "synthesizers", "soulful vocals"]
+        },
+        "techno": {
+            "name": "Techno",
+            "bpm_range": (125, 150),
+            "instruments": ["synth", "drums", "bass"],
+            "characteristics": ["repetitive beats", "industrial sounds", "minimal melodies"]
+        },
+        "hip-hop": {
+            "name": "Hip-Hop/Rap",
+            "bpm_range": (80, 115),
+            "instruments": ["drums", "bass", "vocals", "sample", "808"],
+            "characteristics": ["vocal-dominant", "808 bass", "sample-based", "trap hi-hats"]
+        },
+        "rock": {
+            "name": "Rock",
+            "bpm_range": (100, 140),
+            "instruments": ["guitar", "bass", "drums", "vocals"],
+            "characteristics": ["guitars", "live drums", "bass", "distortion"]
+        },
+        "pop": {
+            "name": "Pop",
+            "bpm_range": (100, 130),
+            "instruments": ["vocals", "synth", "drums", "bass", "piano"],
+            "characteristics": ["catchy melodies", "verse-chorus structure", "polished production"]
+        },
+        "jazz": {
+            "name": "Jazz",
+            "bpm_range": (80, 180),
+            "instruments": ["piano", "bass", "drums", "horns", "saxophone"],
+            "characteristics": ["improvisation", "swing feel", "complex harmonies"]
+        },
+        "classical": {
+            "name": "Classical",
+            "bpm_range": (40, 180),
+            "instruments": ["strings", "piano", "orchestra", "violin", "cello"],
+            "characteristics": ["orchestral", "dynamic range", "acoustic instruments"]
+        },
+        "ambient": {
+            "name": "Ambient",
+            "bpm_range": (60, 100),
+            "instruments": ["synth", "pad", "texture", "drone"],
+            "characteristics": ["atmospheric", "textural", "slow evolution", "minimal rhythm"]
+        },
+        "metal": {
+            "name": "Metal",
+            "bpm_range": (100, 200),
+            "instruments": ["guitar", "bass", "drums", "vocals"],
+            "characteristics": ["heavy distortion", "double bass drums", "aggressive"]
+        },
+        "r&b": {
+            "name": "R&B/Soul",
+            "bpm_range": (60, 100),
+            "instruments": ["vocals", "bass", "drums", "keys", "synth"],
+            "characteristics": ["smooth vocals", "groove-based", "emotional"]
+        },
+        "country": {
+            "name": "Country",
+            "bpm_range": (90, 140),
+            "instruments": ["guitar", "vocals", "bass", "fiddle", "banjo"],
+            "characteristics": ["acoustic guitars", "storytelling", "twangy"]
+        },
+        "reggae": {
+            "name": "Reggae",
+            "bpm_range": (60, 90),
+            "instruments": ["guitar", "bass", "drums", "keys", "vocals"],
+            "characteristics": ["offbeat rhythm", "heavy bass", "laid-back feel"]
+        },
+        "drum_and_bass": {
+            "name": "Drum & Bass",
+            "bpm_range": (160, 180),
+            "instruments": ["drums", "bass", "synth", "pad"],
+            "characteristics": ["fast breakbeats", "heavy sub-bass", "rolling drums"]
+        }
+    }
+    
+    scores = {}
+    
+    # Calculate score for each genre
+    for genre_id, genre_info in genre_db.items():
+        score = 0.0
+        max_score = 100.0
+        
+        # BPM score (40% weight)
+        bpm_min, bpm_max = genre_info["bpm_range"]
+        if bpm_min <= bpm <= bpm_max:
+            # Perfect match - closer to center = higher score
+            center = (bpm_min + bpm_max) / 2
+            distance = abs(bpm - center) / ((bpm_max - bpm_min) / 2)
+            score += 40 * (1 - distance * 0.5)  # Max 40, min 20 if in range
+        else:
+            # Outside range - penalize based on distance
+            if bpm < bpm_min:
+                distance = (bpm_min - bpm) / 20
+            else:
+                distance = (bpm - bpm_max) / 20
+            score += max(0, 20 - distance * 10)  # Some partial credit
+        
+        # Track/instrument matching (40% weight)
+        if tracks:
+            track_names = [t.get("name", "").lower() for t in tracks]
+            track_types = [t.get("type", "").lower() for t in tracks]
+            all_track_info = " ".join(track_names + track_types)
+            
+            matches = 0
+            for instrument in genre_info["instruments"]:
+                if instrument.lower() in all_track_info:
+                    matches += 1
+            
+            if genre_info["instruments"]:
+                instrument_score = (matches / len(genre_info["instruments"])) * 40
+                score += instrument_score
+        else:
+            # No tracks provided - give neutral score
+            score += 20
+        
+        # Project name hint (20% weight)
+        if project_name:
+            name_lower = project_name.lower()
+            if genre_info["name"].lower() in name_lower or genre_id in name_lower:
+                score += 20
+            else:
+                # Check for characteristic keywords
+                for char in genre_info["characteristics"]:
+                    if char.lower() in name_lower:
+                        score += 5
+                        break
+        else:
+            score += 10  # Neutral
+        
+        scores[genre_id] = min(score, max_score)
+    
+    # Sort by score and get top matches
+    sorted_genres = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    
+    # Build response
+    best_genre_id = sorted_genres[0][0]
+    best_score = sorted_genres[0][1]
+    best_genre = genre_db[best_genre_id]
+    
+    # Get top 3 candidates
+    candidates = []
+    for genre_id, score in sorted_genres[:3]:
+        genre = genre_db[genre_id]
+        candidates.append({
+            "genre": genre["name"],
+            "genre_id": genre_id,
+            "confidence": round(score / 100, 2),
+            "bpm_range": list(genre["bpm_range"]),
+            "characteristics": genre["characteristics"]
+        })
+    
+    return {
+        "success": True,
+        "genre": best_genre["name"],
+        "genre_id": best_genre_id,
+        "confidence": round(best_score / 100, 2),
+        "bpm_range": list(best_genre["bpm_range"]),
+        "characteristics": best_genre["characteristics"],
+        "candidates": candidates,
+        "input": {
+            "bpm": bpm,
+            "track_count": len(tracks),
+            "project_name": project_name
+        },
+        "timestamp": get_timestamp()
+    }
+
 # ============================================================================
 # ADDITIONAL ANALYSIS ENDPOINTS (PRODUCTION CHECKLIST, INSTRUMENT INFO)
 # ============================================================================
@@ -761,7 +1011,7 @@ async def production_checklist(stage: str = "mixing"):
         ],
     }
 
-    items = base.get(stage_lower, base["mixing"])[:]
+    items = base.get(stage_lower, base)["mixing"][:]
 
     # Mark all as incomplete by default and add ids
     for i, it in enumerate(items):
@@ -1066,6 +1316,16 @@ async def get_audio_settings():
 # WEBSOCKET
 # ============================================================================
 
+@app.get("/ws/status")
+async def websocket_status():
+    """Return WebSocket server status for REST polling fallback."""
+    return {
+        "connected_clients": len(active_websockets),
+        "last_broadcast_at": LAST_BROADCAST_AT,
+        "transport": transport_manager.get_state(),
+        "timestamp": get_timestamp(),
+    }
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time communication"""
@@ -1074,8 +1334,7 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"✅ WebSocket connected. Total: {len(active_websockets)}")
 
     # Send initial handshake & immediate status
-    await websocket.send_json({"type": "connected", "data": {"status": "connected", "timestamp": get_timestamp()}}
-    )
+    await websocket.send_json({"type": "connected", "data": {"status": "connected", "timestamp": get_timestamp()}})
     await websocket.send_json({"type": "server_status", "data": {"health": {"status": "healthy", "timestamp": get_timestamp()}, "transport": transport_manager.get_state(), "connections": len(active_websockets)}})
 
     try:
@@ -1094,7 +1353,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if codette_core and hasattr(codette_core, 'respond'):
                         try:
                             response = codette_core.respond(data.get("data", {}).get("message", ""))
-                        except:
+                        except Exception:
                             pass
                     await websocket.send_json({"type": "chat_response", "data": {"response": response, "timestamp": get_timestamp()}})
                 else:

@@ -187,7 +187,7 @@ class Codette:
         return context
 
     # =========================================================================
-    # MAIN RESPOND METHOD
+    # MAIN RESPOND METHOD (UPDATED WITH FOLLOW-UP DETECTION)
     # =========================================================================
 
     def respond(self, prompt: str, daw_context: Dict[str, Any] = None) -> str:
@@ -198,9 +198,12 @@ class Codette:
         is_daw = self._is_daw_query(prompt) or (daw_context is not None and daw_context.get("selected_track"))
         context = self._get_daw_context(prompt)
         
-        # Build context-aware introduction if we have DAW state
+        # Detect follow-up questions to avoid repetitive context dumps
+        is_followup = self._is_followup_question(prompt)
+        
+        # Build context-aware introduction if we have DAW state (only on first message or explicit context request)
         context_intro = ""
-        if daw_context:
+        if daw_context and not is_followup:
             selected = daw_context.get("selected_track")
             track_counts = daw_context.get("track_counts", {})
             
@@ -242,14 +245,24 @@ class Codette:
         
         # For DAW queries (or when we have context), prioritize relevant perspectives
         if is_daw:
-            # Prioritize practical perspectives for DAW queries
-            priority_modules = [
-                self.copilotAgent,        # Step-by-step guidance
-                self.neuralNetworkPerspective,  # Analysis
-                self.newtonianLogic,      # Cause-effect
-                self.mathematicalRigor,   # Technical specs
-                self.daVinciSynthesis,    # Creative ideas
-            ]
+            # For follow-up questions, use different perspectives to vary the response
+            if is_followup:
+                # Rotate perspectives for follow-up questions
+                priority_modules = [
+                    self.daVinciSynthesis,        # Creative ideas
+                    self.resilientKindness,       # Supportive guidance  
+                    self.philosophicalInquiry,    # Deeper questions
+                    self.quantumLogicPerspective, # Alternative approaches
+                ]
+            else:
+                # Prioritize practical perspectives for initial DAW queries
+                priority_modules = [
+                    self.copilotAgent,        # Step-by-step guidance
+                    self.neuralNetworkPerspective,  # Analysis
+                    self.newtonianLogic,      # Cause-effect
+                    self.mathematicalRigor,   # Technical specs
+                    self.daVinciSynthesis,    # Creative ideas
+                ]
             selected_modules = priority_modules[:4]  # Use top 4 for focused response
         else:
             # For non-DAW queries, suggest DAW focus
@@ -257,7 +270,7 @@ class Codette:
 
         responses = []
         
-        # Add context intro if available
+        # Add context intro if available (only for non-followup)
         if context_intro:
             responses.append(context_intro)
         
@@ -271,8 +284,64 @@ class Codette:
         self.audit_log(f"Perspectives used: {[m.__name__ for m in selected_modules]}")
         return "\n\n".join(responses)
     
+    def _is_followup_question(self, prompt: str) -> bool:
+        """Detect if this is a follow-up question that doesn't need full context dump"""
+        prompt_lower = prompt.lower().strip()
+        
+        # Common follow-up phrases
+        followup_patterns = [
+            'what else',
+            'anything else',
+            'more tips',
+            'more advice',
+            'tell me more',
+            'go on',
+            'continue',
+            'and',
+            'also',
+            'what about',
+            'how about',
+            'any other',
+            'other suggestions',
+            'other ideas',
+            'more ideas',
+            'next',
+            'then what',
+            'what next',
+            'ok',
+            'okay',
+            'got it',
+            'thanks',
+            'thank you',
+            'cool',
+            'nice',
+            'great',
+            'good',
+            'yes',
+            'yeah',
+            'yep',
+            'sure',
+            'right',
+            'hmm',
+            'interesting',
+        ]
+        
+        # Check if prompt is a short follow-up
+        if len(prompt_lower.split()) <= 4:
+            for pattern in followup_patterns:
+                if pattern in prompt_lower:
+                    return True
+        
+        # Check if prompt starts with follow-up words
+        followup_starters = ['and ', 'also ', 'what else', 'anything else', 'more ', 'other ']
+        for starter in followup_starters:
+            if prompt_lower.startswith(starter):
+                return True
+        
+        return False
+    
     # =========================================================================
-    # DAW-AWARE PERSPECTIVE METHODS - UPDATED TO USE CONTEXT
+    # DAW-AWARE PERSPECTIVE METHODS
     # =========================================================================
     
     def neuralNetworkPerspective(self, prompt: str, daw_context: Dict[str, Any] = None) -> str:
@@ -459,7 +528,7 @@ class Codette:
                 elif track_type == 'aux':
                     steps.append("?? Aux/Bus track: Set up as effects return (reverb, delay) or group bus for parallel processing")
                 else:
-                    steps.append("??? General processing: EQ for cleanup ? Compression for dynamics ? Effects to taste")
+                    steps.append("?? General processing: EQ for cleanup ? Compression for dynamics ? Effects to taste")
             else:
                 # Fallback without training data
                 if 'vocal' in track_name_lower or track_type == 'vocal':
@@ -477,7 +546,7 @@ class Codette:
                 elif track_type == 'aux':
                     steps.append("?? Aux/Bus track: Set up as effects return (reverb, delay) or group bus for parallel processing")
                 else:
-                    steps.append("??? General processing: EQ for cleanup ? Compression for dynamics ? Effects to taste")
+                    steps.append("?? General processing: EQ for cleanup ? Compression for dynamics ? Effects to taste")
             
             # Project-wide suggestions based on track counts
             total_tracks = track_counts.get('total', 0)
@@ -644,11 +713,11 @@ class Codette:
         
         if track_type in ['audio', 'vocal', 'vocals']:
             suggestions.append("?? Apply high-pass filter at 80-100Hz to remove rumble")
-            suggestions.append("??? Use compression (4:1 ratio) for consistent dynamics")
+            suggestions.append("?? Use compression (4:1 ratio) for consistent dynamics")
             suggestions.append("? Boost presence at 3-5kHz for clarity")
         elif track_type in ['instrument', 'synth', 'keys']:
             suggestions.append("?? EQ to fit in frequency spectrum - avoid clashing with vocals")
-            suggestions.append("??? Light compression (2:1 to 3:1) for consistency")
+            suggestions.append("?? Light compression (2:1 to 3:1) for consistency")
         elif track_type in ['drums', 'drum', 'percussion']:
             suggestions.append("?? Check phase alignment if multi-miked")
             suggestions.append("?? Use parallel compression for punch")

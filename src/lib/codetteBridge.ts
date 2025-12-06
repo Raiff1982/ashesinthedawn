@@ -21,10 +21,9 @@ export type EventCallback = (data?: unknown) => void;
 
 // Types
 export interface CodetteChatRequest {
-  user_message: string;
-  conversation_id: string;
-  context?: string;
+  message: string;
   perspective?: string;
+  daw_context?: Record<string, unknown>;
 }
 
 export interface CodetteChatResponse {
@@ -323,12 +322,14 @@ class CodetteBridge {
   async chat(
     message: string,
     conversationId: string,
-    perspective?: string
+    perspective?: string,
+    dawContext?: Record<string, unknown>
   ): Promise<CodetteChatResponse> {
-    const request: CodetteChatRequest = {
-      user_message: message,
-      conversation_id: conversationId,
-      perspective: perspective || "general",
+    // Use 'message' to match server's ChatRequest model
+    const request = {
+      message: message,
+      perspective: perspective || "mix_engineering",
+      daw_context: dawContext || null,
     };
 
     return this.makeRequest<CodetteChatResponse>(
@@ -679,20 +680,25 @@ class CodetteBridge {
   async chatWithContext(
     message: string,
     conversationId: string,
-    perspective?: string
+    perspective?: string,
+    dawContext?: Record<string, unknown>
   ): Promise<CodetteChatResponse> {
     try {
       const context = await this.getCodetteContextJson(message, null);
       
-      const request: CodetteChatRequest = {
-        user_message: message,
-        conversation_id: conversationId,
-        perspective: perspective || "general",
-        context: JSON.stringify({
-          source_snippets: context.snippets,
-          file_context: context.file,
-          chat_history: context.chat_history,
-        }),
+      // Build the daw_context with Supabase context merged
+      const enrichedContext = {
+        ...dawContext,
+        source_snippets: context.snippets,
+        file_context: context.file,
+        chat_history: context.chat_history,
+      };
+
+      // Use 'message' to match server's ChatRequest model
+      const request = {
+        message: message,
+        perspective: perspective || "mix_engineering",
+        daw_context: enrichedContext,
       };
 
       return this.makeRequest<CodetteChatResponse>(
@@ -702,7 +708,7 @@ class CodetteBridge {
       );
     } catch (error) {
       console.error("[CodetteBridge] Chat with context failed:", error);
-      return this.chat(message, conversationId, perspective);
+      return this.chat(message, conversationId, perspective, dawContext);
     }
   }
 
